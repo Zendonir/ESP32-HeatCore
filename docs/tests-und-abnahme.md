@@ -8,6 +8,7 @@
 | Firmware-Build | GitHub Actions `pio run` | Kompilieren und Linken für ESP32-S3 inkl. aller Treiber |
 | Webinterface End-to-End | `tools/sim/ui_test.js` (Playwright) gegen `heatcore_sim` | alle Seiten ohne JS-Fehler, Anlernen eines Funkgeräts über die Oberfläche, Regel anlegen, Displayvorschau |
 | Schaltplanprüfung | KinCony `KC868-A16-schematic.pdf` (ESP32-Ausführung) | Expander-Adressen, Ausgangs-/Eingangspolarität, RF-Pegelanpassung, RS485-Richtungsumschaltung, Analogteiler – für die V3 sinngemäß |
+| Produktseite A16v3 | KinCony-Produktseite | Ausstattung (SSD1306, RF433-Sockel, 3 × 1-Wire mit Pull-ups, 4 × 0–5 V, S1/S2 nur Reset/Boot, freie GPIO39–41); RF-Empfängerstufe gegenüber v1 geändert |
 | Hardware-Integration | Testaufbau laut `docs/hardware.md` | **noch nicht durchgeführt** |
 
 Gekennzeichnet: **bestätigt** = automatisiert nachgewiesen;
@@ -41,8 +42,8 @@ Gekennzeichnet: **bestätigt** = automatisiert nachgewiesen;
 1. Selbsttest: alle I²C-Adressen gefunden, RTC gültig, 1-Wire-Sensoren gezählt.
 2. Ausgänge 1–16 im Handbetrieb mit Testlast schalten; Handbetrieb läuft ab.
 3. Digitaleingänge: Taster kurz/lang, Kontakt → Ereignisprotokoll.
-4. RF-Empfänger: Puffer (74LVC1G125) am Sockel vorhanden bzw. Pegel am GPIO8
-   ≤ 3,3 V, Störpegel (Flanken/s) ablesen, Fernbedienung anlernen,
+4. RF-Empfänger: Pegel am GPIO8 ≤ 3,3 V (V3-Empfängerstufe laut Produktseite
+   gegenüber v1 geändert, Puffer daher nicht vorausgesetzt), Störpegel (Flanken/s) ablesen, Fernbedienung anlernen,
    Reichweite prüfen.
 5. RF-Sender: Loopback-Test, danach eigene Funksteckdose schalten.
 6. Display: alle Seiten, Kontrast, Rotation, Timeout; im Betrieb abziehen und

@@ -3,7 +3,9 @@
 //
 // Sources: KinCony forum "KC868-A16v3 ESP32-S3 IO pins define" (tid=7614),
 // KinCony's ESPHome configuration for the A16v3 and the KinCony schematic
-// of the KC868-A16 (ESP32-WROOM version, KC868-A16-schematic.pdf). The
+// of the KC868-A16 (ESP32-WROOM version, KC868-A16-schematic.pdf) plus the
+// KinCony A16v3 product page (12/24 V DC supply, 4x analog 0-5 V, 3x 1-Wire
+// with on-board pull-ups, SSD1306 and RF433 sockets, free GPIO39/40/41). The
 // schematic confirms the peripheral circuits (expander address straps,
 // buffers, output/input stages); its ESP32 GPIO numbers do NOT apply to the
 // V3. Items marked UNCONFIRMED are not covered by a V3 schematic; the
@@ -39,7 +41,9 @@ constexpr uint8_t kOledAddr = 0x3C;    // SSD1306 (external module on the I2C he
 // ---- RF433 sockets. A16 schematic: receiver socket P2 is supplied with 5 V,
 // its data line is buffered by a 74LVC1G125 at 3.3 V (5 V tolerant input),
 // so 5 V receivers are safe. The transmitter socket P7 is supplied with 3.3 V
-// (low transmit power, short range). Same circuit on the V3: UNCONFIRMED.
+// (low transmit power, short range). The V3 product page states the "RF
+// receiver circuit bug" of the A16v1 PCB was fixed, so the V3 receiver stage
+// differs from that schematic: level buffering on the V3 is UNCONFIRMED.
 constexpr int kRf433Rx = 8;   // receiver data (buffered) -> ESP32
 constexpr int kRf433Tx = 18;  // ESP32 -> transmitter data
 
@@ -77,5 +81,9 @@ constexpr int kSdDetect = 21;
 // usable as a normal user button: navigation uses digital inputs, RF
 // remotes or the web interface instead.
 constexpr int kBootButton = 0;
+
+// ---- Free GPIOs on the V3 header (product page). Not used by the firmware;
+// reserved e.g. for future local navigation buttons.
+constexpr int kFreeGpio[3] = {39, 40, 41};
 
 }  // namespace board

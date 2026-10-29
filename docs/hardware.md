@@ -9,6 +9,10 @@ ESP32-WROOM-Ausführung der A16 (LAN8720-Ethernet, 433 MHz an IO2/IO15,
 I²C an IO4/IO5). Seine GPIO-Nummern gelten nicht für die V3; die
 Peripherieschaltungen (Expander-Adressen, Puffer, Ein-/Ausgangsstufen) sind
 aber sehr wahrscheinlich übernommen. Ein Schaltplan der V3 lag nicht vor.
+Ergänzend: KinCony-Produktseite der A16v3 (Versorgung 12/24 V DC, 4 Analog-
+eingänge 0–5 V, 3 × 1-Wire mit Pull-ups auf der Platine, SSD1306 und
+RF433-Sockel als Ausstattung, freie GPIO39/40/41, gegenüber der A16v1
+„RF-Empfängerschaltung korrigiert“, Verpolschutz, W5500 statt LAN8720A).
 Definiert in `src/platform/Board.h`.
 
 | Funktion | ESP32-S3 | Status |
@@ -21,12 +25,14 @@ Definiert in `src/platform/Board.h`.
 | RF433 Empfänger | GPIO8 | dokumentiert; A16-Schaltplan: Sockel 5 V, Daten über 74LVC1G125 auf 3,3 V gepuffert |
 | RF433 Sender | GPIO18 | dokumentiert; A16-Schaltplan: Sockel mit 3,3 V versorgt |
 | 1-Wire 1/2/3 | GPIO47 / GPIO48 / GPIO38 | dokumentiert, Pull-ups auf der Platine |
-| Analog A1–A4 (0–5 V) | GPIO4 / 6 / 7 / 5 | Zuordnung **unbestätigt**; Teiler 5,1 kΩ/10 kΩ laut A16-Schaltplan (Faktor 1,51) |
+| Analog A1–A4 (0–5 V) | GPIO4 / 6 / 7 / 5 | Bereich 0–5 V laut Produktseite; Zuordnung **unbestätigt**; Teiler 5,1 kΩ/10 kΩ laut A16-Schaltplan (Faktor 1,51) |
 | RS485 RX / TX | GPIO17 / GPIO16 | dokumentiert; A16-Schaltplan: MAX13487E mit automatischer Richtungsumschaltung |
 | I²C-Steckleiste (OLED) | XH2.54-4P | A16-Schaltplan P19: 1 SDA, 2 SCL, 3 GND, 4 3,3 V |
 | W5500 SCK/MOSI/MISO/CS/INT/RST | 42/43/44/15/2/1 | dokumentiert |
 | SD-Karte MOSI/SCK/MISO/CS/CD | 12/13/14/11/21 | dokumentiert |
-| Taster S1 / S2 | EN (Reset) / GPIO0 (Boot) | **keine Benutzertasten** |
+| Taster S1 / S2 | EN (Reset) / GPIO0 (Boot) | Produktseite; **keine Benutzertasten** |
+| Freie GPIOs | GPIO39 / 40 / 41 | Produktseite; von der Firmware nicht belegt |
+| Versorgung | 12/24 V DC | Produktseite, Verpolschutz (NTC) |
 
 GPIO43/44 (UART0) sind mit dem W5500 belegt. Serielle Ausgaben laufen deshalb
 über die native USB-Schnittstelle (`ARDUINO_USB_CDC_ON_BOOT=1`).
@@ -37,6 +43,9 @@ GPIO43/44 (UART0) sind mit dem W5500 belegt. Serielle Ausgaben laufen deshalb
    A16-Schaltplan wird der Empfängersockel mit 5 V versorgt und die Datenleitung
    über einen 74LVC1G125 (5-V-toleranter Eingang, 3,3-V-Ausgang) gepuffert –
    typische 5-V-Set-Empfänger (XY-MK-5V, MX-RM-5V) sind dort also unkritisch.
+   Laut Produktseite wurde bei der V3 ein „Fehler der RF-Empfängerschaltung“
+   der A16v1 behoben – die V3-Empfängerstufe weicht also vom vorliegenden
+   Schaltplan ab, deshalb bleibt die Pegelanpassung **unbestätigt (HW)**.
    Für die V3 einmal prüfen: Neben dem RF-Sockel sollte ein 5-poliger
    SOT-23-5-Baustein (74LVC1G125) sitzen, oder am Pin GPIO8 mit dem Multimeter
    messen (Empfänger rauscht → Pegel springt, Maximum ≤ 3,3 V). Wird ein Modul
@@ -94,6 +103,9 @@ Benutzertasten verwendet. Display-Navigation und Raumfunktionen erfolgen über:
   „Sollwert des angezeigten Raums ±0,5“),
 * Funkfernbedienungen (gleiche Aktionen),
 * das Webinterface.
+
+Für spätere lokale Bedientaster stehen laut Produktseite GPIO39/40/41 frei zur
+Verfügung (`board::kFreeGpio`); die Firmware verwendet sie derzeit nicht.
 
 ## Testaufbau vor dem Anschluss echter Ventile
 
