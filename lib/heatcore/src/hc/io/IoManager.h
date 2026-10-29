@@ -74,21 +74,34 @@ struct InputState {
   uint32_t edges = 0;
 };
 
+// Board input stage of an analog channel: 0..5 V through a voltage divider,
+// or 4..20 mA into a shunt resistor to ground.
+enum class AnalogMode : uint8_t { Voltage, Current };
+
+// 4..20 mA loop supervision (NAMUR NE 43): below 3.6 mA = wire break or
+// failed transmitter, above 21 mA = transmitter fault / overrange.
+constexpr float kLoopMinMa = 3.6f;
+constexpr float kLoopMaxMa = 21.f;
+
 struct AnalogConfig {
   std::string name;
   bool enabled = false;
   bool asSensor = false;   // publish as sensor "ai:<n>" in the sensor manager
-  float dividerGain = 1.f; // board divider: input voltage = pin voltage * gain
-  float scale = 1.f;       // value = volts * scale + offset
+  AnalogMode mode = AnalogMode::Voltage;
+  float dividerGain = 1.f; // Voltage: input voltage = pin voltage * gain
+  float shuntOhm = 150.f;  // Current: input current = pin voltage / shunt
+  float scale = 1.f;       // value = input (V or mA) * scale + offset
   float offset = 0.f;
   std::string unit = "V";
 };
 
 struct AnalogState {
   float pinVolts = 0.f;
-  float volts = 0.f;
+  float volts = 0.f;       // Voltage mode: terminal voltage
+  float milliamps = 0.f;   // Current mode: loop current
   float value = 0.f;
   bool valid = false;
+  bool loopFault = false;  // Current mode: outside 3.6..21 mA
   Millis lastMs = 0;
 };
 
@@ -102,6 +115,10 @@ class IoManager {
   std::array<InputState, kNumInputs> in;
   std::array<AnalogConfig, kNumAnalog> aiCfg;
   std::array<AnalogState, kNumAnalog> ai;
+  // Physical bank order of the input expanders. The KC868-A16 schematic and
+  // KinCony's ESPHome config read inputs 1..8 from 0x22; the A16v3 block
+  // diagram shows 0x21. If DI1 reacts as DI9 on a board, set this in the UI.
+  bool swapInputBanks = false;
 
   // Input sampling from the platform (bit n = input n+1 electrically active).
   void onInputs(uint16_t activeMask, Millis now);

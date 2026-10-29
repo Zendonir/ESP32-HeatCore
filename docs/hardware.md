@@ -9,29 +9,34 @@ ESP32-WROOM-Ausführung der A16 (LAN8720-Ethernet, 433 MHz an IO2/IO15,
 I²C an IO4/IO5). Seine GPIO-Nummern gelten nicht für die V3; die
 Peripherieschaltungen (Expander-Adressen, Puffer, Ein-/Ausgangsstufen) sind
 aber sehr wahrscheinlich übernommen. Ein Schaltplan der V3 lag nicht vor.
-Ergänzend: KinCony-Produktseite der A16v3 (Versorgung 12/24 V DC, 4 Analog-
-eingänge 0–5 V, 3 × 1-Wire mit Pull-ups auf der Platine, SSD1306 und
-RF433-Sockel als Ausstattung, freie GPIO39/40/41, gegenüber der A16v1
-„RF-Empfängerschaltung korrigiert“, Verpolschutz, W5500 statt LAN8720A).
+Ergänzend: KinCony-Produktseite der A16v3 mit Blockschaltbild und
+Platinenfotos der **KC868-A16-V3.1** (Versorgung 12/24 V DC, A1/A2 0–5 V und
+A3/A4 4–20 mA, 3 × 1-Wire mit Pull-ups auf der Platine, SSD1306 und
+RF433-Sockel als Ausstattung, freie GPIO39/40/41 ohne Pull-ups, gegenüber der
+A16v1 „RF-Empfängerschaltung korrigiert“, Verpolschutz, W5500 statt LAN8720A).
+Der Fließtext der Produktseite nennt „4CH analog input DC0-5V“ – das
+Blockschaltbild und der A16-Schaltplan zeigen dagegen zwei 4–20-mA-Kanäle;
+maßgeblich ist die Beschaltung (siehe unten).
 Definiert in `src/platform/Board.h`.
 
 | Funktion | ESP32-S3 | Status |
 |---|---|---|
 | I²C SDA / SCL | GPIO9 / GPIO10 | dokumentiert |
 | PCF8574 Ausgänge 1–8 / 9–16 | 0x24 / 0x25 | dokumentiert + A16-Schaltplan (U16: A2, U32: A0+A2) |
-| PCF8574 Eingänge 1–8 / 9–16 | 0x22 / 0x21 | Adress-Brücken im A16-Schaltplan (U14: A1, U31: A0) |
+| PCF8574 Eingänge 1–8 / 9–16 | 0x22 / 0x21 | A16-Schaltplan (U14: A1, U31: A0) und KinCony-ESPHome; **Blockschaltbild A16v3 zeigt 0x21 / 0x22** → im Webinterface umschaltbar („Bänke tauschen“) |
 | DS3231 RTC / 24C02 EEPROM | 0x68 / 0x50 | dokumentiert |
-| SSD1306 OLED | 0x3C (I²C-Steckleiste) | Modulabhängig (manche Module 0x3D) |
-| RF433 Empfänger | GPIO8 | dokumentiert; A16-Schaltplan: Sockel 5 V, Daten über 74LVC1G125 auf 3,3 V gepuffert |
-| RF433 Sender | GPIO18 | dokumentiert; A16-Schaltplan: Sockel mit 3,3 V versorgt |
+| SSD1306 OLED | 0x3C (I²C-Steckleiste) | Blockschaltbild; Foto: Modul auf Abstandsbolzen über der Platine |
+| RF433 Empfänger | GPIO8 | Blockschaltbild; A16-Schaltplan: Sockel P2 5 V, Daten über U17 (74LVC1G125) auf 3,3 V; V3.1-Foto: U17 + C8 vorhanden, zusätzlich R160 |
+| RF433 Sender | GPIO18 | Blockschaltbild; A16-Schaltplan: Sockel P7 (GND, 3,3 V, Daten); V3.1-Foto: 4-poliges Modul mit EN-Pin im 3-poligen Sockel → Belegung **unbestätigt** |
 | 1-Wire 1/2/3 | GPIO47 / GPIO48 / GPIO38 | dokumentiert, Pull-ups auf der Platine |
-| Analog A1–A4 (0–5 V) | GPIO4 / 6 / 7 / 5 | Bereich 0–5 V laut Produktseite; Zuordnung **unbestätigt**; Teiler 5,1 kΩ/10 kΩ laut A16-Schaltplan (Faktor 1,51) |
+| Analog A1 / A2 (0–5 V) | GPIO4 / GPIO6 | Blockschaltbild; Teiler 5,1 kΩ/10 kΩ laut A16-Schaltplan (Faktor 1,51) |
+| Analog A3 / A4 (4–20 mA) | GPIO7 / GPIO5 | Blockschaltbild; Shunt 150 Ω direkt am ADC-Pin laut A16-Schaltplan (20 mA → 3,0 V) |
 | RS485 RX / TX | GPIO17 / GPIO16 | dokumentiert; A16-Schaltplan: MAX13487E mit automatischer Richtungsumschaltung |
-| I²C-Steckleiste (OLED) | XH2.54-4P | A16-Schaltplan P19: 1 SDA, 2 SCL, 3 GND, 4 3,3 V |
+| I²C-Steckleiste (OLED) | XH2.54-4P | P19: SDA, SCL, GND, 3,3 V (A16-Schaltplan und Bestückungsdruck der V3.1 identisch) |
 | W5500 SCK/MOSI/MISO/CS/INT/RST | 42/43/44/15/2/1 | dokumentiert |
 | SD-Karte MOSI/SCK/MISO/CS/CD | 12/13/14/11/21 | dokumentiert |
 | Taster S1 / S2 | EN (Reset) / GPIO0 (Boot) | Produktseite; **keine Benutzertasten** |
-| Freie GPIOs | GPIO39 / 40 / 41 | Produktseite; von der Firmware nicht belegt |
+| Freie GPIOs | GPIO39 / 40 / 41 | Blockschaltbild: ohne Pull-up auf der Platine; von der Firmware nicht belegt |
 | Versorgung | 12/24 V DC | Produktseite, Verpolschutz (NTC) |
 
 GPIO43/44 (UART0) sind mit dem W5500 belegt. Serielle Ausgaben laufen deshalb
@@ -44,23 +49,41 @@ GPIO43/44 (UART0) sind mit dem W5500 belegt. Serielle Ausgaben laufen deshalb
    über einen 74LVC1G125 (5-V-toleranter Eingang, 3,3-V-Ausgang) gepuffert –
    typische 5-V-Set-Empfänger (XY-MK-5V, MX-RM-5V) sind dort also unkritisch.
    Laut Produktseite wurde bei der V3 ein „Fehler der RF-Empfängerschaltung“
-   der A16v1 behoben – die V3-Empfängerstufe weicht also vom vorliegenden
-   Schaltplan ab, deshalb bleibt die Pegelanpassung **unbestätigt (HW)**.
+   der A16v1 behoben. Das Platinenfoto der V3.1 zeigt am Empfängersockel P2
+   weiterhin U17 im SOT-23-5-Gehäuse (im A16-Schaltplan der 74LVC1G125) mit
+   C8 sowie einen zusätzlichen R160 – der Puffer ist also sehr wahrscheinlich
+   vorhanden, aber ohne V3-Schaltplan nicht bewiesen (**unbestätigt (HW)**).
    Für die V3 einmal prüfen: Neben dem RF-Sockel sollte ein 5-poliger
    SOT-23-5-Baustein (74LVC1G125) sitzen, oder am Pin GPIO8 mit dem Multimeter
    messen (Empfänger rauscht → Pegel springt, Maximum ≤ 3,3 V). Wird ein Modul
    frei verdrahtet statt gesteckt, gilt der Puffer nicht.
-2. **433-MHz-Sender (GPIO18).** Im A16-Schaltplan wird der Sendersockel mit
-   **3,3 V** versorgt. FS1000A-artige Sender funktionieren damit, senden aber
+2. **433-MHz-Sender (GPIO18).** Im A16-Schaltplan ist der Sendersockel P7
+   dreipolig (GND, 3,3 V, Daten). Das KinCony-Foto der V3.1 zeigt darin ein
+   vierpoliges Sendermodul (Beschriftung u. a. „+“, „DAT“, „EN“), das nur mit
+   drei Pins im Sockel steckt. Die Sockelbelegung der V3.1 ist damit nicht
+   eindeutig: das mitgelieferte KinCony-Modul so stecken wie geliefert; bei
+   einem anderen Modul vorher GND/VCC/Daten am Sockel nachmessen (Daten =
+   GPIO18, im Ruhezustand Low). Hat das Modul einen EN-Pin, muss dieser High
+   sein, sonst wird nichts abgestrahlt – der Loopback-Selbsttest zeigt das.
+   Im A16-Schaltplan wird der Sendersockel mit **3,3 V** versorgt. FS1000A-artige Sender funktionieren damit, senden aber
    mit deutlich geringerer Leistung als bei 5–12 V (Reichweite eher Raum als
    Haus). Mehr Leistung nur mit externer Versorgung des Moduls und unter
    Einhaltung der SRD-Grenze (10 mW ERP, 433,05–434,79 MHz).
    Antenne: λ/4 ≈ 17,3 cm Draht.
-3. **SSD1306 (I²C).** Die 4-polige I²C-Steckleiste (A16-Schaltplan P19:
+3. **Analogeingänge.** A1/A2 sind 0–5-V-Eingänge (Teiler 1,51), A3/A4
+   4–20-mA-Eingänge: ein 150-Ω-Shunt liegt **ohne Teiler direkt am
+   ESP32-Pin**. Dort niemals eine Spannungsquelle anschließen – 5 V würden den
+   ESP32-S3 (max. 3,3 V) schädigen. Die Betriebsart ist pro Kanal im
+   Webinterface einstellbar (Hardware → Analogeingänge) und muss zur
+   Beschaltung passen; Voreinstellung wie im Blockschaltbild. Im
+   4–20-mA-Betrieb meldet die Firmware Ströme unter 3,6 mA bzw. über 21 mA als
+   Drahtbruch/Störung (NAMUR NE 43); als Sensor verwendet, gilt der Kanal dann
+   als gestört und die Ersatzsensor-Logik greift.
+4. **SSD1306 (I²C).** Die 4-polige I²C-Steckleiste (A16-Schaltplan P19:
    SDA, SCL, GND, 3,3 V) passt direkt zu üblichen 4-Pin-OLED-Modulen –
    **Pinreihenfolge vergleichen**, viele Module haben GND–VCC–SCL–SDA. Das Modul
    wird mit 3,3 V versorgt. Kabel kurz halten (< 30 cm); Bus läuft mit 100 kHz.
-4. **Geteilter I²C-Bus.** Das Display hängt am selben Bus wie die
+5. **Geteilter I²C-Bus.** Das Display hängt am selben Bus wie die
    Ausgangs-Expander. Jede Display-Übertragung ist auf 17 Byte begrenzt, nutzt
    ein Mutex mit Timeout und eine Bus-Recovery (9 SCL-Takte + STOP). Ein
    Display, das SDA dauerhaft auf Low zieht, würde jedoch auch die
@@ -105,7 +128,9 @@ Benutzertasten verwendet. Display-Navigation und Raumfunktionen erfolgen über:
 * das Webinterface.
 
 Für spätere lokale Bedientaster stehen laut Produktseite GPIO39/40/41 frei zur
-Verfügung (`board::kFreeGpio`); die Firmware verwendet sie derzeit nicht.
+Verfügung (`board::kFreeGpio`, ohne Pull-up auf der Platine – Taster bräuchten
+den internen oder einen externen Pull-up); die Firmware verwendet sie derzeit
+nicht.
 
 ## Testaufbau vor dem Anschluss echter Ventile
 

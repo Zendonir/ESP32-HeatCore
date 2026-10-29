@@ -425,3 +425,57 @@ TEST(system_rf_loopback_selftest) {
   // the echo must not create unknown-code entries
   CHECK_EQ(r.sys.rfRx.unknownCodes().size(), 0u);
 }
+
+TEST(io_analog_voltage_and_current_modes) {
+  Rig r;
+  // defaults per A16v3 block diagram: A1/A2 0..5 V (divider 1.51), A3/A4 4..20 mA (150 Ohm)
+  CHECK(r.sys.io.aiCfg[0].mode == AnalogMode::Voltage);
+  CHECK(r.sys.io.aiCfg[3].mode == AnalogMode::Current);
+  r.sys.io.onAnalog(0, 2.0f, r.clock.ms);
+  CHECK_NEAR(r.sys.io.ai[0].volts, 3.02f, 0.001f);
+  r.sys.io.onAnalog(2, 1.8f, r.clock.ms);  // 1.8 V / 150 Ohm = 12 mA
+  CHECK_NEAR(r.sys.io.ai[2].milliamps, 12.f, 0.001f);
+  CHECK(!r.sys.io.ai[2].loopFault);
+  // 4..20 mA -> 0..100 degC
+  r.load(ConfigSection::Io, R"({"analog":[{"n":3,"enabled":true,"mode":"current","shuntOhm":150,"scale":6.25,"offset":-25,"unit":"C"}]})");
+  r.sys.io.onAnalog(2, 1.8f, r.clock.ms);
+  CHECK_NEAR(r.sys.io.ai[2].value, 50.f, 0.01f);
+  // wire break and overrange are flagged
+  r.sys.io.onAnalog(2, 0.0f, r.clock.ms);
+  CHECK(r.sys.io.ai[2].loopFault);
+  r.sys.io.onAnalog(2, 3.3f, r.clock.ms);  // 22 mA
+  CHECK(r.sys.io.ai[2].loopFault);
+  // switch A3 to voltage mode, A1 to current mode via the config section
+  r.load(ConfigSection::Io, R"({"analog":[{"n":3,"mode":"voltage"},{"n":1,"mode":"current"}]})");
+  CHECK(r.sys.io.aiCfg[2].mode == AnalogMode::Voltage);
+  CHECK_STR(r.sys.io.aiCfg[2].unit, "V");
+  CHECK(r.sys.io.aiCfg[0].mode == AnalogMode::Current);
+  r.sys.io.onAnalog(2, 0.0f, r.clock.ms);
+  CHECK(!r.sys.io.ai[2].loopFault);
+  // implausible board constants are rejected, previous config stays
+  JsonDocument d;
+  deserializeJson(d, R"({"analog":[{"n":2,"shuntOhm":0}]})");
+  CHECK(!r.sys.sectionFromJson(ConfigSection::Io, d.as<JsonObjectConst>()).empty());
+  CHECK_NEAR(r.sys.io.aiCfg[1].shuntOhm, 150.f, 0.001f);
+}
+
+TEST(io_input_bank_swap) {
+  Rig r;
+  r.load(ConfigSection::Io, R"({"inputs":[{"n":1,"kind":"contact","debounceMs":0},{"n":9,"kind":"contact","debounceMs":0}]})");
+  r.sys.io.onInputs(0x0001, r.clock.ms);  // physical bit 0 = first expander bank
+  r.clock.ms += 10;
+  r.sys.io.onInputs(0x0001, r.clock.ms);
+  CHECK(r.sys.io.in[0].stable);
+  CHECK(!r.sys.io.in[8].stable);
+  r.load(ConfigSection::Io, R"({"swapInputBanks":true})");
+  CHECK(r.sys.io.swapInputBanks);
+  r.sys.io.onInputs(0x0001, r.clock.ms);
+  r.clock.ms += 10;
+  r.sys.io.onInputs(0x0001, r.clock.ms);
+  CHECK(!r.sys.io.in[0].stable);
+  CHECK(r.sys.io.in[8].stable);
+  // setting persists through the config round trip
+  JsonDocument d;
+  r.sys.io.toJson(d.to<JsonObject>(), false);
+  CHECK(d["swapInputBanks"].as<bool>());
+}

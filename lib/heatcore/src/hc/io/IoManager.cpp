@@ -37,9 +37,15 @@ IoManager::IoManager(EventBus& bus, const IClock& clock) : bus_(bus), clock_(clo
   for (int i = 0; i < kNumInputs; ++i) inCfg[i].name = "Eingang " + std::to_string(i + 1);
   for (int i = 0; i < kNumAnalog; ++i) {
     aiCfg[i].name = "A" + std::to_string(i + 1);
-    // 0..5 V inputs: 5.1 kOhm / 10 kOhm divider on the KC868-A16 (schematic),
-    // i.e. pin voltage x 1.51. Calibrate with a known voltage.
+    // KC868-A16 schematic: 0..5 V channels use a 5.1 kOhm / 10 kOhm divider
+    // (pin voltage x 1.51), 4..20 mA channels a 150 Ohm shunt. A16v3 block
+    // diagram: A1/A2 = 0..5 V, A3/A4 = 4..20 mA. Changeable in the UI.
     aiCfg[i].dividerGain = 1.51f;
+    aiCfg[i].shuntOhm = 150.f;
+    if (i >= 2) {
+      aiCfg[i].mode = AnalogMode::Current;
+      aiCfg[i].unit = "mA";
+    }
   }
 }
 
@@ -58,6 +64,7 @@ void IoManager::emitInput(int idx, Gesture g, Millis now) {
 }
 
 void IoManager::onInputs(uint16_t activeMask, Millis now) {
+  if (swapInputBanks) activeMask = static_cast<uint16_t>((activeMask >> 8) | (activeMask << 8));
   for (int i = 0; i < kNumInputs; ++i) {
     InputConfig& c = inCfg[i];
     InputState& s = in[i];
@@ -113,8 +120,17 @@ void IoManager::onAnalog(int idx, float pinVolts, Millis now) {
   AnalogState& a = ai[idx];
   const AnalogConfig& c = aiCfg[idx];
   a.pinVolts = pinVolts;
-  a.volts = pinVolts * c.dividerGain;
-  a.value = a.volts * c.scale + c.offset;
+  if (c.mode == AnalogMode::Current) {
+    a.volts = pinVolts;
+    a.milliamps = c.shuntOhm > 0.f ? pinVolts / c.shuntOhm * 1000.f : 0.f;
+    a.loopFault = a.milliamps < kLoopMinMa || a.milliamps > kLoopMaxMa;
+    a.value = a.milliamps * c.scale + c.offset;
+  } else {
+    a.volts = pinVolts * c.dividerGain;
+    a.milliamps = 0.f;
+    a.loopFault = false;
+    a.value = a.volts * c.scale + c.offset;
+  }
   a.valid = true;
   a.lastMs = now;
 }
@@ -166,6 +182,7 @@ bool IoManager::applyLevel(int idx, bool level, Millis now) {
 
 void IoManager::toJson(JsonObject o, bool runtime) const {
   Millis now = clock_.nowMs();
+  o["swapInputBanks"] = swapInputBanks;
   JsonArray outs = o["outputs"].to<JsonArray>();
   for (int i = 0; i < kNumOutputs; ++i) {
     JsonObject x = outs.add<JsonObject>();
@@ -215,13 +232,19 @@ void IoManager::toJson(JsonObject o, bool runtime) const {
     x["name"] = aiCfg[i].name;
     x["enabled"] = aiCfg[i].enabled;
     x["asSensor"] = aiCfg[i].asSensor;
+    x["mode"] = aiCfg[i].mode == AnalogMode::Current ? "current" : "voltage";
     x["dividerGain"] = aiCfg[i].dividerGain;
+    x["shuntOhm"] = aiCfg[i].shuntOhm;
     x["scale"] = aiCfg[i].scale;
     x["offset"] = aiCfg[i].offset;
     x["unit"] = aiCfg[i].unit;
     if (runtime && ai[i].valid) {
       x["pinVolts"] = ai[i].pinVolts;
       x["volts"] = ai[i].volts;
+      if (aiCfg[i].mode == AnalogMode::Current) {
+        x["milliamps"] = ai[i].milliamps;
+        x["loopFault"] = ai[i].loopFault;
+      }
       x["value"] = ai[i].value;
     }
   }
@@ -229,6 +252,7 @@ void IoManager::toJson(JsonObject o, bool runtime) const {
 
 std::string IoManager::fromJson(JsonObjectConst o) {
   std::string err;
+  swapInputBanks = o["swapInputBanks"] | swapInputBanks;
   for (JsonObjectConst x : o["outputs"].as<JsonArrayConst>()) {
     int n = x["n"] | 0;
     if (n < 1 || n > kNumOutputs) continue;
@@ -263,10 +287,18 @@ std::string IoManager::fromJson(JsonObjectConst o) {
     c.name = x["name"] | c.name.c_str();
     c.enabled = x["enabled"] | false;
     c.asSensor = x["asSensor"] | false;
-    c.dividerGain = x["dividerGain"] | c.dividerGain;
+    const char* mode = x["mode"] | (c.mode == AnalogMode::Current ? "current" : "voltage");
+    AnalogMode m = !std::strcmp(mode, "current") ? AnalogMode::Current : AnalogMode::Voltage;
+    float gain = x["dividerGain"] | c.dividerGain;
+    float shunt = x["shuntOhm"] | c.shuntOhm;
+    if (gain < 0.5f || gain > 20.f) return "A" + std::to_string(n) + ": Teilerfaktor 0,5..20";
+    if (shunt < 10.f || shunt > 1000.f) return "A" + std::to_string(n) + ": Shunt 10..1000 Ohm";
+    c.mode = m;
+    c.dividerGain = gain;
+    c.shuntOhm = shunt;
     c.scale = x["scale"] | 1.f;
     c.offset = x["offset"] | 0.f;
-    c.unit = x["unit"] | "V";
+    c.unit = x["unit"] | (m == AnalogMode::Current ? "mA" : "V");
   }
   return std::string();
 }

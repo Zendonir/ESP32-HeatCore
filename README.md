@@ -38,7 +38,7 @@ Webinterface.
 
 ## Status
 
-* Firmware kompiliert für ESP32-S3 (CI), Host-Testsuite grün (63 Tests),
+* Firmware kompiliert für ESP32-S3 (CI), Host-Testsuite grün (65 Tests),
   Webinterface per End-to-End-Test im Simulator geprüft.
 * **Auf der echten Platine noch nicht getestet.** Hardwareabhängige Punkte sind
   in `docs/tests-und-abnahme.md` als „unbestätigt (HW)“ markiert. Vor dem

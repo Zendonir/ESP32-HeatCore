@@ -260,8 +260,12 @@ void sensorTask(void*) {
       for (int i = 0; i < 4; ++i) {
         g_sys->io.onAnalog(i, volts[i], now);
         const hc::AnalogConfig& ac = g_sys->io.aiCfg[static_cast<size_t>(i)];
-        if (ac.enabled && ac.asSensor)
-          g_sys->sensors.update("ai:" + std::to_string(i + 1), g_sys->io.ai[static_cast<size_t>(i)].value, now);
+        const hc::AnalogState& as = g_sys->io.ai[static_cast<size_t>(i)];
+        if (!ac.enabled || !ac.asSensor) continue;
+        if (as.loopFault)
+          g_sys->sensors.reportError("ai:" + std::to_string(i + 1), "4-20 mA ausserhalb 3,6..21 mA (Drahtbruch?)", now);
+        else
+          g_sys->sensors.update("ai:" + std::to_string(i + 1), as.value, now);
       }
       for (auto& r : readings) {
         if (r.ok) g_sys->sensors.update(r.id, r.value, now);
@@ -442,8 +446,15 @@ void selfTestTask(void*) {
   };
   addResult(res, "Ausgaenge 1-8 (PCF8574)", has(board::kPcfOut1) ? "ok" : "fehlt", addr(board::kPcfOut1));
   addResult(res, "Ausgaenge 9-16 (PCF8574)", has(board::kPcfOut2) ? "ok" : "fehlt", addr(board::kPcfOut2));
-  addResult(res, "Eingaenge 1-8 (PCF8574)", has(board::kPcfIn1) ? "ok" : "fehlt", addr(board::kPcfIn1));
-  addResult(res, "Eingaenge 9-16 (PCF8574)", has(board::kPcfIn2) ? "ok" : "fehlt", addr(board::kPcfIn2));
+  bool swapIn = false;
+  {
+    Lock lk(g_sys->mutex());
+    swapIn = g_sys->io.swapInputBanks;
+  }
+  addResult(res, swapIn ? "Eingaenge 9-16 (PCF8574)" : "Eingaenge 1-8 (PCF8574)", has(board::kPcfIn1) ? "ok" : "fehlt",
+            addr(board::kPcfIn1));
+  addResult(res, swapIn ? "Eingaenge 1-8 (PCF8574)" : "Eingaenge 9-16 (PCF8574)", has(board::kPcfIn2) ? "ok" : "fehlt",
+            addr(board::kPcfIn2));
   addResult(res, "RTC DS3231", has(board::kRtcAddr) ? "ok" : "fehlt", addr(board::kRtcAddr));
   addResult(res, "EEPROM 24C02", has(board::kEepromAddr) ? "ok" : "fehlt", addr(board::kEepromAddr));
   addResult(res, "OLED SSD1306", has(board::kOledAddr) ? (g_oled.initialized() ? "ok" : "fehler") : "fehlt",

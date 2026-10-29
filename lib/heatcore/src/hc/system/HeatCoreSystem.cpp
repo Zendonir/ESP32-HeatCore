@@ -987,6 +987,7 @@ std::string HeatCoreSystem::sectionFromJson(ConfigSection s, JsonObjectConst o) 
       probe.outCfg = io.outCfg;
       probe.inCfg = io.inCfg;
       probe.aiCfg = io.aiCfg;
+      probe.swapInputBanks = io.swapInputBanks;
       err = probe.fromJson(o);
       if (err.empty())
         for (int i = 0; i < kNumInputs && err.empty(); ++i) {
@@ -1000,6 +1001,7 @@ std::string HeatCoreSystem::sectionFromJson(ConfigSection s, JsonObjectConst o) 
         io.outCfg = probe.outCfg;
         io.inCfg = probe.inCfg;
         io.aiCfg = probe.aiCfg;
+        io.swapInputBanks = probe.swapInputBanks;
       }
       break;
     }

@@ -56,7 +56,7 @@ alle Heizkreise in den sicheren Zustand. Konfiguration bleibt erhalten
 ```bash
 cmake -S . -B build/host
 cmake --build build/host -j
-./build/host/heatcore_tests            # 63 Tests
+./build/host/heatcore_tests            # 65 Tests
 ./build/host/heatcore_sim --demo       # http://127.0.0.1:8080/
 ```
 
