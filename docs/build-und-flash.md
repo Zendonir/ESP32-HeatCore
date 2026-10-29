@@ -79,15 +79,40 @@ Beide Workflows müssen dafür auf dem Standard-Branch (`main`) liegen.
 
 ## Ersteinrichtung
 
-1. Ohne Netzwerk startet nach 60 s der Access Point `HeatCore-xxxx`
-   (Passwort `heatcore123`, bitte ändern), Webinterface unter
-   `http://192.168.4.1/`. Mit Ethernet: DHCP, Name `heatcore.local`.
+1. **Mit LAN-Kabel:** DHCP, Webinterface unter `http://heatcore.local`
+   (oder die IP aus dem Router/Display). **Ohne LAN:** nach ca. 20 s erscheint
+   der Zugangspunkt `HeatCore-xxxx` (Passwort `heatcore123`, bitte ändern).
+   Mit dem Handy verbinden – die Einrichtungsseite öffnet sich meist von selbst
+   (sonst `http://192.168.4.1/`). Unter System → Netzwerk „Netze suchen“, das
+   eigene WLAN wählen, Passwort eingeben, speichern: Die Seite zeigt die neue
+   Adresse an, der Zugangspunkt geht danach aus. Ablauf siehe unten.
 2. System → Allgemein: Gerätename, Zeitzone, **Web-Passwort setzen**.
 3. Hardware → Selbsttest: I²C-Adressen, RTC, 1-Wire, RF, Display prüfen.
 4. Räume & Heizkreise anlegen, Ausgänge als „Heizkreis“ belassen.
 5. Sensoren übernehmen und Räumen zuordnen; Vorlauffühler mit Rolle „Vorlauf“.
 6. System → Sicherheit prüfen (Vorlaufgrenze für die Anlage!).
 7. Funkgeräte anlernen, Display einstellen, Regeln anlegen.
+
+## Netzwerk: LAN hat Vorrang
+
+| Situation | LAN | WLAN | Zugangspunkt |
+|---|---|---|---|
+| LAN verbunden (Link + IP) | aktiv | **aus** | aus |
+| kein LAN, WLAN eingerichtet und verbunden | – | aktiv | aus |
+| kein LAN, WLAN eingerichtet, aber nicht erreichbar (60 s) | – | versucht es weiter (alle 3 min) | **an** |
+| kein LAN, kein WLAN eingerichtet | – | aus | **an** |
+| LAN kommt zurück (15 s stabil) | aktiv | wird abgeschaltet | aus |
+
+* Kurze LAN-Unterbrechungen (< 10 s) lösen keinen Wechsel aus; ein LAN-Kabel
+  ohne DHCP-Antwort gilt als „kein LAN“.
+* Der Zugangspunkt bleibt nach einer erfolgreichen Verbindung noch 1 min an
+  (5 min, solange noch ein Gerät damit verbunden ist), damit die neue Adresse
+  abgelesen werden kann. Solange er aktiv ist, beantwortet ein DNS-Server alle
+  Namen mit 192.168.4.1 (Captive Portal).
+* Neue WLAN-Zugangsdaten werden sofort ausprobiert.
+* Die Regelung arbeitet in jedem Zustand unabhängig vom Netzwerk weiter.
+* Logik: `lib/heatcore/src/hc/net/NetPolicy.*` (Host-Tests `net_*`),
+  Umsetzung `src/platform/Net.cpp`.
 
 ## Updates im Webinterface (OTA)
 
@@ -128,7 +153,7 @@ Schreibvorgänge). Vor größeren Versionssprüngen trotzdem: System → Allgeme
 ```bash
 cmake -S . -B build/host
 cmake --build build/host -j
-./build/host/heatcore_tests            # 81 Tests
+./build/host/heatcore_tests            # 86 Tests
 ./build/host/heatcore_sim --demo       # http://127.0.0.1:8080/
 ```
 

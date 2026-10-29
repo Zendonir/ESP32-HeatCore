@@ -49,12 +49,23 @@ struct FirmwareStatus {
   bool busy = false;              // an update is being written
 };
 
+struct WifiNetwork {
+  std::string ssid;
+  int rssi = 0;
+  bool open = false;
+  int channel = 0;
+};
+
 // Hardware / platform facts reported by the ESP32 layer.
 struct PlatformStatus {
   std::string deviceId = "000000";
   std::string ip;
   std::string network;     // "ETH", "WLAN", "AP" or ""
   std::string netDetail;
+  std::string netState;    // hc::netStateName of the network policy
+  std::string apSsid;      // setup access point name while it is active
+  bool wifiScanRunning = false;
+  std::vector<WifiNetwork> wifiScan;
   bool ethLink = false;
   bool wifiConnected = false;
   int wifiRssi = 0;

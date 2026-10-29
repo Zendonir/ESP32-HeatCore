@@ -56,6 +56,7 @@ BoundedQueue<std::string> g_sdLog(64);
 
 std::atomic<bool> g_selfTestRunning{false};
 std::atomic<bool> g_applyNetwork{false};
+std::atomic<bool> g_wifiScan{false};  // Wi-Fi scan requested via web (net task owns Wi-Fi)
 std::atomic<bool> g_applySystem{false};
 std::atomic<bool> g_factoryReset{false};
 std::atomic<bool> g_shutdown{false};   // reboot pending: io task keeps outputs safe
@@ -374,6 +375,7 @@ void netTask(void*) {
         Lock lk(g_sys->mutex());
         EspClock::setTimezone(g_sys->sysCfg.timezone.c_str());
       }
+      if (g_wifiScan.exchange(false)) g_net.startScan();
       g_net.loop();
       g_mqtt->loop(g_net.online());
       g_web->loop();
@@ -392,6 +394,10 @@ void netTask(void*) {
         p.ip = g_net.ip();
         p.network = g_net.kind();
         p.netDetail = g_net.detail();
+        p.netState = g_net.stateText();
+        p.apSsid = g_net.apSsid();
+        p.wifiScanRunning = g_net.scanRunning();
+        p.wifiScan = g_net.scanResults();
         p.ethLink = g_net.ethLink();
         p.wifiConnected = g_net.wifiConnected();
         p.wifiRssi = g_net.rssi();
@@ -534,7 +540,8 @@ void selfTestTask(void*) {
   }
   addResult(res, "SD-Karte", g_storage.sdMounted() ? "ok" : "fehlt", g_storage.sdStatus());
   addResult(res, "Ethernet W5500", g_net.ethLink() ? "ok" : "unbestaetigt", g_net.ethLink() ? "Link" : "kein Link");
-  addResult(res, "WLAN", g_net.wifiConnected() ? "ok" : "deaktiviert", g_net.wifiConnected() ? "verbunden" : "-");
+  addResult(res, "WLAN", g_net.wifiConnected() ? "ok" : "deaktiviert",
+            g_net.wifiConnected() ? "verbunden" : "aus (LAN hat Vorrang oder nicht eingerichtet)");
   addResult(res, "MQTT", g_mqtt->connected() ? "ok" : "deaktiviert", g_mqtt->stateText());
   addResult(res, "RS485 (GPIO16/17)", g_rs485.active() ? "unbestaetigt" : "deaktiviert",
             "rtl_433-JSON-Eingang, 115200 Baud; Funktion erst mit Gateway pruefbar");
@@ -571,6 +578,10 @@ std::string platformCommand(const std::string& cmd, JsonObjectConst) {
   }
   if (cmd == "factory_reset") {
     g_factoryReset = true;
+    return "";
+  }
+  if (cmd == "wifi_scan") {
+    g_wifiScan = true;
     return "";
   }
   if (cmd == "apply_network") {

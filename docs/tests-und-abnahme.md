@@ -4,7 +4,7 @@
 
 | Ebene | Werkzeug | Umfang |
 |---|---|---|
-| Unit- und Integrationstests | `build/host/heatcore_tests` (CMake, ASan/UBSan) | 81 Tests, 933 Prüfungen: Funk-Codec, Empfangskette, Sender, Sensor-Decoder, Sensor-Manager, Heizung, Sicherheit, Automationen, Lernmodell mit simulierter Raumthermik, REST-API, MQTT/Discovery, Konfiguration, Analog-Betriebsarten (0–5 V / 4–20 mA, Drahtbruch), Eingangsbank-Tausch, Firmware-Image-Prüfung (SHA-256-Testvektoren, Chip, Factory-Image, fremde Firmware, Kennung über Blockgrenzen), Versionsvergleich, Statistik (Buckets, Ring, Verdichtung, Kennzahlen, Persistenz, REST), MCP (Protokoll, Werkzeuge, Grenzen, Freigabe, Rücknahme, Tageslimit, Journal) |
+| Unit- und Integrationstests | `build/host/heatcore_tests` (CMake, ASan/UBSan) | 86 Tests, 973 Prüfungen: Funk-Codec, Empfangskette, Sender, Sensor-Decoder, Sensor-Manager, Heizung, Sicherheit, Automationen, Lernmodell mit simulierter Raumthermik, REST-API, MQTT/Discovery, Konfiguration, Analog-Betriebsarten (0–5 V / 4–20 mA, Drahtbruch), Eingangsbank-Tausch, Firmware-Image-Prüfung (SHA-256-Testvektoren, Chip, Factory-Image, fremde Firmware, Kennung über Blockgrenzen), Versionsvergleich, Statistik (Buckets, Ring, Verdichtung, Kennzahlen, Persistenz, REST), MCP (Protokoll, Werkzeuge, Grenzen, Freigabe, Rücknahme, Tageslimit, Journal), Netzwerk-Vorrang LAN/WLAN/Zugangspunkt |
 | Firmware-Build | GitHub Actions `pio run` + `tools/make_release.py` | Kompilieren und Linken für ESP32-S3 inkl. aller Treiber; OTA- und Factory-Image werden wie im Gerät geprüft |
 | Webinterface End-to-End | `tools/sim/ui_test.js` (Playwright) gegen `heatcore_sim` | alle Seiten ohne JS-Fehler, Anlernen eines Funkgeräts über die Oberfläche, Regel anlegen, Displayvorschau, Online-Update aus einem (simulierten) GitHub-Release, Abweisung fremder Firmware |
 | MCP-Interop | `tools/sim/mcp_client_test.py` mit offiziellem MCP-Python-SDK 2.3.0 gegen `heatcore_sim` | Discovery-Rückfall auf den Handshake, Werkzeuge, Prompts, Token (401), fremder Origin (403), Grenzen, Vorschlag und Freigabe |
@@ -57,6 +57,9 @@ Gekennzeichnet: **bestätigt** = automatisiert nachgewiesen;
 6. Display: alle Seiten, Kontrast, Rotation, Timeout; im Betrieb abziehen und
    wieder anstecken.
 7. Vorlaufschutz und Raum-Übertemperatur mit erwärmtem Fühler auslösen.
+7a. Netzwerk: LAN ziehen → nach ca. 10 s WLAN (falls eingerichtet), sonst
+   Zugangspunkt; LAN wieder stecken → nach ca. 15 s WLAN aus. Einrichtung über
+   den Zugangspunkt mit dem Handy (Captive Portal) einmal durchspielen.
 8. Netzwerk trennen, MQTT-Broker stoppen, OTA-Update einspielen – Ausgänge
    beobachten. Nach dem Update „Probelauf“ → nach ca. 2 min „bestätigt“;
    „Vorherige Firmware starten“ testen; Web-Flasher einmal ohne „Gerät

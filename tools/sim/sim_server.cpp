@@ -148,7 +148,7 @@ void simLoop() {
     p.uptimeSec = g_clock.ms / 1000;
     p.ip = "127.0.0.1";
     p.network = "SIM";
-    p.netDetail = "Host-Simulator";
+    p.netDetail = "Host-Simulator (LAN), WLAN aus";
     p.freeHeap = 200000;
     p.freePsram = 7000000;
     p.totalPsram = 8 * 1024 * 1024;
@@ -363,11 +363,19 @@ int main(int argc, char** argv) {
   g_sys = new HeatCoreSystem(g_clock);
   g_sys->platform.deviceId = "51a7e5";
   g_sys->platform.firmware.runningPartition = "app0";
+  g_sys->platform.netState = "LAN aktiv, WLAN aus (Simulator)";
+  g_sys->platform.network = "ETH";
+  g_sys->platform.ip = "127.0.0.1";
+  g_sys->platform.netDetail = "LAN verbunden, WLAN aus";
   g_sys->platform.firmware.slotSize = 0x400000;
   g_sys->platformCommand = [](const std::string& cmd, JsonObjectConst) -> std::string {
     if (cmd == "selftest") {
       g_sys->selfTest = {{"Simulator", "ok", "alle Komponenten simuliert"},
                          {"433-MHz-Sender (GPIO18)", "unbestaetigt", "nur simulierte Funkstrecke"}};
+      return "";
+    }
+    if (cmd == "wifi_scan") {  // simulated neighbourhood
+      g_sys->platform.wifiScan = {{"Heimnetz", -52, false, 6}, {"Heimnetz-Gast", -60, false, 6}, {"Nachbar 5G", -81, false, 11}};
       return "";
     }
     if (cmd == "ota_rollback") {

@@ -47,7 +47,7 @@ table{border-collapse:collapse;width:100%;font-size:14px}td{padding:4px 6px;bord
     <li>Platine mit einem USB-C-<b>Datenkabel</b> am Rechner anschließen (die 12/24-V-Versorgung darf angeschlossen bleiben).</li>
     <li>„Per USB installieren“ klicken und den Port „USB JTAG/serial debug unit“ bzw. „ESP32-S3“ wählen.</li>
     <li><b>Erstinstallation:</b> „Gerät löschen“ bestätigen. <b>Neuinstallation über eine bestehende HeatCore-Firmware:</b> nicht löschen – dann bleiben alle Einstellungen erhalten.</li>
-    <li>Nach dem Flashen startet die Steuerung neu. Mit Netzwerkkabel per DHCP erreichbar unter <code>http://heatcore.local</code>; ohne Netzwerk öffnet sie nach 60 s den WLAN-Zugangspunkt „HeatCore-xxxx“ (Passwort <code>heatcore123</code>, Adresse <code>192.168.4.1</code>).</li>
+    <li>Nach dem Flashen startet die Steuerung neu. Mit Netzwerkkabel per DHCP erreichbar unter <code>http://heatcore.local</code>; ohne LAN öffnet sie nach ca. 20 s den WLAN-Zugangspunkt „HeatCore-xxxx“ (Passwort <code>heatcore123</code>); die Einrichtungsseite öffnet sich auf dem Handy meist von selbst (sonst <code>192.168.4.1</code>). Dort unter System → Netzwerk das eigene WLAN wählen – LAN hat später immer Vorrang.</li>
   </ol>
   <p class="muted">Wird kein Port angezeigt oder bricht die Verbindung ab: <b>S2 (Download)</b> gedrückt halten, <b>S1 (Reset)</b> kurz drücken, S2 loslassen und erneut versuchen. Nach dem Flashen einmal S1 drücken.</p>
 </div>
