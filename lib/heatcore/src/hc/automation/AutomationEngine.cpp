@@ -535,7 +535,7 @@ void AutomationEngine::runRules(std::vector<Rule*>& matched, const Event& e) {
     r->lastExecMs = now;
     r->executedOnce = true;
     r->lastExecEpoch = ctx_.epoch();
-    char head[48];
+    char head[80];
     std::snprintf(head, sizeof(head), "%d ok, %d uebersteuert, %d Fehler", ok, skipped, failed);
     r->lastResult = std::string(r->testMode ? "TESTMODUS (nicht ausgefuehrt): " : "") + head +
                     (result.empty() ? "" : " - " + result);

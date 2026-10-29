@@ -220,9 +220,9 @@ void IRAM_ATTR rxIsr() {
   uint32_t us = dur > 65535 ? 65535u : static_cast<uint32_t>(dur);
   uint32_t head = g_head;
   uint32_t next = (head + 1) & (kRing - 1);
-  ++g_edges;
+  g_edges = g_edges + 1;
   if (next == g_tail) {
-    ++g_dropped;
+    g_dropped = g_dropped + 1;
     return;
   }
   g_ring[head] = us | (ended << 16);
@@ -337,7 +337,7 @@ void OneWireBuses::request() {
 void OneWireBuses::collect(std::vector<Reading>& out) {
   for (size_t b = 0; b < dallas_.size(); ++b) {
     for (auto& a : addrs_[b]) {
-      char id[24];
+      char id[40];
       std::snprintf(id, sizeof(id), "ow%u:%02X%02X%02X%02X%02X%02X%02X%02X", static_cast<unsigned>(b + 1), a[0], a[1],
                     a[2], a[3], a[4], a[5], a[6], a[7]);
       float t = dallas_[b]->getTempC(a.data());

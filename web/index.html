@@ -76,7 +76,7 @@ function h(tag,attrs,...kids){const e=document.createElement(tag);if(attrs)for(c
 function toast(m,bad){const t=$('#toast');t.textContent=m;t.style.background=bad?'#c92a2a':'#222';t.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>t.style.display='none',3500)}
 async function api(method,path,body){const o={method,headers:{}};if(body!==undefined){o.body=typeof body==='string'?body:JSON.stringify(body);o.headers['Content-Type']='application/json'}const r=await fetch('/api/'+path,o);let j={};try{j=await r.json()}catch(e){}if(!r.ok){const m=j.error||('HTTP '+r.status);throw new Error(m)}return j}
 const GET=p=>api('GET',p),POST=(p,b)=>api('POST',p,b??{}),PUT=(p,b)=>api('PUT',p,b),DEL=p=>api('DELETE',p);
-async function act(fn,okMsg){try{const r=await fn();if(okMsg)toast(okMsg);return r}catch(e){toast(e.message,true);throw e}}
+async function act(fn,okMsg){try{const r=await fn();if(okMsg)toast(okMsg);return r}catch(e){toast(e.message,true);return undefined}}
 const fmt=(v,d=1)=>v==null||isNaN(v)?'–':Number(v).toFixed(d);
 const ago=s=>s==null?'–':s<60?s+' s':s<3600?Math.round(s/60)+' min':s<86400?Math.round(s/3600)+' h':Math.round(s/86400)+' d';
 const dt=e=>e?new Date(e*1000).toLocaleString('de-DE'):'–';
@@ -173,6 +173,7 @@ function actionEditor(list,cat,container){
   for(const f of def.fields)row.append(h('span',{class:'muted'},f.label),fieldInput(a,f,cat));
   row.append(h('button',{class:'d',onclick:()=>{list.splice(i,1);actionEditor(list,cat,container)}},'×'));container.append(row)});
  container.append(h('button',{onclick:()=>{list.push({type:'adjust_setpoint'});actionEditor(list,cat,container)}},'+ Aktion'))}
+const NUM_DEFAULTS={delta:0.5,value:21,hysteresis:0.3,windowSec:600,durationSec:0,level:1,page:1,circuit:0};
 function fieldInput(o,f,cat){const R=cat.refs,E=cat.enums;const k=f.key;
  const s=(opts)=>{if(o[k]===undefined&&opts.length)o[k]=Array.isArray(opts[0])?opts[0][0]:opts[0];return sel(opts,o[k],v=>o[k]=v)};
  switch(f.kind){
@@ -190,7 +191,7 @@ function fieldInput(o,f,cat){const R=cat.refs,E=cat.enums;const k=f.key;
   case 'rf_command':return s(R.rfCommands.map(x=>[x.ref,x.name+(x.automationAllowed===false?' (gesperrt)':'')]));
   case 'global_mode_any':return s(['*'].concat(E.global_mode));
   case 'bool':return h('input',{type:'checkbox',checked:!!o[k],onchange:e=>o[k]=e.target.checked});
-  case 'number':return h('input',{type:'number',step:'any',class:'n',value:o[k]??'',oninput:e=>o[k]=e.target.value===''?undefined:Number(e.target.value)});
+  case 'number':if(o[k]===undefined&&NUM_DEFAULTS[k]!==undefined)o[k]=NUM_DEFAULTS[k];return h('input',{type:'number',step:'any',class:'n',value:o[k]??'',oninput:e=>o[k]=e.target.value===''?undefined:Number(e.target.value)});
   case 'time':return h('input',{type:'time',value:o[k]||'',oninput:e=>o[k]=e.target.value});
   case 'days':{if(!Array.isArray(o[k]))o[k]=[0,1,2,3,4,5,6];return h('span',null,DAYS.map((d,i)=>h('label',null,h('input',{type:'checkbox',checked:o[k].includes(i),onchange:e=>{o[k]=o[k].filter(x=>x!==i);if(e.target.checked)o[k].push(i)}}),d,' ')))}
   case 'text':return h('input',{value:o[k]??'',oninput:e=>o[k]=e.target.value});
@@ -220,7 +221,7 @@ async function rfDeviceForm(m,dev,onSaved){
   ...field('Ersatzzustand bei Funkverlust',sel([['false','AUS / geschlossen (Heizung läuft weiter)'],['true','EIN / offen']],String(d.failsafeOn),v=>d.failsafeOn=v==='true')),
   ...field('Automatisch AUS nach s',inp(d,'autoOffSec','number',{class:'n'}),'Für Sensoren, die nur beim Öffnen senden (0 = aus).')),
   h('h3',null,'Tasten / Codes'),btnBox,h('div',{class:'row',style:'margin-top:10px'},h('button',{class:'p',onclick:async()=>{const body=JSON.parse(JSON.stringify(d));['stats','id','state','available','lastSeenAgeSec','address','bits'].forEach(k=>delete body[k]);body.buttons.forEach(b=>{delete b.fresh;delete b.count;delete b.lastEpoch;delete b.tristate});body.minRepeats=+body.minRepeats;body.pulseUs=+body.pulseUs;
-   const r=await act(()=>dev&&dev.id?PUT('rf/devices/'+dev.id,body):POST('rf/devices',body),'Gespeichert');onSaved&&onSaved(r)}},'Speichern')));
+   const r=await act(()=>dev&&dev.id?PUT('rf/devices/'+dev.id,body):POST('rf/devices',body),'Gespeichert');if(r)onSaved&&onSaved(r)}},'Speichern')));
  renderButtons();return d}
 
 // ------------------------------------------------------------ RF overview
@@ -281,7 +282,7 @@ routes['/rf/tx']=async m=>{
   const rc=()=>{cmds.innerHTML='';x.commands.forEach((c,i)=>cmds.append(h('div',{class:'row box'},'Name ',inp(c,'name'),'Code ',inp(c,'code',null,{style:'width:110px'}),'Wdh. ',inp(c,'repeats','number',{class:'n',title:'0 = Gerätevorgabe'}),h('label',null,inp(c,'automationAllowed','checkbox'),' Automation'),h('label',null,inp(c,'haExposed','checkbox'),' Home Assistant'),c.sent!=null?h('span',{class:'muted'},c.sent+'× gesendet'):null,
    x.id&&c.id?h('button',{onclick:()=>act(()=>POST('rf/tx/send',{command:x.id+'/'+c.id}),'Sendeauftrag eingereiht')},'Test senden'):null,h('button',{class:'d',onclick:()=>{x.commands.splice(i,1);rc()}},'×'))));cmds.append(h('button',{onclick:()=>{x.commands.push({name:'',code:'',repeats:0,automationAllowed:true,haExposed:false});rc()}},'+ Befehl'))};
   card.append(h('h3',{style:'margin-top:0'},x.id?x.name:'Neues Sendegerät'),h('div',{class:'form'},...field('Name',inp(x,'name')),...field('Gruppe',inp(x,'group'),'Befehle gleichen Namens einer Gruppe: „group:<Gruppe>/<Befehl>“'),...field('Protokoll',sel(['ev1527','pt2262'],x.protocol,v=>x.protocol=v)),...field('Pulslänge µs',inp(x,'pulseUs','number',{class:'n'})),...field('Wiederholungen',inp(x,'repeats','number',{class:'n'}),'1..20 Telegramme pro Sendung'),...field('Aktiv',inp(x,'enabled','checkbox'))),h('h3',null,'Befehle'),cmds,
-   h('div',{class:'row',style:'margin-top:8px'},h('button',{class:'p',onclick:async()=>{const b=JSON.parse(JSON.stringify(x));b.pulseUs=+b.pulseUs;b.repeats=+b.repeats;b.commands.forEach(c=>c.repeats=+c.repeats||0);await act(()=>x.id?PUT('rf/tx/devices/'+x.id,b):POST('rf/tx/devices',b),'Gespeichert');route()}},'Speichern'),x.id?h('button',{class:'d',onclick:()=>confirm('Sender löschen?')&&act(()=>DEL('rf/tx/devices/'+x.id)).then(route)},'Löschen'):null));rc();return card};
+   h('div',{class:'row',style:'margin-top:8px'},h('button',{class:'p',onclick:async()=>{const b=JSON.parse(JSON.stringify(x));b.pulseUs=+b.pulseUs;b.repeats=+b.repeats;b.commands.forEach(c=>c.repeats=+c.repeats||0);if(await act(()=>x.id?PUT('rf/tx/devices/'+x.id,b):POST('rf/tx/devices',b),'Gespeichert'))route()}},'Speichern'),x.id?h('button',{class:'d',onclick:()=>confirm('Sender löschen?')&&act(()=>DEL('rf/tx/devices/'+x.id)).then(route)},'Löschen'):null));rc();return card};
  dev.devices.forEach(d=>devBox.append(editor(d)));devBox.append(h('button',{onclick:e=>{e.target.before(editor());}},'+ Sendegerät'));
  // quick rule: send on state change
  const q={trigger:'global_mode',state:'eco',room:'',roomState:'heating_on',command:(cat.refs.rfCommands[0]||{}).ref||''};const qb=h('div',{class:'card'});
@@ -345,7 +346,7 @@ function ruleEditor(m,rule,cat,onSaved){const r=JSON.parse(JSON.stringify(rule||
   box.append(h('button',{onclick:()=>{arr.push({type:cat[kind][0].type});list(arr,kind,box)}},kind==='triggers'?'+ Trigger':'+ Bedingung'))};
  card.append(h('div',{class:'form'},...field('Name',inp(r,'name')),...field('Aktiv',inp(r,'enabled','checkbox'),'Regeln werden vor der Aktivierung geprüft (Referenzen, Grenzwerte, Schleifen).'),...field('Testmodus',inp(r,'testMode','checkbox'),'Regel reagiert normal, Aktionen werden nur simuliert und protokolliert.'),...field('Priorität',inp(r,'priority','number',{class:'n'}),'0..100 – höhere Priorität gewinnt bei Konflikten um dasselbe Ziel.'),...field('Sperrzeit s',inp(r,'cooldownSec','number',{class:'n'})),...field('max. Ausführungen/h',inp(r,'maxPerHour','number',{class:'n'}))),
   h('h3',null,'Trigger (einer genügt)'),trg,h('h3',null,'Bedingungen (alle müssen erfüllt sein)'),cnd,h('h3',null,'Aktionen'),acts,msg,
-  h('div',{class:'row',style:'margin-top:10px'},h('button',{onclick:async()=>{const v=await POST('rules/validate',clean());msg.innerHTML='';msg.append(v.valid?h('p',{class:'ok'},'Regel ist gültig.'):h('p',{class:'bad'},v.error))}},'Prüfen'),h('button',{class:'p',onclick:async()=>{const res=await act(()=>r.id?PUT('rules/'+r.id,clean()):POST('rules',clean()));if(res.validationError){msg.innerHTML='';msg.append(h('p',{class:'bad'},'Gespeichert, aber nicht aktiviert: '+res.validationError))}else{toast('Gespeichert');onSaved&&onSaved()}}},'Speichern')));
+  h('div',{class:'row',style:'margin-top:10px'},h('button',{onclick:async()=>{const v=await POST('rules/validate',clean());msg.innerHTML='';msg.append(v.valid?h('p',{class:'ok'},'Regel ist gültig.'):h('p',{class:'bad'},v.error))}},'Prüfen'),h('button',{class:'p',onclick:async()=>{const res=await act(()=>r.id?PUT('rules/'+r.id,clean()):POST('rules',clean()));if(!res)return;if(res.validationError){msg.innerHTML='';msg.append(h('p',{class:'bad'},'Gespeichert, aber nicht aktiviert: '+res.validationError))}else{toast('Gespeichert');onSaved&&onSaved()}}},'Speichern')));
  const clean=()=>{const o=JSON.parse(JSON.stringify(r));['execCount','lastExecEpoch','blockedCount','lastResult','valid','validationError'].forEach(k=>delete o[k]);o.priority=+o.priority;o.cooldownSec=+o.cooldownSec;o.maxPerHour=+o.maxPerHour;return o};
  list(r.triggers,'triggers',trg);list(r.conditions,'conditions',cnd);actionEditor(r.actions,cat,acts);m.append(card)}
 routes['/rules']=async m=>{const cat=await catalog(true);m.append(h('h2',null,'Automationen – Regeln'));const st=h('div',{class:'card row'});const lst=h('div',{class:'card tbl'});const ed=h('div');m.append(st,lst,ed);

@@ -38,14 +38,14 @@ jobs:
         run: pip install -U platformio
       - name: Build firmware
         run: pio run -e kc868_a16v3
-      - name: Firmware size
-        run: |
-          ls -l .pio/build/kc868_a16v3/firmware.bin
-          pio run -e kc868_a16v3 -t size | tail -n 20
       - uses: actions/upload-artifact@v4
         with:
           name: heatcore-firmware
           path: |
             .pio/build/kc868_a16v3/firmware.bin
+            .pio/build/kc868_a16v3/firmware.factory.bin
             .pio/build/kc868_a16v3/bootloader.bin
             .pio/build/kc868_a16v3/partitions.bin
+          if-no-files-found: error
+      - name: Firmware size
+        run: pio run -e kc868_a16v3 -t size | tail -n 20

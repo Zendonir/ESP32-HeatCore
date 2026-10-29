@@ -577,9 +577,9 @@ void catalogJson(HeatCoreSystem& sys, JsonObject o) {
     field(f, "hysteresis", "Hysterese K", "number");
   }
   {
-    JsonArray f = entry(t, "temp_change", "Temperaturaenderung");
+    JsonArray f = entry(t, "temp_change", "Temperaturänderung");
     field(f, "ref", "Quelle", "temp_ref");
-    field(f, "delta", "Aenderung K (+/-)", "number");
+    field(f, "delta", "Änderung K (+/-)", "number");
     field(f, "windowSec", "Zeitfenster s", "number");
   }
   {
@@ -648,9 +648,9 @@ void catalogJson(HeatCoreSystem& sys, JsonObject o) {
     field(f, "value", "offen", "bool");
   }
   {
-    JsonArray f = entry(c, "sensor_available", "Sensorverfuegbarkeit");
+    JsonArray f = entry(c, "sensor_available", "Sensorverfügbarkeit");
     field(f, "ref", "Sensor", "sensor");
-    field(f, "value", "verfuegbar", "bool");
+    field(f, "value", "verfügbar", "bool");
   }
   {
     JsonArray f = entry(c, "input_state", "Zustand Eingang");
@@ -675,9 +675,9 @@ void catalogJson(HeatCoreSystem& sys, JsonObject o) {
     field(f, "value", "Sollwert C", "number");
   }
   {
-    JsonArray f = entry(a, "adjust_setpoint", "Solltemperatur erhoehen/verringern");
+    JsonArray f = entry(a, "adjust_setpoint", "Solltemperatur erhöhen/verringern");
     field(f, "room", "Raum", "room");
-    field(f, "delta", "Aenderung K", "number");
+    field(f, "delta", "Änderung K", "number");
   }
   {
     JsonArray f = entry(a, "set_room_mode", "Raum-Betriebsart");
@@ -702,7 +702,7 @@ void catalogJson(HeatCoreSystem& sys, JsonObject o) {
   }
   field(entry(a, "rf_send", "Funkbefehl senden"), "command", "Befehl", "rf_command");
   {
-    JsonArray f = entry(a, "mqtt_publish", "MQTT veroeffentlichen (<basis>/out/<thema>)");
+    JsonArray f = entry(a, "mqtt_publish", "MQTT veröffentlichen (<basis>/out/<thema>)");
     field(f, "topic", "Thema", "text");
     field(f, "payload", "Inhalt", "text");
   }
@@ -712,18 +712,18 @@ void catalogJson(HeatCoreSystem& sys, JsonObject o) {
     field(f, "level", "Stufe 0..2", "number");
   }
   field(entry(a, "display_page", "Displayseite wechseln"), "page", "Seite 1..5", "number");
-  entry(a, "display_next", "Display: naechste Seite");
+  entry(a, "display_next", "Display: nächste Seite");
   entry(a, "display_prev", "Display: vorherige Seite");
   entry(a, "display_wake", "Display einschalten");
-  entry(a, "display_room_next", "Display: naechster Raum");
-  field(entry(a, "displayed_room_adjust", "Sollwert des angezeigten Raums"), "delta", "Aenderung K", "number");
+  entry(a, "display_room_next", "Display: nächster Raum");
+  field(entry(a, "displayed_room_adjust", "Sollwert des angezeigten Raums"), "delta", "Änderung K", "number");
   {
     JsonArray f = entry(a, "raise_alarm", "Alarm registrieren");
     field(f, "code", "Code (user.*)", "text");
     field(f, "message", "Text", "text");
     field(f, "level", "Stufe 0..2", "number");
   }
-  field(entry(a, "clear_alarm", "Alarm loeschen"), "code", "Code (user.*)", "text");
+  field(entry(a, "clear_alarm", "Alarm löschen"), "code", "Code (user.*)", "text");
   {
     JsonArray f = entry(a, "window_state", "Fensterstatus setzen");
     field(f, "room", "Raum", "room");
@@ -735,7 +735,7 @@ void catalogJson(HeatCoreSystem& sys, JsonObject o) {
     field(f, "present", "anwesend", "bool");
   }
   {
-    JsonArray f = entry(a, "heat_demand", "Waermeanforderung");
+    JsonArray f = entry(a, "heat_demand", "Wärmeanforderung");
     field(f, "room", "Raum", "room");
     field(f, "on", "an", "bool");
     field(f, "durationSec", "Dauer s (max 4 h)", "number");

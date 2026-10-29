@@ -235,7 +235,7 @@ void DisplayManager::pageRooms(Framebuffer& fb, const DisplaySnapshot& s) const 
   if (cfg.mode == DisplayMode::Large) {
     const auto& r = s.rooms[idx];
     fb.fillRect(0, 0, 128, 9);
-    char cnt[12];
+    char cnt[24];
     std::snprintf(cnt, sizeof(cnt), "%u/%u", static_cast<unsigned>(idx + 1), static_cast<unsigned>(s.rooms.size()));
     int w = Framebuffer::textWidth(cnt);
     fb.text(2, 1, truncateGlyphs(r.name, (120 - w) / 6), 1, false);
@@ -257,10 +257,10 @@ void DisplayManager::pageRooms(Framebuffer& fb, const DisplaySnapshot& s) const 
   for (int row = 0; row < rows && first + row < n; ++row) {
     const auto& r = s.rooms[first + row];
     int y = y0 + row * 9;
-    fb.textFit(0, y, r.name, 54);
+    fb.textFit(0, y, r.name, 48);
     std::string t = r.hasTemp ? f1(r.temp) : "--.-";
-    fb.textRight(84, y, t);
-    fb.textRight(110, y, f1(r.setpoint));
+    fb.textRight(77, y, t);
+    fb.textRight(109, y, f1(r.setpoint));
     std::string flags;
     if (r.fault) flags = "!";
     else if (r.window) flags = "F";
@@ -318,7 +318,14 @@ void DisplayManager::pageModel(Framebuffer& fb, const DisplaySnapshot& s) const 
   int y = 11;
   fb.textFit(0, y, m.room, 128);
   y += 9;
-  fb.textFit(0, y, std::string(tr(kStatus)) + ": " + m.status, 128);
+  std::string st = m.status;
+  if (cfg.language == Language::De) {
+    if (st == "learning") st = "lernt";
+    else if (st == "ready") st = "bereit";
+    else if (st == "degraded") st = "eingeschr\xC3\xA4nkt";
+    else if (st == "disabled") st = "aus";
+  }
+  fb.textFit(0, y, std::string(tr(kStatus)) + ": " + st, 128);
   y += 9;
   char b[40];
   std::snprintf(b, sizeof(b), "%s %+.2f K/h", tr(kTrend), m.trendKh);
@@ -327,8 +334,8 @@ void DisplayManager::pageModel(Framebuffer& fb, const DisplaySnapshot& s) const 
   std::snprintf(b, sizeof(b), "%s %.0f+-%.0f min", tr(kDelay), m.delayMin, m.delayStd);
   fb.textFit(0, y, b, 128);
   y += 9;
-  if (m.predValid) std::snprintf(b, sizeof(b), "%s1h %.1f+-%.1f", tr(kForecast), m.predMean, m.predStd);
-  else std::snprintf(b, sizeof(b), "%s1h ---", tr(kForecast));
+  if (m.predValid) std::snprintf(b, sizeof(b), "%s 1h %.1f+-%.1f", tr(kForecast), m.predMean, m.predStd);
+  else std::snprintf(b, sizeof(b), "%s 1h ---", tr(kForecast));
   fb.textFit(0, y, b, 128);
   std::snprintf(b, sizeof(b), "%s %.2f K/h", tr(kGain), m.gain);
   fb.textFit(0, 56, b, 128);
