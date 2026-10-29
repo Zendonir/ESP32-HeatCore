@@ -1,0 +1,53 @@
+name: Pages
+
+# Publishes the web flasher (ESP Web Tools) and the update source for the
+# web UI on GitHub Pages, using the newest release. Runs after every release
+# and can be started by hand.
+# One-time setup: Settings -> Pages -> Build and deployment -> Source:
+# "GitHub Actions".
+on:
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble site from the newest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          TAG=$(gh release list --exclude-pre-releases --limit 1 --json tagName --jq '.[0].tagName // empty')
+          if [ -z "$TAG" ]; then TAG=$(gh release list --limit 1 --json tagName --jq '.[0].tagName // empty'); fi
+          if [ -z "$TAG" ]; then echo "::error::Noch kein Release vorhanden - zuerst den Workflow 'Release' ausfuehren"; exit 1; fi
+          echo "Release $TAG"
+          mkdir -p site/firmware
+          gh release download "$TAG" --dir site/firmware \
+            --pattern heatcore-ota.bin --pattern heatcore-factory.bin --pattern release.json --pattern manifest.json --pattern SHA256SUMS
+          mv site/firmware/manifest.json site/manifest.json
+          cp tools/webflash/index.html site/index.html
+          touch site/.nojekyll
+          ls -la site site/firmware
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4

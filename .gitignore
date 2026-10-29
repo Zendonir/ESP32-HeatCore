@@ -1,0 +1,10 @@
+build/
+.pio/
+.vscode/
+src/generated/
+*.pyc
+__pycache__/
+
+# UI test screenshots (tools/sim/ui_test.js without HC_SHOTS)
+/*.png
+include/hc_version.h

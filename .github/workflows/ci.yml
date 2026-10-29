@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  host-tests:
+    name: Host unit and integration tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build/host -DCMAKE_BUILD_TYPE=Debug
+      - name: Build
+        run: cmake --build build/host -j4
+      - name: Run tests
+        run: ./build/host/heatcore_tests
+
+  firmware:
+    name: ESP32-S3 firmware build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            .pio/libdeps
+          key: pio-${{ hashFiles('platformio.ini') }}
+      - name: Install PlatformIO
+        run: pip install -U platformio
+      - name: Build firmware
+        run: pio run -e kc868_a16v3
+      - name: Package and check images (as for a release)
+        run: python3 tools/make_release.py --build .pio/build/kc868_a16v3 --out dist --repo "${{ github.repository }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: heatcore-firmware
+          path: |
+            dist/
+            .pio/build/kc868_a16v3/bootloader.bin
+            .pio/build/kc868_a16v3/partitions.bin
+          if-no-files-found: error
+      - name: Firmware size
+        run: pio run -e kc868_a16v3 -t size | tail -n 20

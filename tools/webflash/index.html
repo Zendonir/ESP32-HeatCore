@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HeatCore Web-Flasher</title>
+<script type="module" src="https://unpkg.com/esp-web-tools@10.4.0/dist/web/install-button.js?module"></script>
+<style>
+:root{--bg:#f3f5f8;--panel:#fff;--text:#1d2430;--muted:#667085;--line:#dde2ea;--accent:#d9480f;--bad:#c92a2a;--ok:#2b8a3e;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#12161c;--panel:#1b2129;--text:#e6e9ee;--muted:#9aa4b2;--line:#2c3440;--accent:#ff7a3d;--bad:#ff6b6b;--ok:#51cf66;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:760px;margin:0 auto;padding:24px 16px 48px}
+h1{margin:0 0 4px;font-size:26px;color:var(--accent)}
+h2{font-size:17px;margin:0 0 8px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:14px 0}
+.muted{color:var(--muted)}
+ol{padding-left:20px;margin:6px 0}li{margin:4px 0}
+code{background:var(--bg);padding:1px 5px;border-radius:4px;font-size:13px}
+pre{white-space:pre-wrap;background:var(--bg);padding:10px;border-radius:6px;max-height:240px;overflow:auto;font-size:13px}
+.warn{border-left:4px solid var(--bad)}
+a{color:var(--accent)}
+esp-web-install-button button[slot=activate]{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:12px 22px;font-size:16px;cursor:pointer}
+table{border-collapse:collapse;width:100%;font-size:14px}td{padding:4px 6px;border-bottom:1px solid var(--line);word-break:break-all}
+</style>
+</head>
+<body>
+<main>
+<h1>HeatCore</h1>
+<div class="muted">Firmware für KinCony KC868-A16 V3 (ESP32-S3) direkt im Browser flashen</div>
+
+<div class="card">
+  <h2 id="ver">Aktuelles Release</h2>
+  <div id="info" class="muted">wird geladen …</div>
+  <p style="margin:16px 0 4px">
+    <esp-web-install-button manifest="manifest.json">
+      <button slot="activate">Per USB installieren</button>
+      <span slot="unsupported">Dieser Browser kann nicht auf USB-Geräte zugreifen. Bitte Chrome oder Edge auf einem Desktop-Rechner verwenden (nicht Firefox/Safari, nicht auf Smartphones).</span>
+      <span slot="not-allowed">Der Web-Flasher funktioniert nur über HTTPS.</span>
+    </esp-web-install-button>
+  </p>
+</div>
+
+<div class="card">
+  <h2>So geht's</h2>
+  <ol>
+    <li>Platine mit einem USB-C-<b>Datenkabel</b> am Rechner anschließen (die 12/24-V-Versorgung darf angeschlossen bleiben).</li>
+    <li>„Per USB installieren“ klicken und den Port „USB JTAG/serial debug unit“ bzw. „ESP32-S3“ wählen.</li>
+    <li><b>Erstinstallation:</b> „Gerät löschen“ bestätigen. <b>Neuinstallation über eine bestehende HeatCore-Firmware:</b> nicht löschen – dann bleiben alle Einstellungen erhalten.</li>
+    <li>Nach dem Flashen startet die Steuerung neu. Mit Netzwerkkabel per DHCP erreichbar unter <code>http://heatcore.local</code>; ohne LAN öffnet sie nach ca. 20 s den WLAN-Zugangspunkt „HeatCore-xxxx“ (Passwort <code>heatcore123</code>); die Einrichtungsseite öffnet sich auf dem Handy meist von selbst (sonst <code>192.168.4.1</code>). Dort unter System → Netzwerk das eigene WLAN wählen – LAN hat später immer Vorrang.</li>
+  </ol>
+  <p class="muted">Wird kein Port angezeigt oder bricht die Verbindung ab: <b>S2 (Download)</b> gedrückt halten, <b>S1 (Reset)</b> kurz drücken, S2 loslassen und erneut versuchen. Nach dem Flashen einmal S1 drücken.</p>
+</div>
+
+<div class="card warn">
+  <h2>Sicherheit</h2>
+  <p>Während des Flashens und beim Neustart sind alle Ausgänge aus. Die Ausgänge sind Low-Side-MOSFET-Schalter (nur Gleichspannung). Vor dem ersten Betrieb mit echten Stellantrieben die Prüfungen in <a href="https://github.com/Zendonir/ESP32-HeatCore/blob/main/docs/hardware.md">docs/hardware.md</a> durchführen.</p>
+</div>
+
+<div class="card">
+  <h2>Updates</h2>
+  <p>Spätere Updates ohne USB: im Webinterface der Steuerung unter <b>System → Firmware-Update</b> („Nach Updates suchen“) oder die Datei <code>heatcore-ota.bin</code> hochladen. Eine neue Firmware läuft zunächst auf Probe und kehrt bei Problemen automatisch zur vorherigen Version zurück.</p>
+  <table id="files"></table>
+  <p><a id="rel" href="https://github.com/Zendonir/ESP32-HeatCore/releases">Alle Releases auf GitHub</a></p>
+</div>
+</main>
+<script>
+fetch('firmware/release.json',{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(rel=>{
+  document.getElementById('ver').textContent='Release '+rel.version;
+  const info=document.getElementById('info');info.textContent=(rel.date?'veröffentlicht '+rel.date+' · ':'')+'Platine '+rel.board;
+  if(rel.notes){const pre=document.createElement('pre');pre.textContent=rel.notes;info.after(pre)}
+  if(rel.releaseUrl)document.getElementById('rel').href=rel.releaseUrl;
+  const t=document.getElementById('files');
+  for(const k of ['ota','factory']){const f=rel[k];if(!f)continue;const tr=document.createElement('tr');
+    const a=document.createElement('a');a.href='firmware/'+f.file;a.textContent=f.file;
+    const td1=document.createElement('td');td1.append(a);const td2=document.createElement('td');td2.textContent=Math.round(f.size/1024)+' KB';
+    const td3=document.createElement('td');td3.innerHTML='<code></code>';td3.firstChild.textContent='SHA-256 '+f.sha256;tr.append(td1,td2,td3);t.append(tr)}
+}).catch(e=>{document.getElementById('info').textContent='Release-Informationen nicht verfügbar ('+e.message+').'});
+</script>
+</body>
+</html>

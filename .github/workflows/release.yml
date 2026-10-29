@@ -1,0 +1,84 @@
+name: Release
+
+# Builds a release and publishes it on GitHub:
+#   * push a tag:             git tag v0.5.0 && git push origin v0.5.0
+#   * or Actions -> Release -> "Run workflow" with a version (creates the tag)
+# Afterwards the "Pages" workflow publishes the web flasher with this release.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version, z. B. v0.5.0 (Vorabversion: v0.5.0-rc1)"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Version
+        id: v
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          V="${INPUT_VERSION:-$REF_NAME}"
+          [[ "$V" == v* ]] || V="v$V"
+          if ! [[ "$V" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::Ungueltige Version '$V' (erwartet v1.2.3 oder v1.2.3-rc1)"; exit 1
+          fi
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && git rev-parse -q --verify "refs/tags/$V" >/dev/null; then
+            echo "::error::Tag $V existiert bereits"; exit 1
+          fi
+          echo "tag=$V" >> "$GITHUB_OUTPUT"
+      - name: Release notes
+        run: |
+          PREV=$(git describe --tags --abbrev=0 --match 'v[0-9]*' HEAD^ 2>/dev/null || true)
+          if [ -n "$PREV" ]; then RANGE="$PREV..HEAD"; else RANGE="HEAD"; fi
+          git log --no-merges --pretty='- %s' $RANGE | head -n 40 > notes.txt
+          cat notes.txt
+      - name: Host tests
+        run: |
+          cmake -S . -B build/host -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/host -j4
+          ./build/host/heatcore_tests
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            .pio/libdeps
+          key: pio-${{ hashFiles('platformio.ini') }}
+      - name: Install PlatformIO
+        run: pip install -U platformio
+      - name: Build firmware
+        env:
+          HC_VERSION: ${{ steps.v.outputs.tag }}
+        run: pio run -e kc868_a16v3
+      - name: Package and check images
+        run: >
+          python3 tools/make_release.py --build .pio/build/kc868_a16v3 --out dist
+          --version "${{ steps.v.outputs.tag }}" --repo "${{ github.repository }}" --notes notes.txt
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.v.outputs.tag }}
+        run: |
+          PRE=""
+          if [[ "$TAG" == *-* ]]; then PRE="--prerelease"; fi
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "HeatCore $TAG" --notes-file dist/NOTES.md $PRE \
+            dist/heatcore-ota.bin dist/heatcore-factory.bin dist/release.json dist/manifest.json dist/SHA256SUMS

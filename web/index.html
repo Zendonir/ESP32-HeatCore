@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HeatCore</title>
+<style>
+:root{--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--bg:#f3f5f8;--panel:#fff;--text:#1d2430;--muted:#667085;--line:#dde2ea;--accent:#d9480f;--accent2:#1c7ed6;--ok:#2b8a3e;--warn:#e67700;--bad:#c92a2a;--chip:#eef1f5}
+@media (prefers-color-scheme:dark){:root{--s1:#3987e5;--s2:#d95926;--s3:#199e70;--bg:#12161c;--panel:#1b2129;--text:#e6e9ee;--muted:#98a2b3;--line:#2c3440;--chip:#252d38}}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text)}
+header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+header h1{font-size:17px;margin:0;color:var(--accent)}
+header .st{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;font-size:12px}
+#menuBtn{display:none;border:0;background:none;font-size:22px;color:var(--text)}
+.wrap{display:flex;min-height:calc(100vh - 50px)}
+nav{width:230px;flex:none;background:var(--panel);border-right:1px solid var(--line);padding:8px 0;overflow-y:auto}
+nav .grp{padding:10px 16px 4px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+nav a{display:block;padding:6px 16px 6px 22px;color:var(--text);text-decoration:none;border-left:3px solid transparent}
+nav a.active{border-left-color:var(--accent);background:var(--chip);font-weight:600}
+main{flex:1;padding:16px;min-width:0}
+h2{margin:0 0 12px;font-size:19px}
+h3{margin:18px 0 8px;font-size:15px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.muted{color:var(--muted)}
+.big{font-size:28px;font-weight:600}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;color:var(--muted);font-weight:600}
+.tbl{overflow-x:auto}
+input,select,textarea{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--text);max-width:100%}
+input[type=checkbox]{width:auto}
+input.n{width:90px}
+textarea{width:100%;min-height:120px;font-family:ui-monospace,monospace;font-size:12px}
+button,.btn{font:inherit;padding:6px 12px;border-radius:6px;border:1px solid var(--line);background:var(--chip);color:var(--text);cursor:pointer}
+button.p{background:var(--accent);border-color:var(--accent);color:#fff}
+button.d{color:var(--bad)}
+button:disabled{opacity:.5}
+.chip{display:inline-block;padding:1px 8px;border-radius:10px;background:var(--chip);font-size:12px}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+.chip.ok{background:#d3f9d8;color:#2b8a3e}.chip.warn{background:#fff3bf;color:#a65e00}.chip.bad{background:#ffe3e3;color:#c92a2a}
+@media (prefers-color-scheme:dark){.chip.ok{background:#173b22}.chip.warn{background:#3d3010}.chip.bad{background:#451b1b}}
+.form{display:grid;grid-template-columns:minmax(120px,220px) 1fr;gap:8px 12px;align-items:center}
+.form label{color:var(--muted)}
+.hint{font-size:12px;color:var(--muted);margin-top:4px}
+.chart{position:relative}.chart svg{display:block;width:100%;height:auto;overflow:visible}.chart text{font-size:11px;fill:var(--muted)}
+.chart .tip{position:absolute;pointer-events:none;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,.15);white-space:nowrap;display:none}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:2px 0 6px}.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:5px}
+.tiles{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));margin-bottom:14px}.tile{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}.tile b{display:block;font-size:20px}.tile span{font-size:12px;color:var(--muted)}
+pre.code{white-space:pre-wrap;word-break:break-all;background:var(--chip);padding:8px;border-radius:6px;font-size:12px}
+.box{border:1px dashed var(--line);border-radius:8px;padding:10px;margin:8px 0}
+.tabs{display:flex;gap:4px;margin-bottom:12px;flex-wrap:wrap}
+.tabs a{padding:6px 12px;border-radius:6px;text-decoration:none;color:var(--text);background:var(--chip)}
+.tabs a.active{background:var(--accent);color:#fff}
+.room{position:relative}
+.room .t{font-size:30px;font-weight:600}
+.room .flags{position:absolute;right:12px;top:12px;display:flex;gap:4px}
+#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:8px 14px;border-radius:8px;display:none;z-index:20;max-width:90vw}
+canvas.oled{image-rendering:pixelated;background:#000;border-radius:6px;border:4px solid #333;width:100%;max-width:520px}
+.out{display:grid;grid-template-columns:repeat(8,1fr);gap:4px}
+.out div{text-align:center;padding:6px 0;border-radius:4px;background:var(--chip);font-size:12px}
+.out div.on{background:var(--accent);color:#fff}
+.wave{width:100%;height:70px;background:var(--chip);border-radius:6px}
+@media (max-width:820px){#menuBtn{display:block}nav{position:fixed;top:50px;bottom:0;left:-250px;z-index:10;transition:left .2s}nav.open{left:0}.form{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header><button id="menuBtn" onclick="document.querySelector('nav').classList.toggle('open')">&#9776;</button><h1>HeatCore</h1><div class="st" id="hdr"></div></header>
+<div class="wrap">
+<nav id="nav"></nav>
+<main id="main"><p class="muted">Lade ...</p></main>
+</div>
+<div id="toast"></div>
+<script>
+'use strict';
+// ------------------------------------------------------------ helpers
+const $=s=>document.querySelector(s);
+function h(tag,attrs,...kids){const e=document.createElement(tag);if(attrs)for(const[k,v]of Object.entries(attrs)){if(v==null||v===false)continue;if(k.startsWith('on'))e.addEventListener(k.slice(2),v);else if(k==='style')e.style.cssText=v;else if(k==='value')e.value=v;else if(k==='checked')e.checked=!!v;else e.setAttribute(k,v===true?'':v)}for(const c of kids.flat()){if(c==null||c===false)continue;e.append(c instanceof Node?c:document.createTextNode(String(c)))}return e}
+function toast(m,bad){const t=$('#toast');t.textContent=m;t.style.background=bad?'#c92a2a':'#222';t.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>t.style.display='none',3500)}
+async function api(method,path,body){const o={method,headers:{}};if(body!==undefined){o.body=typeof body==='string'?body:JSON.stringify(body);o.headers['Content-Type']='application/json'}const r=await fetch('/api/'+path,o);let j={};try{j=await r.json()}catch(e){}if(!r.ok){const m=j.error||('HTTP '+r.status);throw new Error(m)}return j}
+const GET=p=>api('GET',p),POST=(p,b)=>api('POST',p,b??{}),PUT=(p,b)=>api('PUT',p,b),DEL=p=>api('DELETE',p);
+async function act(fn,okMsg){try{const r=await fn();if(okMsg)toast(okMsg);return r}catch(e){toast(e.message,true);return undefined}}
+const fmt=(v,d=1)=>v==null||isNaN(v)?'–':Number(v).toFixed(d);
+const ago=s=>s==null?'–':s<60?s+' s':s<3600?Math.round(s/60)+' min':s<86400?Math.round(s/3600)+' h':Math.round(s/86400)+' d';
+const dt=e=>e?new Date(e*1000).toLocaleString('de-DE'):'–';
+const chip=(t,c)=>h('span',{class:'chip '+(c||'')},t);
+const stChip=s=>chip(s,s==='ok'?'ok':(s==='fehler'||s==='fehlt'||s==='fault'||s==='stale')?'bad':(s==='unbestaetigt'||s==='never')?'warn':'');
+function sel(opts,val,onch,attrs){return h('select',Object.assign({onchange:e=>onch&&onch(e.target.value)},attrs||{}),opts.map(o=>{const[v,l]=Array.isArray(o)?o:[o,o];return h('option',{value:v,selected:String(v)===String(val)},l)}))}
+function field(label,el,hint){return[h('label',null,label),h('div',null,el,hint?h('div',{class:'hint'},hint):null)]}
+function inp(obj,key,type,attrs){const a=Object.assign({value:obj[key]??''},attrs||{});if(type==='checkbox'){return h('input',Object.assign({type:'checkbox',checked:!!obj[key],onchange:e=>obj[key]=e.target.checked},attrs||{}))}return h('input',Object.assign(a,{type:type||'text',oninput:e=>{obj[key]=type==='number'?(e.target.value===''?'':Number(e.target.value)):e.target.value}}))}
+let timers=[];function every(ms,fn){fn();timers.push(setInterval(fn,ms))}
+function clearTimers(){timers.forEach(clearInterval);timers=[]}
+const DAYS=['Mo','Di','Mi','Do','Fr','Sa','So'];
+
+// ------------------------------------------------------------ navigation
+const NAV=[
+ ['Übersicht',[['#/','Dashboard'],['#/rooms','Räume & Heizkreise'],['#/sensors','Sensoren'],['#/model','Lernmodell'],['#/stats','Statistik']]],
+ ['Funkgeräte',[['#/rf','Übersicht'],['#/rf/learn','Gerät anlernen'],['#/rf/monitor','Empfangsmonitor'],['#/rf/tx','Sender'],['#/rf/sensors','Temperaturfunksensoren'],['#/rf/diag','Funkdiagnose']]],
+ ['Display',[['#/display','Live-Vorschau'],['#/display/pages','Anzeigeseiten'],['#/display/settings','Einstellungen'],['#/display/status','Status & Diagnose']]],
+ ['Automationen',[['#/rules','Regeln'],['#/rules/catalog','Trigger, Bedingungen, Aktionen'],['#/rules/test','Testmodus'],['#/rules/log','Ereignisprotokoll']]],
+ ['Hardware',[['#/hw/outputs','16 Ausgänge'],['#/hw/inputs','16 Digitaleingänge'],['#/hw/analog','Analogeingänge'],['#/hw/onewire','1-Wire-Busse'],['#/hw/selftest','Selbsttest & Status']]],
+ ['System',[['#/sys/safety','Sicherheit'],['#/sys/network','Netzwerk'],['#/sys/mqtt','MQTT / Home Assistant'],['#/sys/general','Allgemein & Backup'],['#/sys/firmware','Firmware-Update'],['#/sys/ai','KI / MCP']]]];
+function buildNav(){const n=$('#nav');n.innerHTML='';for(const[g,items]of NAV){n.append(h('div',{class:'grp'},g));for(const[href,l]of items)n.append(h('a',{href},l))}}
+function markNav(){const cur=location.hash||'#/';document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('active',a.getAttribute('href')===cur));$('nav').classList.remove('open')}
+const routes={};
+async function route(){clearTimers();markNav();const key=(location.hash||'#/').slice(1);const fn=routes[key]||routes['/'];const m=$('#main');m.innerHTML='';try{await fn(m)}catch(e){m.append(h('div',{class:'card bad'},'Fehler: '+e.message))}}
+window.addEventListener('hashchange',route);
+
+// header status
+async function header(){try{const s=await GET('status');const el=$('#hdr');el.innerHTML='';el.append(chip(s.network||'offline',s.network?'ok':'warn'),chip('MQTT '+s.mqtt,s.mqtt==='verbunden'?'ok':''),chip(s.localTime||'keine Uhrzeit',s.timeValid?'':'warn'),chip(s.alarmCount+' Alarm'+(s.alarmCount==1?'':'e'),s.alarmCount?'bad':'ok'))}catch(e){}}
+
+// websocket for live events
+let ws,wsHandlers=[];function connectWs(){try{ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws');ws.onmessage=m=>{let j;try{j=JSON.parse(m.data)}catch(e){return}wsHandlers.forEach(f=>f(j))};ws.onclose=()=>setTimeout(connectWs,3000)}catch(e){}}
+
+// shared cache of the automation catalog
+let CAT=null;async function catalog(force){if(!CAT||force)CAT=await GET('automation/catalog');return CAT}
+
+// ------------------------------------------------------------ dashboard
+routes['/']=async m=>{
+ m.append(h('h2',null,'Dashboard'));
+ const top=h('div',{class:'card'});const grid=h('div',{class:'grid'});const al=h('div');m.append(top,grid,al);
+ const render=async()=>{const s=await GET('status');
+  top.innerHTML='';top.append(h('div',{class:'row'},h('b',null,s.device),chip('FW '+s.firmware),chip('Laufzeit '+ago(s.uptimeSec)),h('span',{class:'muted'},'Sensoren '+s.sensorsOk+'/'+s.sensorsTotal),
+   h('span',{style:'margin-left:auto'},'Betriebsart '),sel([['normal','Normal'],['eco','Absenkbetrieb'],['away','Abwesend'],['vacation','Urlaub']],s.globalMode,v=>act(()=>POST('mode',{mode:v}),'Betriebsart gesetzt'))));
+  const o=h('div',{class:'out',style:'margin-top:10px'});for(let i=0;i<16;i++)o.append(h('div',{class:(s.outputs>>i)&1?'on':''},i+1));top.append(o);
+  if(s.safety.flowTrip)top.append(h('p',{class:'bad'},'Vorlauf-Übertemperatur: alle Heizkreise geschlossen'));
+  grid.innerHTML='';if(!s.rooms.length)grid.append(h('div',{class:'card'},'Noch keine Räume angelegt – ',h('a',{href:'#/rooms'},'Räume einrichten')));
+  for(const r of s.rooms){grid.append(h('div',{class:'card room'},h('div',{class:'flags'},r.demand?chip('heizt','warn'):null,r.window?chip('Fenster','bad'):null,r.manual?chip('manuell'):null,r.fault?chip('Fehler','bad'):null),
+   h('div',{class:'muted'},r.name),h('div',{class:'t'},fmt(r.temperature)+' °C'),h('div',null,'Soll ',h('b',null,fmt(r.setpoint)+' °C'),' ',h('span',{class:'muted'},r.reason)),
+   h('div',{class:'row',style:'margin-top:8px'},h('button',{onclick:()=>act(()=>POST('rooms/'+r.id+'/adjust',{delta:-0.5})).then(render)},'−0,5'),h('button',{onclick:()=>act(()=>POST('rooms/'+r.id+'/adjust',{delta:0.5})).then(render)},'+0,5'),
+    sel([['auto','Auto'],['comfort','Komfort'],['eco','Absenkung'],['frost','Frostschutz'],['off','Aus']],r.mode,v=>act(()=>POST('rooms/'+r.id+'/mode',{mode:v})).then(render)),
+    r.manual?h('button',{onclick:()=>act(()=>DEL('rooms/'+r.id+'/manual')).then(render)},'Auto'):null)))}
+  al.innerHTML='';if(s.alarms.length){al.append(h('div',{class:'card'},h('h3',null,'Aktive Alarme'),h('table',null,s.alarms.map(a=>h('tr',null,h('td',null,chip(['Info','Warnung','Kritisch'][a.level],a.level==2?'bad':'warn')),h('td',null,a.message),h('td',{class:'muted'},a.code),h('td',{class:'muted'},ago(a.ageSec)))))))}
+ };every(5000,render);
+};
+
+// ------------------------------------------------------------ rooms & circuits
+routes['/rooms']=async m=>{
+ const d=await GET('heating');m.append(h('h2',null,'Räume & Heizkreise'));
+ const rooms=d.rooms.map(r=>({id:r.id,name:r.name,comfort:r.comfort,eco:r.eco,frost:r.frost,mode:r.mode,hysteresis:r.hysteresis,groups:r.groups.join(', '),schedule:r.schedule.map(x=>x.join(', ')),modelAssist:r.modelAssist,manualOverrideMin:r.manualOverrideMin,showOnDisplay:r.showOnDisplay}));
+ const circuits=d.circuits.map(c=>({n:c.n,name:c.name,room:c.room,enabled:c.enabled,valveNormallyOpen:c.valveNormallyOpen,minOnSec:c.minOnSec,minOffSec:c.minOffSec,open:c.open,fault:c.fault,faultText:c.faultText}));
+ const rc=h('div');const cc=h('div',{class:'card tbl'});m.append(rc,cc,h('div',{class:'row'},h('button',{class:'p',onclick:save},'Speichern')));
+ function renderRooms(){rc.innerHTML='';rooms.forEach((r,i)=>{const sc=h('div',{class:'form'});for(let dd=0;dd<7;dd++)sc.append(...field(DAYS[dd],h('input',{value:r.schedule[dd]||'',placeholder:'06:00-08:00, 17:00-22:00',oninput:e=>r.schedule[dd]=e.target.value})));
+  rc.append(h('div',{class:'card'},h('div',{class:'row'},h('h3',{style:'margin:0'},r.name||'(neu)'),h('button',{class:'d',style:'margin-left:auto',onclick:()=>{if(confirm('Raum löschen?')){rooms.splice(i,1);renderRooms()}}},'Löschen')),
+   h('div',{class:'form'},...field('Raum-ID',inp(r,'id'),'a-z, 0-9, _ und - (max. 15)'),...field('Name',inp(r,'name')),...field('Komfort °C',inp(r,'comfort','number',{step:0.5,class:'n'})),...field('Absenkung °C',inp(r,'eco','number',{step:0.5,class:'n'})),...field('Frostschutz °C',inp(r,'frost','number',{step:0.5,class:'n'})),
+   ...field('Betriebsart',sel([['auto','Auto (Zeitplan)'],['comfort','Komfort'],['eco','Absenkung'],['frost','Frostschutz'],['off','Aus']],r.mode,v=>r.mode=v)),...field('Hysterese K',inp(r,'hysteresis','number',{step:0.1,class:'n'})),
+   ...field('Gruppen',inp(r,'groups'),'Kommagetrennt, z. B. eg, schlafen'),...field('Manuelle Änderung gilt',inp(r,'manualOverrideMin','number',{class:'n'}),'Minuten (endet auch beim nächsten Zeitplanwechsel)'),
+   ...field('Lernmodell-Unterstützung',inp(r,'modelAssist','checkbox')),...field('Auf Display',inp(r,'showOnDisplay','checkbox'))),h('h3',null,'Komfortzeiten (außerhalb: Absenkung)'),sc))});
+  rc.append(h('button',{onclick:()=>{rooms.push({id:'',name:'',comfort:21,eco:18,frost:7,mode:'auto',hysteresis:0.4,groups:'',schedule:['06:00-08:00, 16:00-22:00','06:00-08:00, 16:00-22:00','06:00-08:00, 16:00-22:00','06:00-08:00, 16:00-22:00','06:00-08:00, 16:00-22:00','07:00-22:00','07:00-22:00'],modelAssist:true,manualOverrideMin:180,showOnDisplay:true});renderRooms()}},'+ Raum'))}
+ function renderCircuits(){cc.innerHTML='';cc.append(h('h3',{style:'margin-top:0'},'Heizkreise (Ausgang n = Heizkreis n)'),h('p',{class:'hint'},'Nur Ausgänge mit Funktion „Heizkreis“ (Hardware → Ausgänge) werden von der Regelung verwendet. Stromlos geschlossene Stellantriebe (NC) sind Standard.'),
+  h('table',null,h('tr',null,['#','Name','Raum','aktiv','NO-Ventil','min. Ein s','min. Aus s','Zustand'].map(t=>h('th',null,t))),circuits.map(c=>h('tr',null,h('td',null,c.n),h('td',null,inp(c,'name')),h('td',null,sel([['','–']].concat(rooms.map(r=>[r.id,r.name||r.id])),c.room,v=>c.room=v)),h('td',null,inp(c,'enabled','checkbox')),h('td',null,inp(c,'valveNormallyOpen','checkbox')),h('td',null,inp(c,'minOnSec','number',{class:'n'})),h('td',null,inp(c,'minOffSec','number',{class:'n'})),h('td',null,c.fault?chip(c.faultText||'Fehler','bad'):c.open?chip('offen','warn'):chip('zu'))))))}
+ async function save(){const body={rooms:rooms.map(r=>({id:r.id.trim(),name:r.name,comfort:+r.comfort,eco:+r.eco,frost:+r.frost,mode:r.mode,hysteresis:+r.hysteresis,groups:String(r.groups).split(',').map(s=>s.trim()).filter(Boolean),schedule:r.schedule.map(s=>String(s||'').split(',').map(x=>x.trim()).filter(Boolean)),modelAssist:r.modelAssist,manualOverrideMin:+r.manualOverrideMin,showOnDisplay:r.showOnDisplay})),circuits:circuits.map(c=>({n:c.n,name:c.name,room:c.room,enabled:c.enabled,valveNormallyOpen:c.valveNormallyOpen,minOnSec:+c.minOnSec,minOffSec:+c.minOffSec})),globalMode:d.globalMode,globalModeUntilEpoch:d.globalModeUntilEpoch};
+  await act(()=>PUT('heating',body),'Gespeichert');CAT=null}
+ renderRooms();renderCircuits();
+};
+
+// ------------------------------------------------------------ sensors
+routes['/sensors']=async m=>{
+ const [d,heat]=await Promise.all([GET('sensors'),GET('heating')]);const rooms=[['','–']].concat(heat.rooms.map(r=>[r.id,r.name]));
+ m.append(h('h2',null,'Sensoren'),h('p',{class:'muted'},'Zentraler Sensor-Manager für 1-Wire-, Funk-, externe (rtl_433/RS485) und Analogsensoren. Höhere Priorität gewinnt innerhalb eines Raums; fällt ein Sensor aus, wird der Ersatzsensor verwendet.'));
+ const list=h('div',{class:'card tbl'});m.append(list);
+ list.append(h('table',null,h('tr',null,['ID','Name','Art','Rolle','Raum','Wert','Status','Alter','Korrektur','Timeout s','Prio','Ersatz',''].map(t=>h('th',null,t))),d.sensors.map(s=>{const e={...s};return h('tr',null,h('td',null,h('code',null,s.id)),h('td',null,inp(e,'name')),h('td',null,s.kind),h('td',null,sel([['room','Raum'],['flow','Vorlauf'],['return','Rücklauf'],['outdoor','Außen'],['other','Sonstige']],e.role,v=>e.role=v)),h('td',null,sel(rooms,e.room,v=>e.room=v)),
+  h('td',null,fmt(s.value,2),s.humidity!=null?' / '+fmt(s.humidity,0)+'%':'',s.batteryOk===false?chip('Batterie','bad'):null),h('td',null,stChip(s.status)),h('td',null,ago(s.ageSec)),h('td',null,inp(e,'offset','number',{step:0.1,class:'n'})),h('td',null,inp(e,'timeoutSec','number',{class:'n'})),h('td',null,inp(e,'priority','number',{class:'n'})),
+  h('td',null,sel([['','–']].concat(d.sensors.filter(x=>x.id!==s.id).map(x=>[x.id,x.name])),e.fallbackId,v=>e.fallbackId=v)),h('td',null,h('label',null,inp(e,'enabled','checkbox'),' aktiv'),' ',h('button',{onclick:()=>act(()=>PUT('sensors/'+encodeURIComponent(s.id),e),'Gespeichert')},'Speichern'),' ',h('button',{class:'d',onclick:()=>confirm('Entfernen?')&&act(()=>DEL('sensors/'+encodeURIComponent(s.id))).then(route)},'×')))})));
+ const disc=h('div',{class:'card tbl'},h('h3',{style:'margin-top:0'},'Erkannte, noch nicht zugeordnete Sensoren'));m.append(disc);
+ if(!d.discovered.length)disc.append(h('p',{class:'muted'},'Keine. 1-Wire-Sensoren erscheinen nach dem Busscan, Funksensoren nach ihrem ersten gültigen Telegramm.'));
+ else disc.append(h('table',null,d.discovered.map(x=>{const a={id:x.id,name:'',room:'',role:'room'};return h('tr',null,h('td',null,h('code',null,x.id)),h('td',null,fmt(x.value,2)+' °C'),h('td',null,x.seen+'×'),h('td',null,inp(a,'name',null,{placeholder:'Name'})),h('td',null,sel(rooms,'',v=>a.room=v)),h('td',null,sel([['room','Raum'],['flow','Vorlauf'],['return','Rücklauf'],['outdoor','Außen'],['other','Sonstige']],'room',v=>a.role=v)),h('td',null,h('button',{class:'p',onclick:()=>act(()=>POST('sensors/adopt',a),'Übernommen').then(route)},'Übernehmen')))})));
+ const auto={autoAdoptOneWire:d.autoAdoptOneWire};m.append(h('div',{class:'card row'},h('label',null,inp(auto,'autoAdoptOneWire','checkbox'),' 1-Wire-Sensoren automatisch übernehmen'),h('button',{onclick:()=>act(()=>PUT('sensors',auto),'Gespeichert')},'Speichern')));
+};
+
+// ------------------------------------------------------------ action / binding editors
+function actionEditor(list,cat,container){
+ container.innerHTML='';
+ list.forEach((a,i)=>{const def=cat.actions.find(x=>x.type===a.type)||cat.actions[0];const row=h('div',{class:'row box'});
+  row.append(sel(cat.actions.map(x=>[x.type,x.label]),a.type,v=>{for(const k of Object.keys(a))delete a[k];a.type=v;actionEditor(list,cat,container)}));
+  for(const f of def.fields)row.append(h('span',{class:'muted'},f.label),fieldInput(a,f,cat));
+  row.append(h('button',{class:'d',onclick:()=>{list.splice(i,1);actionEditor(list,cat,container)}},'×'));container.append(row)});
+ container.append(h('button',{onclick:()=>{list.push({type:'adjust_setpoint'});actionEditor(list,cat,container)}},'+ Aktion'))}
+const NUM_DEFAULTS={delta:0.5,value:21,hysteresis:0.3,windowSec:600,durationSec:0,level:1,page:1,circuit:0};
+function fieldInput(o,f,cat){const R=cat.refs,E=cat.enums;const k=f.key;
+ const s=(opts)=>{if(o[k]===undefined&&opts.length)o[k]=Array.isArray(opts[0])?opts[0][0]:opts[0];return sel(opts,o[k],v=>o[k]=v)};
+ switch(f.kind){
+  case 'input':return s([['*','* (alle)']].concat(R.inputs.map(x=>[x.ref,x.name])));
+  case 'input_state_ref':return s(R.inputs.filter(x=>x.ref.startsWith('di:')||!x.ref.includes('/')).map(x=>[x.ref,x.name]));
+  case 'gesture':return s(E.gesture);
+  case 'temp_ref':return s(R.rooms.map(r=>[r.id,'Raum '+r.name]).concat(R.sensors.map(x=>['sensor:'+x.id,'Sensor '+x.name])));
+  case 'room':return s(R.rooms.map(r=>[r.id,r.name]));
+  case 'room_any':return s([['*','* (alle)']].concat(R.rooms.map(r=>[r.id,r.name])));
+  case 'room_opt':return s([['','(Haus/alle)']].concat(R.rooms.map(r=>[r.id,r.name])));
+  case 'sensor':return s(R.sensors.map(x=>[x.id,x.name]));
+  case 'sensor_any':return s([['*','* (alle)']].concat(R.sensors.map(x=>[x.id,x.name])));
+  case 'group':return s(R.groups);
+  case 'general_output':return s(R.outputs.filter(x=>x.function==='general').map(x=>[x.n,x.n+' '+x.name+(x.automationAllowed?'':' (gesperrt)')]));
+  case 'rf_command':return s(R.rfCommands.map(x=>[x.ref,x.name+(x.automationAllowed===false?' (gesperrt)':'')]));
+  case 'global_mode_any':return s(['*'].concat(E.global_mode));
+  case 'bool':return h('input',{type:'checkbox',checked:!!o[k],onchange:e=>o[k]=e.target.checked});
+  case 'number':if(o[k]===undefined&&NUM_DEFAULTS[k]!==undefined)o[k]=NUM_DEFAULTS[k];return h('input',{type:'number',step:'any',class:'n',value:o[k]??'',oninput:e=>o[k]=e.target.value===''?undefined:Number(e.target.value)});
+  case 'time':return h('input',{type:'time',value:o[k]||'',oninput:e=>o[k]=e.target.value});
+  case 'days':{if(!Array.isArray(o[k]))o[k]=[0,1,2,3,4,5,6];return h('span',null,DAYS.map((d,i)=>h('label',null,h('input',{type:'checkbox',checked:o[k].includes(i),onchange:e=>{o[k]=o[k].filter(x=>x!==i);if(e.target.checked)o[k].push(i)}}),d,' ')))}
+  case 'text':return h('input',{value:o[k]??'',oninput:e=>o[k]=e.target.value});
+  default:if(E[f.kind])return s(E[f.kind]);return h('input',{value:o[k]??'',oninput:e=>o[k]=e.target.value})}}
+function bindingEditor(bindings,cat,container,gestures){container.innerHTML='';
+ bindings.forEach((b,i)=>{const acts=h('div');container.append(h('div',{class:'box'},h('div',{class:'row'},'Bei ',sel(gestures,b.gesture,v=>b.gesture=v),h('button',{class:'d',onclick:()=>{bindings.splice(i,1);bindingEditor(bindings,cat,container,gestures)}},'Zuordnung entfernen')),acts));b.actions=b.actions||[];actionEditor(b.actions,cat,acts)});
+ container.append(h('button',{onclick:()=>{bindings.push({gesture:gestures[0][0]||gestures[0],actions:[]});bindingEditor(bindings,cat,container,gestures)}},'+ Ereignis zuordnen'))}
+const BTN_GESTURES=[['short','kurz gedrückt'],['long','lang gedrückt'],['press','gedrückt'],['release','losgelassen']];
+const STATE_GESTURES=[['open','Ein / offen'],['closed','Aus / geschlossen']];
+
+// ------------------------------------------------------------ RF device form
+async function rfDeviceForm(m,dev,onSaved){
+ const cat=await catalog(true);const heat=await GET('heating');
+ const d=Object.assign({name:'',protocol:'ev1527',pulseUs:350,enabled:true,function:'none',room:'',minRepeats:2,longPressMs:1000,releaseMs:250,retriggerMs:300,supervisionSec:0,failsafeOn:false,autoOffSec:0,buttons:[]},JSON.parse(JSON.stringify(dev||{})));
+ const box=h('div',{class:'card'});m.append(box);
+ const btnBox=h('div');
+ function renderButtons(){btnBox.innerHTML='';d.buttons.forEach((b,i)=>{b.bindings=b.bindings||[];const bind=h('div');btnBox.append(h('div',{class:'box'},h('div',{class:'row'},h('b',null,'#'+b.index),'Name ',inp(b,'name'),'Code ',inp(b,'code',null,{style:'width:110px'}),'Bedeutung ',sel([['button','Taste'],['state_on','Zustand EIN / offen'],['state_off','Zustand AUS / geschlossen']],b.role||'button',v=>{b.role=v;renderButtons()}),b.count!=null?h('span',{class:'muted'},b.count+'× empfangen, zuletzt '+dt(b.lastEpoch)):null,h('button',{class:'d',onclick:()=>{d.buttons.splice(i,1);renderButtons()}},'×')),h('div',{class:'hint'},'Aktionen dieser Taste (gleiche Aktionen wie Automationen und Digitaleingänge):'),bind));bindingEditor(b.bindings,cat,bind,(b.role||'button')==='button'?BTN_GESTURES:STATE_GESTURES)});
+  btnBox.append(h('div',{class:'row'},h('button',{onclick:()=>{d.buttons.push({index:(d.buttons.reduce((a,b)=>Math.max(a,b.index),0)+1),name:'',code:'',role:'button',bindings:[]});renderButtons()}},'+ Taste/Code manuell')))}
+ box.append(h('h3',{style:'margin-top:0'},dev&&dev.id?'Funkgerät bearbeiten':'Neues Funkgerät'),
+  h('div',{class:'form'},...field('Name',inp(d,'name')),...field('Protokoll',sel([['ev1527','EV1527 (20 Bit Adresse + 4 Datenbits)'],['pt2262','PT2262 (12 Tri-State-Symbole)']],d.protocol,v=>d.protocol=v),'Beide nutzen dieselbe Signalform; die Wahl bestimmt nur die Aufteilung Adresse/Taste.'),
+  ...field('Pulslänge µs',inp(d,'pulseUs','number',{class:'n'}),'Gemessen im Lernmodus. Abweichung > 40 % wird als fremdes Gerät verworfen.'),...field('Aktiv',inp(d,'enabled','checkbox')),
+  ...field('Funktion',sel([['none','keine (nur Aktionen)'],['window','Fensterkontakt (pausiert Raum)'],['presence','Anwesenheit'],['heat_demand','Wärmeanforderung (Funkthermostat)']],d.function,v=>d.function=v)),
+  ...field('Raum',sel([['','–']].concat(heat.rooms.map(r=>[r.id,r.name])),d.room,v=>d.room=v)),
+  ...field('Mindest-Wiederholungen',inp(d,'minRepeats','number',{class:'n'}),'Identische Telegramme bis ein Tastendruck gilt (Störfilter).'),...field('Langer Druck ab ms',inp(d,'longPressMs','number',{class:'n'})),
+  ...field('Loslassen nach ms',inp(d,'releaseMs','number',{class:'n'})),...field('Entprellzeit ms',inp(d,'retriggerMs','number',{class:'n'})),
+  ...field('Überwachung s',inp(d,'supervisionSec','number',{class:'n'}),'0 = keine. Sendet das Gerät zyklisch, wird ein Ausbleiben nach dieser Zeit als Funkverlust gemeldet.'),
+  ...field('Ersatzzustand bei Funkverlust',sel([['false','AUS / geschlossen (Heizung läuft weiter)'],['true','EIN / offen']],String(d.failsafeOn),v=>d.failsafeOn=v==='true')),
+  ...field('Automatisch AUS nach s',inp(d,'autoOffSec','number',{class:'n'}),'Für Sensoren, die nur beim Öffnen senden (0 = aus).')),
+  h('h3',null,'Tasten / Codes'),btnBox,h('div',{class:'row',style:'margin-top:10px'},h('button',{class:'p',onclick:async()=>{const body=JSON.parse(JSON.stringify(d));['stats','id','state','available','lastSeenAgeSec','address','bits'].forEach(k=>delete body[k]);body.buttons.forEach(b=>{delete b.fresh;delete b.count;delete b.lastEpoch;delete b.tristate});body.minRepeats=+body.minRepeats;body.pulseUs=+body.pulseUs;
+   const r=await act(()=>dev&&dev.id?PUT('rf/devices/'+dev.id,body):POST('rf/devices',body),'Gespeichert');if(r)onSaved&&onSaved(r)}},'Speichern')));
+ renderButtons();return d}
+
+// ------------------------------------------------------------ RF overview
+routes['/rf']=async m=>{
+ m.append(h('h2',null,'Funkgeräte – Übersicht'),h('p',{class:'muted'},'Empfangene 433-MHz-Geräte (EV1527/PT2262). Hinweis: einfache Festcodes sind nicht authentifiziert und können kopiert werden – sie lösen deshalb keine sicherheitskritischen Funktionen aus.'));
+ const c=h('div',{class:'card tbl'});const ed=h('div');m.append(c,ed);
+ const render=async()=>{const d=await GET('rf/devices');c.innerHTML='';if(!d.devices.length){c.append(h('p',null,'Noch keine Geräte. ',h('a',{href:'#/rf/learn'},'Gerät anlernen')));return}
+  c.append(h('table',null,h('tr',null,['Name','Protokoll','Adresse','Funktion','Zustand','Empfang','Qualität','Zuletzt',''].map(t=>h('th',null,t))),d.devices.map(x=>h('tr',null,h('td',null,h('b',null,x.name),x.enabled?null:chip('deaktiviert','warn')),h('td',null,x.protocol),h('td',null,h('code',null,x.address)),h('td',null,x.function+(x.room?' / '+x.room:'')),
+   h('td',null,x.available?(x.state<0?'–':x.state?chip('EIN/offen','warn'):chip('AUS/zu')):chip('Funkverlust','bad')),h('td',null,x.stats.presses+' Drücke / '+x.stats.frames+' Telegr.',x.stats.rejected?h('div',{class:'muted'},x.stats.rejected+' verworfen'):null),h('td',null,x.stats.reliability+' %'),h('td',null,dt(x.stats.lastEpoch)),
+   h('td',null,h('button',{onclick:()=>{ed.innerHTML='';rfDeviceForm(ed,x,()=>{ed.innerHTML='';render()})}},'Bearbeiten'),' ',h('button',{onclick:async()=>{const b=JSON.parse(JSON.stringify(x));b.enabled=!x.enabled;delete b.stats;await act(()=>PUT('rf/devices/'+x.id,b));render()}},x.enabled?'Deaktivieren':'Aktivieren'),' ',h('button',{class:'d',onclick:()=>confirm('Gerät löschen?')&&act(()=>DEL('rf/devices/'+x.id)).then(render)},'Löschen'))))))};
+ every(5000,render);
+};
+
+// ------------------------------------------------------------ RF learn
+routes['/rf/learn']=async m=>{
+ m.append(h('h2',null,'Funkgeräte – Gerät anlernen'),h('div',{class:'card'},h('ol',null,h('li',null,'Lernmodus starten.'),h('li',null,'Taste des Senders mehrmals drücken (mindestens zweimal).'),h('li',null,'Zuverlässig erkannte Codes übernehmen, Namen und Tasten vergeben, Aktionen zuordnen.')),h('p',{class:'hint'},'Unterstützt: EV1527 und PT2262 (24 Bit). Andere 433-MHz-Protokolle werden nicht als Gerät angelernt; sie erscheinen im Empfangsmonitor.')));
+ const ctl=h('div',{class:'card row'});const list=h('div',{class:'card tbl'});const form=h('div');m.append(ctl,list,form);
+ const t={timeoutSec:120};let draft=null;
+ const saved=()=>{draft=null;form.innerHTML='';render()};
+ const showForm=async()=>{form.innerHTML='';const devs=(await GET('rf/devices')).devices;
+  form.append(h('div',{class:'card row'},'Codes einem bestehenden Gerät hinzufügen: ',sel([['','– neues Gerät –']].concat(devs.map(d=>[d.id,d.name])),draft&&draft.id||'',v=>{const fresh=draft.buttons.filter(b=>b.fresh);
+   draft=v?JSON.parse(JSON.stringify(devs.find(d=>d.id==v))):{protocol:draft.protocol,pulseUs:draft.pulseUs,buttons:[]};
+   for(const b of fresh){b.index=draft.buttons.reduce((a,x)=>Math.max(a,x.index),0)+1;draft.buttons.push(b)}showForm()})));
+  draft=await rfDeviceForm(form,draft,saved)};
+ const addCandidate=c=>{if(!draft)draft={protocol:c.pt2262?'pt2262':'ev1527',pulseUs:c.pulseUs,buttons:[]};
+  if(!draft.buttons.some(b=>b.code===c.code))draft.buttons.push({index:draft.buttons.reduce((a,b)=>Math.max(a,b.index),0)+1,name:'Taste '+c.ev1527Key,code:c.code,role:'button',bindings:[],fresh:true});showForm()};
+ const render=async()=>{const l=await GET('rf/learn');ctl.innerHTML='';
+  ctl.append(l.active?chip('Lernmodus aktiv – noch '+l.remainingSec+' s','warn'):chip('Lernmodus aus'),l.active?h('button',{onclick:()=>POST('rf/learn/stop').then(render)},'Stoppen'):h('span',null,'Dauer s ',inp(t,'timeoutSec','number',{class:'n'}),' ',h('button',{class:'p',onclick:()=>act(()=>POST('rf/learn/start',{timeoutSec:+t.timeoutSec})).then(render)},'Lernmodus starten')));
+  list.innerHTML='';if(!l.candidates.length){list.append(h('p',{class:'muted'},l.active?'Warte auf Telegramme ...':'Keine Kandidaten.'));return}
+  list.append(h('table',null,h('tr',null,['Code','Tri-State','EV1527 Adr./Taste','Puls µs','Qualität','Telegramme','Drücke','Status',''].map(x=>h('th',null,x))),l.candidates.map(c=>h('tr',null,h('td',null,h('code',null,c.code)),h('td',null,c.tristate||'–'),h('td',null,c.ev1527Address+' / '+c.ev1527Key),h('td',null,c.pulseUs),h('td',null,c.quality+' %'),h('td',null,c.frames),h('td',null,c.presses),
+   h('td',null,c.knownDevice!=null?chip('bekannt (Gerät '+c.knownDevice+')'):c.ignored?chip('ignoriert'):c.reliable?chip('zuverlässig','ok'):chip('weiter drücken','warn')),
+   h('td',null,c.knownDevice==null&&!c.ignored?[h('button',{class:'p',disabled:!c.reliable,onclick:()=>addCandidate(c)},'Übernehmen'),' ',h('button',{onclick:()=>act(()=>POST('rf/ignored',{code:c.code,note:'beim Anlernen'}),'Ignoriert').then(render)},'Ignorieren')]:null)))))};
+ every(800,render);
+};
+
+// ------------------------------------------------------------ RF monitor
+function waveform(pulses){const total=pulses.reduce((a,p)=>a+Math.abs(p),0)||1;const W=1000,H=60;let x=0,d='M0 '+H;for(const p of pulses){const y=p>0?8:H;d+=` L${x.toFixed(1)} ${y}`;x+=Math.abs(p)/total*W;d+=` L${x.toFixed(1)} ${y}`}
+ const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox',`0 0 ${W} ${H+4}`);svg.setAttribute('preserveAspectRatio','none');svg.setAttribute('class','wave');const path=document.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('d',d);path.setAttribute('fill','none');path.setAttribute('stroke','currentColor');path.setAttribute('stroke-width','1.5');svg.append(path);return svg}
+routes['/rf/monitor']=async m=>{
+ m.append(h('h2',null,'Funkgeräte – Empfangsmonitor'));const tb=h('tbody');const tbl=h('div',{class:'card tbl'},h('table',null,h('thead',null,h('tr',null,['Zeit','Code','Bits','Puls µs','Qualität','Status','Gerät'].map(t=>h('th',null,t)))),tb));
+ const raw=h('div',{class:'card'});m.append(tbl,raw);let since=0;
+ const poll=async()=>{const d=await GET('rf/monitor?since='+since);since=d.seq;for(const f of d.frames){tb.prepend(h('tr',null,h('td',null,new Date().toLocaleTimeString('de-DE')),h('td',null,h('code',null,f.code)),h('td',null,f.bits),h('td',null,f.pulseUs),h('td',null,f.quality+' %'),h('td',null,chip(f.status,f.status==='known'?'ok':f.status==='unknown'?'warn':'')),h('td',null,f.deviceName?f.deviceName+' / '+f.button:(f.tristate?'Tri-State '+f.tristate:''))))}
+  while(tb.children.length>150)tb.lastChild.remove()};every(700,poll);
+ const rawRender=async()=>{const r=await GET('rf/raw');raw.innerHTML='';raw.append(h('div',{class:'row'},h('h3',{style:'margin:0'},'Protokollunabhängige Pulsaufzeichnung'),h('button',{onclick:()=>act(()=>POST('rf/raw/capture',{count:4}),'Aufzeichnung gestartet')},'Nächste 4 Bursts aufzeichnen'),r.pending?chip('wartet auf '+r.pending):null),h('p',{class:'hint'},'Zeigt Pulsfolgen (auch nicht dekodierbare) für Diagnose und spätere Protokollerweiterungen. Positive Werte = Träger an.'));
+  for(const c of r.captures.slice().reverse())raw.append(h('div',{class:'box'},h('div',{class:'row'},chip(c.decoded?'dekodiert':'unbekannt',c.decoded?'ok':'warn'),h('span',{class:'muted'},c.pulses.length+' Pulse, Startlücke '+c.leadGapUs+' µs, vor '+ago(Math.round(c.ageMs/1000)))),waveform(c.pulses),h('details',null,h('summary',null,'Rohdaten (µs)'),h('code',{style:'word-break:break-all;font-size:11px'},c.pulses.join(' ')))))};every(4000,rawRender);
+};
+
+// ------------------------------------------------------------ RF transmitter
+routes['/rf/tx']=async m=>{
+ m.append(h('h2',null,'Funkgeräte – Sender'),h('div',{class:'card hint'},'Sendet EV1527/PT2262-Festcodes über das 433-MHz-Modul (GPIO18). Jede Sendung hat begrenzte Wiederholungen und einen Timeout; ein Stundenbudget begrenzt die Sendezeit (Duty-Cycle, EN 300 220 / SRD-Allgemeinzuteilung: max. 10 %, Voreinstellung 1 %). Nur eigene Geräte ansteuern.'));
+ const [st,dev,cat]=await Promise.all([GET('rf/status'),GET('rf/tx/devices'),catalog(true)]);
+ const cfg=h('div',{class:'card'});const tx={...st.tx};
+ cfg.append(h('h3',{style:'margin-top:0'},'Sendereinstellungen'),h('div',{class:'form'},...field('Sender aktiv',inp(tx,'enabled','checkbox')),...field('Duty-Cycle % / Stunde',inp(tx,'dutyCyclePct','number',{step:0.1,class:'n'}),'Belegt: '+tx.airtimeLastHourMs+' ms von '+tx.budgetMs+' ms in der letzten Stunde'),...field('Sendeabstand ms',inp(tx,'minIntervalMs','number',{class:'n'})),...field('Timeout ms',inp(tx,'defaultTimeoutMs','number',{class:'n'}),'Nicht gesendete Aufträge verfallen nach dieser Zeit.')),
+  h('button',{onclick:()=>act(()=>PUT('rf/config',{tx:{enabled:tx.enabled,dutyCyclePct:+tx.dutyCyclePct,minIntervalMs:+tx.minIntervalMs,defaultTimeoutMs:+tx.defaultTimeoutMs}}),'Gespeichert')},'Speichern'),h('div',{class:'row',style:'margin-top:8px'},chip(st.tx.hw?'RMT bereit':'kein Sender',st.tx.hw?'ok':'bad'),chip(st.tx.sent+' gesendet'),chip(st.tx.failed+' Fehler',st.tx.failed?'warn':''),st.tx.lastError?h('span',{class:'muted'},st.tx.lastError):null));
+ m.append(cfg);
+ const devBox=h('div');m.append(devBox);
+ const editor=(d)=>{const x=JSON.parse(JSON.stringify(d||{name:'',group:'',protocol:'ev1527',pulseUs:350,repeats:8,enabled:true,commands:[]}));const cmds=h('div');const card=h('div',{class:'card'});
+  const rc=()=>{cmds.innerHTML='';x.commands.forEach((c,i)=>cmds.append(h('div',{class:'row box'},'Name ',inp(c,'name'),'Code ',inp(c,'code',null,{style:'width:110px'}),'Wdh. ',inp(c,'repeats','number',{class:'n',title:'0 = Gerätevorgabe'}),h('label',null,inp(c,'automationAllowed','checkbox'),' Automation'),h('label',null,inp(c,'haExposed','checkbox'),' Home Assistant'),c.sent!=null?h('span',{class:'muted'},c.sent+'× gesendet'):null,
+   x.id&&c.id?h('button',{onclick:()=>act(()=>POST('rf/tx/send',{command:x.id+'/'+c.id}),'Sendeauftrag eingereiht')},'Test senden'):null,h('button',{class:'d',onclick:()=>{x.commands.splice(i,1);rc()}},'×'))));cmds.append(h('button',{onclick:()=>{x.commands.push({name:'',code:'',repeats:0,automationAllowed:true,haExposed:false});rc()}},'+ Befehl'))};
+  card.append(h('h3',{style:'margin-top:0'},x.id?x.name:'Neues Sendegerät'),h('div',{class:'form'},...field('Name',inp(x,'name')),...field('Gruppe',inp(x,'group'),'Befehle gleichen Namens einer Gruppe: „group:<Gruppe>/<Befehl>“'),...field('Protokoll',sel(['ev1527','pt2262'],x.protocol,v=>x.protocol=v)),...field('Pulslänge µs',inp(x,'pulseUs','number',{class:'n'})),...field('Wiederholungen',inp(x,'repeats','number',{class:'n'}),'1..20 Telegramme pro Sendung'),...field('Aktiv',inp(x,'enabled','checkbox'))),h('h3',null,'Befehle'),cmds,
+   h('div',{class:'row',style:'margin-top:8px'},h('button',{class:'p',onclick:async()=>{const b=JSON.parse(JSON.stringify(x));b.pulseUs=+b.pulseUs;b.repeats=+b.repeats;b.commands.forEach(c=>c.repeats=+c.repeats||0);if(await act(()=>x.id?PUT('rf/tx/devices/'+x.id,b):POST('rf/tx/devices',b),'Gespeichert'))route()}},'Speichern'),x.id?h('button',{class:'d',onclick:()=>confirm('Sender löschen?')&&act(()=>DEL('rf/tx/devices/'+x.id)).then(route)},'Löschen'):null));rc();return card};
+ dev.devices.forEach(d=>devBox.append(editor(d)));devBox.append(h('button',{onclick:e=>{e.target.before(editor());}},'+ Sendegerät'));
+ // quick rule: send on state change
+ const q={trigger:'global_mode',state:'eco',room:'',roomState:'heating_on',command:(cat.refs.rfCommands[0]||{}).ref||''};const qb=h('div',{class:'card'});
+ qb.append(h('h3',{style:'margin-top:0'},'Befehl bei Zustandsänderung ausführen'),h('p',{class:'hint'},'Legt eine normale Automationsregel an (gleiche Logik, Prioritäten und Schutzmechanismen wie alle Regeln).'),
+  h('div',{class:'form'},...field('Auslöser',sel([['global_mode','Betriebsart wechselt zu'],['room_state','Raumzustand']],q.trigger,v=>q.trigger=v)),...field('Betriebsart',sel(cat.enums.global_mode,q.state,v=>q.state=v)),...field('Raum / Zustand',h('span',null,sel([['*','alle']].concat(cat.refs.rooms.map(r=>[r.id,r.name])),'*',v=>q.room=v),' ',sel(cat.enums.room_state,q.roomState,v=>q.roomState=v))),...field('Befehl',sel(cat.refs.rfCommands.map(x=>[x.ref,x.name]),q.command,v=>q.command=v))),
+  h('button',{class:'p',onclick:()=>{const trig=q.trigger==='global_mode'?{type:'global_mode',state:q.state}:{type:'room_state',ref:q.room||'*',state:q.roomState};act(()=>POST('rules',{name:'Funk: '+(q.trigger==='global_mode'?q.state:q.roomState),enabled:true,priority:50,triggers:[trig],conditions:[],actions:[{type:'rf_send',command:q.command}]}),'Regel angelegt')}},'Regel anlegen'));m.append(qb);
+ const hist=await GET('rf/tx/history');m.append(h('div',{class:'card tbl'},h('h3',{style:'margin-top:0'},'Sendeprotokoll'),h('table',null,h('tr',null,['Zeit','Befehl','Quelle','Ergebnis','Sendezeit'].map(t=>h('th',null,t))),hist.history.slice().reverse().map(x=>h('tr',null,h('td',null,dt(x.epoch)),h('td',null,x.label),h('td',null,x.origin),h('td',null,x.ok?chip('ok','ok'):chip(x.reason,'bad')),h('td',null,x.airtimeMs+' ms'))))));
+};
+
+// ------------------------------------------------------------ RF sensors
+routes['/rf/sensors']=async m=>{
+ const [st,d,heat]=await Promise.all([GET('rf/status'),GET('rf/sensors'),GET('heating')]);
+ m.append(h('h2',null,'Funkgeräte – Temperaturfunksensoren'),h('div',{class:'card hint'},'433 MHz allein bedeutet keine Kompatibilität. Nur ausdrücklich implementierte Protokolle werden dekodiert. Für andere Sensoren: externer Empfänger mit rtl_433 (JSON-Zeilen über RS485/UART an GPIO16/17, 115200 Baud) oder per HTTP POST /api/rf/rtl433.'));
+ const dec=h('div',{class:'card tbl'},h('h3',{style:'margin-top:0'},'Decoder-Plug-ins'));const sett={};
+ dec.append(h('table',null,st.decoders.map(x=>{sett[x.name]=x.enabled;return h('tr',null,h('td',null,h('label',null,h('input',{type:'checkbox',checked:x.enabled,onchange:e=>sett[x.name]=e.target.checked}),' ',h('b',null,x.name))),h('td',null,x.description),h('td',null,x.hardwareVerified?chip('hardwaregeprüft','ok'):chip('unbestätigt – nur mit Testvektoren geprüft','warn')),h('td',null,x.rows+' Zeilen / '+x.accepted+' Messwerte'))})),h('button',{onclick:()=>act(()=>PUT('rf/config',{decoders:sett}),'Gespeichert')},'Speichern'));m.append(dec);
+ const rooms=[['','–']].concat(heat.rooms.map(r=>[r.id,r.name]));
+ const disc=h('div',{class:'card tbl'},h('h3',{style:'margin-top:0'},'Automatisch erkannt'));if(!d.discovered.length)disc.append(h('p',{class:'muted'},'Noch keine Funksensoren empfangen.'));
+ else disc.append(h('table',null,d.discovered.map(x=>{const a={id:x.id,name:'',room:'',role:'room'};return h('tr',null,h('td',null,h('code',null,x.id)),h('td',null,fmt(x.value)+' °C'+(x.humidity!=null?' / '+fmt(x.humidity,0)+' %':'')),h('td',null,x.batteryOk===false?chip('Batterie schwach','bad'):''),h('td',null,x.seen+'× / vor '+ago(x.ageSec)),h('td',null,inp(a,'name',null,{placeholder:'Name'})),h('td',null,sel(rooms,'',v=>a.room=v)),h('td',null,h('button',{class:'p',onclick:()=>act(()=>POST('sensors/adopt',a),'Übernommen').then(route)},'Übernehmen')))})));m.append(disc);
+ m.append(h('div',{class:'card tbl'},h('h3',{style:'margin-top:0'},'Zugeordnete Funksensoren'),d.sensors.length?h('table',null,h('tr',null,['Name','ID','Raum','Wert','Batterie','Status','Empfang','Timeout'].map(t=>h('th',null,t))),d.sensors.map(s=>h('tr',null,h('td',null,s.name),h('td',null,h('code',null,s.id)),h('td',null,s.room),h('td',null,fmt(s.value)+' °C'),h('td',null,s.batteryOk==null?'–':s.batteryOk?'ok':chip('schwach','bad')),h('td',null,stChip(s.status)),h('td',null,s.updates+' Werte, vor '+ago(s.ageSec)),h('td',null,s.timeoutSec+' s')))):h('p',{class:'muted'},'Keine.'),h('p',{class:'hint'},'Raumzuordnung, Korrektur, Priorität und Ersatzsensor: ',h('a',{href:'#/sensors'},'Sensoren'))));
+};
+
+// ------------------------------------------------------------ RF diagnostics
+routes['/rf/diag']=async m=>{
+ m.append(h('h2',null,'Funkgeräte – Funkdiagnose'));const c=h('div');m.append(c);
+ const render=async()=>{const [st,unk,ign,hw]=await Promise.all([GET('rf/status'),GET('rf/unknown'),GET('rf/ignored'),GET('hardware')]);const r=st.rx;c.innerHTML='';
+  c.append(h('div',{class:'grid'},h('div',{class:'card'},h('h3',{style:'margin-top:0'},'Empfänger (GPIO8)'),h('table',null,[['Hardware',r.hw?chip('ISR aktiv','ok'):chip('nicht initialisiert','bad')],['Flanken/s (Störpegel)',r.edgesPerSec],['Telegramme',r.frames],['bekannt / unbekannt',r.known+' / '+r.unknown],['ignoriert / deaktiviert',r.ignored+' / '+r.disabled],['nicht unterstützt',r.unsupported],['Timing passt nicht zum Gerät',r.timingMismatch],['Tastendrücke',r.presses],['verworfen (zu wenig Wdh.)',r.rejected],['entprellt',r.debounced],['eigene Aussendung',r.echoes],['Sensorzeilen',r.sensorRows],['Ø Qualität',r.quality+' %'],['letztes Telegramm vor',ago(r.lastFrameAgeSec)],['Segmente / Glitches / Überläufe',r.segments+' / '+r.glitches+' / '+r.overflows],['ISR-Pufferverluste',r.droppedPulses]].map(([k,v])=>h('tr',null,h('td',{class:'muted'},k),h('td',null,v))))),
+   h('div',{class:'card'},h('h3',{style:'margin-top:0'},'Selbsttest Funkstrecke'),h('p',{class:'hint'},'Sendet einen Testcode und prüft, ob der eigene Empfänger ihn dekodiert. Bestätigt Sender und Empfänger gemeinsam.'),h('button',{onclick:()=>act(()=>POST('rf/tx/loopback'),'Test gestartet')},'Loopback-Test starten'),
+    h('p',null,hw.rfLoopback.running?chip('läuft','warn'):hw.rfLoopback.done?(hw.rfLoopback.ok?chip('ok','ok'):chip('fehlgeschlagen','bad')):'',' ',hw.rfLoopback.detail),
+    h('h3',null,'Decoder-Toleranzen'),(()=>{const k={...r.codec};return h('div',null,h('div',{class:'form'},...field('Glitchfilter µs',inp(k,'glitchUs','number',{class:'n'})),...field('Timing-Toleranz',inp(k,'maxTimingError','number',{step:0.05,class:'n'}))),h('button',{onclick:()=>act(()=>PUT('rf/config',{codec:{glitchUs:+k.glitchUs,maxTimingError:+k.maxTimingError}}),'Gespeichert')},'Speichern'))})())));
+  c.append(h('div',{class:'card tbl'},h('div',{class:'row'},h('h3',{style:'margin:0'},'Unbekannte Codes'),h('button',{onclick:()=>DEL('rf/unknown').then(render)},'Liste leeren')),unk.codes.length?h('table',null,h('tr',null,['Code','Puls','Qualität','Telegramme','Drücke','zuletzt',''].map(t=>h('th',null,t))),unk.codes.map(u=>h('tr',null,h('td',null,h('code',null,u.code),u.tristate?h('div',{class:'muted'},u.tristate):null),h('td',null,u.pulseUs),h('td',null,u.quality+' %'),h('td',null,u.frames),h('td',null,u.presses),h('td',null,ago(u.ageSec)),h('td',null,h('button',{onclick:()=>act(()=>POST('rf/ignored',{code:u.code,note:'unbekannt'}),'Dauerhaft ignoriert').then(render)},'Dauerhaft ignorieren'))))):h('p',{class:'muted'},'Keine. Unbekannte und fehlerhafte Telegramme lösen niemals Aktionen aus.')));
+  c.append(h('div',{class:'card tbl'},h('h3',{style:'margin-top:0'},'Ignorierte Codes'),ign.ignored.length?h('table',null,ign.ignored.map(i=>h('tr',null,h('td',null,h('code',null,i.code)),h('td',null,i.note),h('td',null,h('button',{onclick:()=>act(()=>DEL('rf/ignored/'+i.code)).then(render)},'Entfernen'))))):h('p',{class:'muted'},'Keine.')))};
+ every(4000,render);
+};
+
+// ------------------------------------------------------------ display
+function drawFb(canvas,b64){const bin=atob(b64);const ctx=canvas.getContext('2d');const img=ctx.createImageData(128,64);for(let y=0;y<64;y++)for(let x=0;x<128;x++){const on=(bin.charCodeAt((y>>3)*128+x)>>(y&7))&1;const i=(y*128+x)*4;img.data[i]=on?120:0;img.data[i+1]=on?210:0;img.data[i+2]=on?255:0;img.data[i+3]=255}ctx.putImageData(img,0,0)}
+const PAGES=['System','Räume','Heizkreise','Diagnose','Lernmodell'];
+routes['/display']=async m=>{
+ m.append(h('h2',null,'Display – Live-Vorschau'));const cv=h('canvas',{class:'oled',width:128,height:64});const info=h('div',{class:'row'});let page=0;
+ m.append(h('div',{class:'card'},cv,info,h('div',{class:'row',style:'margin-top:8px'},h('button',{onclick:()=>POST('display/page',{action:'prev'})},'◀ Seite'),h('button',{onclick:()=>POST('display/page',{action:'next'})},'Seite ▶'),h('button',{onclick:()=>POST('display/page',{action:'room_next'})},'nächster Raum'),h('button',{onclick:()=>POST('display/page',{action:'wake'})},'Wecken'),
+  h('span',{style:'margin-left:auto'},'Vorschau: '),sel([[0,'wie Display']].concat(PAGES.map((p,i)=>[i+1,(i+1)+' '+p])),0,v=>page=+v)),h('p',{class:'hint'},'Die Vorschau zeigt exakt den Bildspeicher, der an das SSD1306 gesendet wird. Sie funktioniert auch ohne angeschlossenes Display.')));
+ every(1000,async()=>{const f=await GET('display/framebuffer?page='+page);drawFb(cv,f.fb);info.innerHTML='';info.append(chip('Seite '+f.page+' '+PAGES[f.page-1]),f.screenOn?chip('Bildschirm an','ok'):chip('Bildschirm aus (Timeout/deaktiviert)'),chip('Rotation '+f.rotation+'°'))});
+};
+async function displayConfigPage(m,part){const d=await GET('display');const c={...d,pages:[...d.pages],rooms:[...d.rooms]};const f=h('div',{class:'form'});
+ if(part==='pages'){f.append(...field('Aktive Seiten',h('div',null,PAGES.map((p,i)=>h('label',{style:'display:block'},h('input',{type:'checkbox',checked:c.pages[i],onchange:e=>c.pages[i]=e.target.checked}),' ',(i+1)+' '+p)))),
+  ...field('Angezeigte Räume',h('div',null,d.availableRooms.map(r=>h('label',{style:'display:block'},h('input',{type:'checkbox',checked:c.rooms.includes(r.id),onchange:e=>{c.rooms=c.rooms.filter(x=>x!==r.id);if(e.target.checked)c.rooms.push(r.id)}}),' ',r.name))),'Keine Auswahl = alle Räume mit „Auf Display“.'),
+  ...field('Anzeigemodus Räume',sel([['standard','Standard (Liste)'],['large','Groß (ein Raum)'],['compact','Kompakt (7 Zeilen)']],c.mode,v=>c.mode=v)))}
+ else{f.append(...field('Display aktiv',inp(c,'enabled','checkbox')),...field('Kontrast',inp(c,'contrast','number',{min:0,max:255,class:'n'}),'0..255'),...field('Rotation',sel([[0,'0°'],[180,'180°']],c.rotation,v=>c.rotation=+v),'Das SSD1306 (128×64) unterstützt nur 0° und 180°.'),...field('Automatischer Seitenwechsel',inp(c,'autoCycle','checkbox')),...field('Wechselintervall s',inp(c,'cycleSec','number',{class:'n'})),...field('Display-Timeout s',inp(c,'timeoutSec','number',{class:'n'}),'0 = immer an. Taste/Funk/Web weckt das Display.'),
+  ...field('Alarme anzeigen ab',sel([[0,'Info'],[1,'Warnung'],[2,'Kritisch'],[3,'nie']],c.alarmPriority,v=>c.alarmPriority=+v)),...field('Alarm weckt Display',inp(c,'alarmWakes','checkbox')),...field('Sprache',sel([['de','Deutsch'],['en','English']],c.language,v=>c.language=v)))}
+ m.append(h('div',{class:'card'},f,h('button',{class:'p',style:'margin-top:10px',onclick:()=>act(()=>PUT('display/config',{enabled:c.enabled,contrast:+c.contrast,rotation:+c.rotation,autoCycle:c.autoCycle,cycleSec:+c.cycleSec,pages:c.pages,rooms:c.rooms,timeoutSec:+c.timeoutSec,mode:c.mode,alarmPriority:+c.alarmPriority,alarmWakes:c.alarmWakes,language:c.language}),'Gespeichert – sofort wirksam')},'Speichern')));
+ m.append(h('div',{class:'card hint'},'Bedienung ohne Bedientasten: S1 (Reset) und S2 (Boot/GPIO0) der A16 V3 sind keine Benutzertasten. Navigation über Digitaleingänge (Hardware → Digitaleingänge → Aktionen „Display: nächste Seite“ usw.), Funkfernbedienungen oder dieses Webinterface.'))}
+routes['/display/pages']=m=>{m.append(h('h2',null,'Display – Anzeigeseiten'));return displayConfigPage(m,'pages')};
+routes['/display/settings']=m=>{m.append(h('h2',null,'Display – Einstellungen'));return displayConfigPage(m,'settings')};
+routes['/display/status']=async m=>{m.append(h('h2',null,'Display – Status & Diagnose'));const c=h('div',{class:'card'});m.append(c);every(3000,async()=>{const d=await GET('display');const hw=d.hw;c.innerHTML='';c.append(h('table',null,[['Aktiviert',d.enabled?'ja':'nein'],['Hardware erkannt',hw.present?chip('ja','ok'):chip('nein','warn')],['Initialisiert',hw.initialized?chip('ok','ok'):chip('nein','bad')],['Bildschirm',d.screenOn?'an':'aus'],['Aktuelle Seite',d.page+' '+PAGES[d.page-1]],['Aktualisierungen',hw.flushes],['Fehler',hw.errors],['Re-Initialisierungen',hw.reinits],['Letzter Fehler',hw.lastError||'–'],['Dauer letzte Übertragung',hw.lastFlushUs+' µs']].map(([k,v])=>h('tr',null,h('td',{class:'muted'},k),h('td',null,v)))),h('p',{class:'hint'},'Das Display ist optional. Fällt es aus, wird alle 30 s eine Neuinitialisierung versucht; die Heizungsregelung ist davon unabhängig. Es teilt sich den I2C-Bus mit den Ausgangs-Expandern – jede Übertragung ist kurz und mit Timeout begrenzt.'))})};
+
+// ------------------------------------------------------------ automation
+function ruleEditor(m,rule,cat,onSaved){const r=JSON.parse(JSON.stringify(rule||{name:'',enabled:false,testMode:false,priority:50,cooldownSec:5,maxPerHour:60,triggers:[{type:'manual'}],conditions:[],actions:[]}));
+ const card=h('div',{class:'card'});const trg=h('div'),cnd=h('div'),acts=h('div');const msg=h('div');
+ const list=(arr,kind,box)=>{box.innerHTML='';arr.forEach((x,i)=>{const def=cat[kind].find(d=>d.type===x.type)||cat[kind][0];const row=h('div',{class:'row box'},sel(cat[kind].map(d=>[d.type,d.label]),x.type,v=>{for(const k of Object.keys(x))delete x[k];x.type=v;list(arr,kind,box)}));
+  for(const f of def.fields)row.append(h('span',{class:'muted'},f.label),fieldInput(x,f,cat));if(kind==='conditions')row.append(h('label',null,h('input',{type:'checkbox',checked:!!x.negate,onchange:e=>x.negate=e.target.checked}),' NICHT'));row.append(h('button',{class:'d',onclick:()=>{arr.splice(i,1);list(arr,kind,box)}},'×'));box.append(row)});
+  box.append(h('button',{onclick:()=>{arr.push({type:cat[kind][0].type});list(arr,kind,box)}},kind==='triggers'?'+ Trigger':'+ Bedingung'))};
+ card.append(h('div',{class:'form'},...field('Name',inp(r,'name')),...field('Aktiv',inp(r,'enabled','checkbox'),'Regeln werden vor der Aktivierung geprüft (Referenzen, Grenzwerte, Schleifen).'),...field('Testmodus',inp(r,'testMode','checkbox'),'Regel reagiert normal, Aktionen werden nur simuliert und protokolliert.'),...field('Priorität',inp(r,'priority','number',{class:'n'}),'0..100 – höhere Priorität gewinnt bei Konflikten um dasselbe Ziel.'),...field('Sperrzeit s',inp(r,'cooldownSec','number',{class:'n'})),...field('max. Ausführungen/h',inp(r,'maxPerHour','number',{class:'n'}))),
+  h('h3',null,'Trigger (einer genügt)'),trg,h('h3',null,'Bedingungen (alle müssen erfüllt sein)'),cnd,h('h3',null,'Aktionen'),acts,msg,
+  h('div',{class:'row',style:'margin-top:10px'},h('button',{onclick:async()=>{const v=await POST('rules/validate',clean());msg.innerHTML='';msg.append(v.valid?h('p',{class:'ok'},'Regel ist gültig.'):h('p',{class:'bad'},v.error))}},'Prüfen'),h('button',{class:'p',onclick:async()=>{const res=await act(()=>r.id?PUT('rules/'+r.id,clean()):POST('rules',clean()));if(!res)return;if(res.validationError){msg.innerHTML='';msg.append(h('p',{class:'bad'},'Gespeichert, aber nicht aktiviert: '+res.validationError))}else{toast('Gespeichert');onSaved&&onSaved()}}},'Speichern')));
+ const clean=()=>{const o=JSON.parse(JSON.stringify(r));['execCount','lastExecEpoch','blockedCount','lastResult','valid','validationError'].forEach(k=>delete o[k]);o.priority=+o.priority;o.cooldownSec=+o.cooldownSec;o.maxPerHour=+o.maxPerHour;return o};
+ list(r.triggers,'triggers',trg);list(r.conditions,'conditions',cnd);actionEditor(r.actions,cat,acts);m.append(card)}
+routes['/rules']=async m=>{const cat=await catalog(true);m.append(h('h2',null,'Automationen – Regeln'));const st=h('div',{class:'card row'});const lst=h('div',{class:'card tbl'});const ed=h('div');m.append(st,lst,ed);
+ const render=async()=>{const d=await GET('rules');const s=d.stats;st.innerHTML='';st.append(chip(s.executions+' Ausführungen'),chip(s.conflicts+' Konflikte'),chip(s.blockedDepth+' Kettenlimit',s.blockedDepth?'warn':''),chip(s.blockedRate+' Ratenlimit'),chip(s.storms+' Stürme',s.storms?'bad':''),s.paused?chip('pausiert','bad'):null,h('button',{class:'p',style:'margin-left:auto',onclick:()=>{ed.innerHTML='';ruleEditor(ed,null,cat,()=>{ed.innerHTML='';render()})}},'+ Neue Regel'));
+  lst.innerHTML='';if(!d.rules.length){lst.append(h('p',{class:'muted'},'Noch keine Regeln.'));return}
+  lst.append(h('table',null,h('tr',null,['Aktiv','Name','Prio','Trigger → Aktionen','Ausgeführt','Zuletzt',''].map(t=>h('th',null,t))),d.rules.map(r=>{const desc=d.descriptions.find(x=>x.id===r.id)||{triggers:[],actions:[],conditions:[]};return h('tr',null,h('td',null,h('input',{type:'checkbox',checked:r.enabled,onchange:e=>act(()=>POST('rules/'+r.id+'/enable',{enabled:e.target.checked})).then(render,render)})),
+   h('td',null,h('b',null,r.name),r.testMode?chip('Testmodus','warn'):null,r.validationError?h('div',{class:'bad'},r.validationError):null),h('td',null,r.priority),h('td',null,desc.triggers.join(' | '),desc.conditions.length?h('div',{class:'muted'},'wenn '+desc.conditions.join(' und ')):null,h('div',null,'→ '+desc.actions.join(', '))),h('td',null,r.execCount),h('td',null,dt(r.lastExecEpoch),h('div',{class:'muted'},r.lastResult)),
+   h('td',null,h('button',{onclick:()=>{ed.innerHTML='';ruleEditor(ed,r,cat,()=>{ed.innerHTML='';render()})}},'Bearbeiten'),' ',r.triggers.some(t=>t.type==='manual')?h('button',{onclick:()=>act(()=>POST('rules/'+r.id+'/run'),'Ausgelöst')},'Ausführen'):null,' ',h('button',{onclick:()=>{location.hash='#/rules/test';setTimeout(()=>{const s=$('#testRule');if(s){s.value=r.id}},300)}},'Testen'),' ',h('button',{class:'d',onclick:()=>confirm('Regel löschen?')&&act(()=>DEL('rules/'+r.id)).then(render)},'×')))})))};render();};
+routes['/rules/catalog']=async m=>{const cat=await catalog(true);m.append(h('h2',null,'Automationen – Trigger, Bedingungen, Aktionen'),h('p',{class:'muted'},'Alle Signalquellen sind gleichberechtigt: Digitaleingänge und Funkgeräte erzeugen dieselben Ereignisse. Sicherheitsfunktionen (Übertemperatur, Heizkreis-Ausgänge, Sicherheitsgrenzen) sind für Regeln nicht erreichbar.'));
+ for(const[k,t]of[['triggers','Trigger'],['conditions','Bedingungen'],['actions','Aktionen']])m.append(h('div',{class:'card tbl'},h('h3',{style:'margin-top:0'},t),h('table',null,cat[k].map(e=>h('tr',null,h('td',null,h('code',null,e.type)),h('td',null,e.label),h('td',{class:'muted'},e.fields.map(f=>f.label).join(', ')))))))};
+routes['/rules/test']=async m=>{const d=await GET('rules');const cat=await catalog();m.append(h('h2',null,'Automationen – Testmodus'),h('p',{class:'muted'},'Prüft eine Regel gegen den aktuellen Zustand – ohne etwas zu schalten. Optional kann ein Ereignis simuliert werden.'));
+ const ev={type:'manual',ref:'',gesture:'none',value:0};const out=h('div');let rid=d.rules[0]&&d.rules[0].id;
+ m.append(h('div',{class:'card'},h('div',{class:'form'},...field('Regel',sel(d.rules.map(r=>[r.id,r.name]),rid,v=>rid=+v,{id:'testRule'})),...field('Simuliertes Ereignis',sel([['','(keins – nur Bedingungen)'],['manual','manuell'],['input','Eingang'],['room_window','Fenster'],['room_heating','Heizanforderung'],['global_mode','Betriebsart'],['mqtt','MQTT'],['sensor_fault','Sensorfehler'],['time_minute','Zeit']],ev.type,v=>ev.type=v)),...field('Referenz',inp(ev,'ref'),'z. B. di:3, rf:2/1, Raum-ID, Thema'),...field('Geste',sel(cat.enums.gesture.filter(g=>g!=='any').concat(['none']),'none',v=>ev.gesture=v)),...field('Wert',inp(ev,'value','number',{class:'n'}))),
+  h('button',{class:'p',onclick:async()=>{const id=+$('#testRule').value;const body=ev.type?{event:{type:ev.type,ref:ev.ref,gesture:ev.gesture,value:+ev.value,a:ev.type==='manual'?id:-1}}:{};const r=await act(()=>POST('rules/'+id+'/test',body));out.innerHTML='';out.append(h('div',{class:'card'},h('h3',{style:'margin-top:0'},r.wouldRun?h('span',{class:'ok'},'Regel würde ausgeführt'):h('span',{class:'warn'},'Regel würde nicht ausgeführt')),r.triggerMatched!=null?h('p',null,'Trigger passt: ',r.triggerMatched?'ja':'nein'):null,
+   h('h3',null,'Bedingungen'),h('ul',null,r.conditions.map(c=>h('li',{class:c.ok?'ok':'bad'},(c.ok?'✔ ':'✘ ')+c.text))),h('h3',null,'Aktionen (Trockenlauf)'),h('ul',null,r.actions.map(a=>h('li',{class:a.result==='ok'?'':'bad'},a.text+' – '+a.result))),r.problems.length?h('p',{class:'bad'},r.problems.join('; ')):null))}},'Test ausführen')),out)};
+routes['/rules/log']=async m=>{m.append(h('h2',null,'Automationen – Ereignisprotokoll'));const al=h('tbody'),el=h('tbody');m.append(h('div',{class:'card tbl'},h('h3',{style:'margin-top:0'},'Regelausführungen'),h('table',null,h('tr',null,['Zeit','Regel','Auslöser','Ergebnis'].map(t=>h('th',null,t))),al)),h('div',{class:'card tbl'},h('h3',{style:'margin-top:0'},'Ereignisse (live)'),h('table',null,h('tr',null,['vor','Typ','Quelle','Geste','Referenz','Wert','Kette'].map(t=>h('th',null,t))),el)));
+ let s1=0,s2=0;every(2000,async()=>{const [a,e]=await Promise.all([GET('automation/log?since='+s1),GET('events?since='+s2)]);for(const x of a.log){s1=x.seq;al.prepend(h('tr',null,h('td',null,dt(x.epoch)),h('td',null,x.rule,x.dryRun?chip('Test','warn'):null),h('td',null,x.trigger),h('td',null,x.result)))}
+  for(const x of e.events){s2=x.seq;el.prepend(h('tr',null,h('td',null,ago(Math.round(x.ageMs/1000))),h('td',null,x.type),h('td',null,x.source),h('td',null,x.gesture||''),h('td',null,x.ref||'',x.text?h('div',{class:'muted'},x.text):null),h('td',null,fmt(x.value,2)),h('td',null,x.depth?'Tiefe '+x.depth+(x.rule?' / Regel '+x.rule:''):'')))}while(el.children.length>200)el.lastChild.remove()})};
+
+// ------------------------------------------------------------ model
+routes['/model']=async m=>{const d=await GET('model');const heat=await GET('heating');m.append(h('h2',null,'Lernmodell'),h('div',{class:'card hint'},'Thermisches Raummodell dT/dt = a·u(t−Totzeit) + b·(T_außen − T) bzw. Driftterm ohne Außenfühler. Nur „normale“ Perioden passen die Parameter an; Lüftung (offenes Fenster inkl. Erholzeit), unvollständige Daten, manuelle Übersteuerung und Heizungsstörungen werden getrennt. Das Modell verschiebt die Schaltschwellen höchstens um ±0,5 K; ohne vertrauenswürdiges Modell regelt die konventionelle Hysterese.'));
+ const cfg={...d.config,enabled:d.enabled};m.append(h('div',{class:'card'},h('div',{class:'form'},...field('Lernende Regelung aktiv',inp(cfg,'enabled','checkbox')),...field('Abtastintervall min',inp(cfg,'sampleMin','number',{class:'n'})),...field('Erholzeit nach Lüften min',inp(cfg,'ventilationRecoveryMin','number',{class:'n'})),...field('Bei manuellem Sollwert lernen',inp(cfg,'learnDuringManualSetpoint','checkbox')),...field('Max. Schwellenverschiebung K',inp(cfg,'maxAdviceK','number',{step:0.1,class:'n'}))),h('button',{onclick:()=>act(()=>PUT('model/config',{enabled:cfg.enabled,config:{sampleMin:+cfg.sampleMin,forgetting:cfg.forgetting,minSamples:cfg.minSamples,ventilationRecoveryMin:+cfg.ventilationRecoveryMin,learnDuringManualSetpoint:cfg.learnDuringManualSetpoint,maxAdviceK:+cfg.maxAdviceK}}),'Gespeichert')},'Speichern')));
+ const g=h('div',{class:'grid'});m.append(g);for(const r of heat.rooms){const x=d.models[r.id];if(!x){g.append(h('div',{class:'card'},h('h3',{style:'margin-top:0'},r.name),h('p',{class:'muted'},'Noch keine Daten (Raum benötigt Heizkreis und Temperatur).')));continue}
+  g.append(h('div',{class:'card'},h('div',{class:'row'},h('h3',{style:'margin:0'},r.name),chip(x.status,x.status==='ready'?'ok':x.status==='degraded'?'bad':'warn'),x.faultSuspected?chip('Störung vermutet','bad'):null),h('table',null,[['Heizleistung a',fmt(x.heatingGainKh,2)+' ± '+fmt(x.heatingGainStd,2)+' K/h'],['Verlust b',fmt(x.lossCoeff,3)+' ± '+fmt(x.lossCoeffStd,3)+' 1/h'],['Drift c',fmt(x.offsetKh,2)+' K/h'],['Totzeit',fmt(x.delayMin,0)+' ± '+fmt(x.delayStdMin,0)+' min'],['Aufheiztrend',fmt(x.trendKh,2)+' K/h'],['Residuum σ',fmt(x.residualStd,2)+' K/h'],['Prognose 60 min',x.prediction60?fmt(x.prediction60.mean,1)+' ± '+fmt(x.prediction60.std,1)+' °C'+(x.prediction60.valid?'':' (nicht vertrauenswürdig)'):'–'],['Letzte Periode',x.lastClass]].map(([k,v])=>h('tr',null,h('td',{class:'muted'},k),h('td',null,v)))),
+   h('div',{class:'row'},Object.entries(x.periods).map(([k,v])=>chip(k+': '+v))),x.context.length?h('details',null,h('summary',null,'Kontextereignisse'),h('ul',null,x.context.slice().reverse().map(c=>h('li',null,dt(c.epoch)+' – '+c.what)))):null,h('button',{class:'d',style:'margin-top:8px',onclick:()=>confirm('Modell zurücksetzen?')&&act(()=>POST('model/'+r.id+'/reset'),'Zurückgesetzt').then(route)},'Zurücksetzen')))}};
+
+// ------------------------------------------------------------ hardware
+routes['/hw/outputs']=async m=>{const io=await GET('io');m.append(h('h2',null,'Hardware – 16 Ausgänge'),h('p',{class:'muted'},'Heizkreis-Ausgänge gehören der Regelung. Handbetrieb ist zeitlich begrenzt und wird von den Sicherheitsfunktionen (Übertemperatur) weiterhin überwacht. Nur „allgemeine“ Ausgänge können von Automationen bzw. Home Assistant geschaltet werden – wenn ausdrücklich freigegeben.'));
+ const outs=io.outputs.map(o=>({...o}));const t=h('div',{class:'card tbl'});m.append(t);const dur={sec:600};
+ t.append(h('table',null,h('tr',null,['#','Name','Funktion','Automation','Home Assistant','max. Ein s','Zustand','Handbetrieb'].map(x=>h('th',null,x))),outs.map(o=>h('tr',null,h('td',null,o.n),h('td',null,inp(o,'name')),h('td',null,sel([['circuit','Heizkreis'],['general','allgemein'],['disabled','deaktiviert']],o.function,v=>o.function=v)),h('td',null,inp(o,'automationAllowed','checkbox')),h('td',null,inp(o,'haAllowed','checkbox')),h('td',null,inp(o,'maxOnSec','number',{class:'n'})),
+  h('td',null,o.on?chip('EIN','warn'):chip('aus'),o.manual?chip('Hand '+o.manualRemainingSec+' s','warn'):null,o.blocked?h('div',{class:'muted'},o.blocked):null,!o.hwOk?chip('I2C-Fehler','bad'):null),h('td',null,h('button',{onclick:()=>act(()=>POST('outputs/'+o.n+'/manual',{state:true,durationSec:dur.sec}),'Hand EIN').then(route)},'Ein'),' ',h('button',{onclick:()=>act(()=>POST('outputs/'+o.n+'/manual',{state:false,durationSec:dur.sec}),'Hand AUS').then(route)},'Aus'),' ',h('button',{onclick:()=>act(()=>DEL('outputs/'+o.n+'/manual')).then(route)},'Auto')))))
+  ,h('div',{class:'row',style:'margin-top:8px'},'Handbetrieb-Dauer s ',inp(dur,'sec','number',{class:'n'}),h('button',{class:'p',onclick:()=>act(()=>PUT('io',{outputs:outs.map(o=>({n:o.n,name:o.name,function:o.function,automationAllowed:o.automationAllowed,haAllowed:o.haAllowed,maxOnSec:+o.maxOnSec}))}),'Gespeichert')},'Konfiguration speichern')))};
+routes['/hw/inputs']=async m=>{const [io,heat,cat]=await Promise.all([GET('io'),GET('heating'),catalog(true)]);m.append(h('h2',null,'Hardware – 16 Digitaleingänge'),h('p',{class:'muted'},'Optokoppler-Eingänge (aktiv = gegen GND geschaltet). Taster liefern kurz/lang/gedrückt/losgelassen, Kontakte Ein/Aus – dieselben Ereignisse wie Funkgeräte.'));
+ const ins=io.inputs.map(i=>JSON.parse(JSON.stringify(i)));const box=h('div');m.append(box);const rooms=[['','–']].concat(heat.rooms.map(r=>[r.id,r.name]));
+ ins.forEach(i=>{const b=h('div');box.append(h('details',{class:'card'},h('summary',null,h('b',null,'DI'+i.n+' '),i.name,' ',i.active?chip('aktiv','warn'):chip('inaktiv'),' ',chip(i.kind),i.function!=='none'?chip(i.function+' '+i.room):null,i.bindings.length?chip(i.bindings.length+' Zuordnung(en)'):null),
+  h('div',{class:'form',style:'margin-top:10px'},...field('Name',inp(i,'name')),...field('Art',sel([['button','Taster'],['contact','Kontakt'],['disabled','deaktiviert']],i.kind,v=>{i.kind=v})),...field('Invertieren',inp(i,'invert','checkbox'),'Für Fensterkontakte: „Ein“ soll „Fenster offen“ bedeuten.'),...field('Funktion',sel([['none','keine'],['window','Fensterkontakt'],['presence','Anwesenheit'],['heat_demand','Wärmeanforderung']],i.function,v=>i.function=v)),...field('Raum',sel(rooms,i.room,v=>i.room=v)),...field('Entprellung ms',inp(i,'debounceMs','number',{class:'n'})),...field('Langer Druck ms',inp(i,'longPressMs','number',{class:'n'}))),h('h3',null,'Aktionen'),b));bindingEditor(i.bindings,cat,b,i.kind==='contact'?STATE_GESTURES:BTN_GESTURES)});
+ const bank={swap:!!io.swapInputBanks};m.append(h('div',{class:'card'},h('h3',{style:'margin-top:0'},'Eingangs-Expander'),h('label',null,inp(bank,'swap','checkbox'),' Bänke tauschen (DI1–8 ↔ DI9–16)'),h('p',{class:'muted'},'Standard laut A16-Schaltplan und KinCony-ESPHome: DI1–8 = PCF8574 0x22, DI9–16 = 0x21. Das A16v3-Blockschaltbild zeigt es umgekehrt. Reagiert beim Test DI1 als DI9, hier umschalten.'),h('button',{onclick:()=>act(()=>PUT('io',{swapInputBanks:bank.swap}),'Gespeichert').then(route)},'Übernehmen')));
+ m.append(h('button',{class:'p',onclick:()=>act(()=>PUT('io',{inputs:ins.map(i=>({n:i.n,name:i.name,kind:i.kind,invert:i.invert,function:i.function,room:i.room,debounceMs:+i.debounceMs,longPressMs:+i.longPressMs,bindings:i.bindings}))}),'Gespeichert')},'Speichern'))};
+routes['/hw/analog']=async m=>{const io=await GET('io');m.append(h('h2',null,'Hardware – Analogeingänge'),h('p',{class:'muted'},'Laut KinCony-Blockschaltbild der A16v3: A1/A2 = 0..5 V (GPIO4/GPIO6, Teiler 5,1 kΩ/10 kΩ → Faktor 1,51), A3/A4 = 4..20 mA (GPIO7/GPIO5, Shunt 150 Ω). Die Betriebsart muss zur Beschaltung der Platine passen; mit einer bekannten Spannung bzw. einem bekannten Strom kalibrieren. Bei 4..20 mA wird ein Strom unter 3,6 mA oder über 21 mA als Drahtbruch/Störung gemeldet.'),
+  h('p',{class:'card',style:'border-left:4px solid var(--bad,#c33)'},'Achtung: An einen 4..20-mA-Eingang keine Spannungsquelle anschließen – der Shunt liegt ohne Teiler direkt am ESP32-Pin (max. 3,3 V).'));
+ const ai=io.analog.map(a=>({...a}));const val=a=>a.pinVolts===undefined?'–':a.mode==='current'?fmt(a.milliamps,2)+' mA':fmt(a.volts,2)+' V';
+ m.append(h('div',{class:'card tbl'},h('table',null,h('tr',null,['#','Name','aktiv','als Sensor','Betriebsart','Teiler','Shunt Ω','Skalierung','Offset','Einheit','Pin V','Eingang','Wert'].map(x=>h('th',null,x))),ai.map(a=>h('tr',null,h('td',null,'A'+a.n),h('td',null,inp(a,'name')),h('td',null,inp(a,'enabled','checkbox')),h('td',null,inp(a,'asSensor','checkbox')),h('td',null,sel([['voltage','0..5 V'],['current','4..20 mA']],a.mode,v=>a.mode=v)),h('td',null,inp(a,'dividerGain','number',{step:0.01,class:'n'})),h('td',null,inp(a,'shuntOhm','number',{step:1,class:'n'})),h('td',null,inp(a,'scale','number',{step:0.01,class:'n'})),h('td',null,inp(a,'offset','number',{step:0.01,class:'n'})),h('td',null,inp(a,'unit',null,{style:'width:60px'})),h('td',null,fmt(a.pinVolts,3)),h('td',null,val(a),a.loopFault?' ':null,a.loopFault?chip('Drahtbruch/Störung','bad'):null),h('td',null,fmt(a.value,2)+' '+a.unit)))),
+  h('p',{class:'muted'},'Wert = Eingang (V bzw. mA) × Skalierung + Offset. Beispiel 4..20 mA → 0..100 °C: Skalierung 6,25, Offset −25.'),
+  h('button',{class:'p',style:'margin-top:8px',onclick:()=>act(()=>PUT('io',{analog:ai.map(a=>({n:a.n,name:a.name,enabled:a.enabled,asSensor:a.asSensor,mode:a.mode,dividerGain:+a.dividerGain,shuntOhm:+a.shuntOhm,scale:+a.scale,offset:+a.offset,unit:a.unit}))}),'Gespeichert').then(route)},'Speichern')))};
+routes['/hw/onewire']=async m=>{const [hw,s]=await Promise.all([GET('hardware'),GET('sensors')]);m.append(h('h2',null,'Hardware – 1-Wire-Busse'));const pins=[47,48,38];
+ for(let b=0;b<3;b++){const list=s.sensors.filter(x=>x.id.startsWith('ow'+(b+1)+':')).concat(s.discovered.filter(x=>x.id.startsWith('ow'+(b+1)+':')).map(x=>({id:x.id,name:'(nicht zugeordnet)',value:x.value,status:'neu'})));m.append(h('div',{class:'card tbl'},h('h3',{style:'margin-top:0'},'Bus '+(b+1)+' (GPIO'+pins[b]+') – '+hw.platform.oneWire[b]+' Sensor(en)'),list.length?h('table',null,list.map(x=>h('tr',null,h('td',null,h('code',null,x.id)),h('td',null,x.name),h('td',null,fmt(x.value,2)+' °C'),h('td',null,stChip(x.status))))):h('p',{class:'muted'},'Keine Sensoren gefunden.')))}
+ m.append(h('button',{onclick:()=>act(()=>POST('system/onewire_rescan'),'Busscan gestartet')},'Busse neu scannen'))};
+routes['/hw/selftest']=async m=>{m.append(h('h2',null,'Hardware – Selbsttest & Status'));const c=h('div');m.append(h('div',{class:'row'},h('button',{class:'p',onclick:()=>act(()=>POST('hardware/selftest'),'Selbsttest gestartet')},'Selbsttest starten')),c);
+ every(3000,async()=>{const d=await GET('hardware');const p=d.platform;c.innerHTML='';c.append(h('div',{class:'card tbl'},h('h3',{style:'margin-top:0'},'Selbsttest'),d.selfTest.length?h('table',null,d.selfTest.map(t=>h('tr',null,h('td',null,t.component),h('td',null,stChip(t.status)),h('td',{class:'muted'},t.detail)))):h('p',{class:'muted'},'Noch nicht ausgeführt.'),h('p',{class:'hint'},'„unbestätigt“ = Funktion vorhanden, aber ohne angeschlossene/aktive Gegenstelle nicht automatisch prüfbar.')),
+  h('div',{class:'grid'},h('div',{class:'card'},h('h3',{style:'margin-top:0'},'System'),h('table',null,[['Freier RAM',Math.round(p.freeHeap/1024)+' KB (min. '+Math.round(p.minFreeHeap/1024)+')'],['PSRAM frei',Math.round(p.freePsram/1024)+' / '+Math.round(p.totalPsram/1024)+' KB'],['Last HeatCore-Tasks',p.cpuPct<0?'n/a':p.cpuPct+' %'],['Regelzyklus max.',p.controlLoopMaxUs+' µs'],['Reset-Grund',p.resetReason]].map(([k,v])=>h('tr',null,h('td',{class:'muted'},k),h('td',null,v))))),
+   h('div',{class:'card'},h('h3',{style:'margin-top:0'},'I2C / IO'),h('table',null,[['Geräte',p.i2c.join(' ')||'–'],['Fehler / Bus-Recovery',p.i2cErrors+' / '+p.i2cRecoveries],['Expander',p.ioExpandersOk?chip('ok','ok'):chip('Fehler','bad')],['Schreib-/Lesefehler',p.outputWriteErrors+' / '+p.inputReadErrors]].map(([k,v])=>h('tr',null,h('td',{class:'muted'},k),h('td',null,v))))),
+   h('div',{class:'card'},h('h3',{style:'margin-top:0'},'RTC / SD / RS485'),h('table',null,[['RTC DS3231',p.rtcPresent?(p.rtcValid?chip('gültig','ok'):chip('Zeit ungültig','warn')):chip('fehlt','bad')],['RTC-Temperatur',fmt(p.rtcTempC,2)+' °C'],['NTP synchronisiert',p.timeSynced?'ja':'nein'],['SD-Karte',p.sd+(p.sdTotalBytes?' ('+Math.round(p.sdUsedBytes/1048576)+'/'+Math.round(p.sdTotalBytes/1048576)+' MB)':'')],['RS485',p.rs485+' – '+p.rs485Lines+' Zeilen, '+p.rs485Errors+' Fehler']].map(([k,v])=>h('tr',null,h('td',{class:'muted'},k),h('td',null,v))))),
+   h('div',{class:'card'},h('h3',{style:'margin-top:0'},'Netzwerk / Funk / OLED'),h('table',null,[['Ethernet',p.ethLink?chip('Link','ok'):chip('kein Link')],['WLAN',p.wifiConnected?p.wifiRssi+' dBm':'–'],['Details',p.netDetail],['RF433 Empfänger',p.rfRxHw?chip('ok','ok'):chip('Fehler','bad')],['RF433 Sender',p.rfTxHw?chip('ok','ok'):chip('Fehler','bad')],['Loopback',d.rfLoopback.done?(d.rfLoopback.ok?chip('ok','ok'):chip('fehlgeschlagen','warn')):'–']].map(([k,v])=>h('tr',null,h('td',{class:'muted'},k),h('td',null,v)))),h('p',null,h('a',{href:'#/display/status'},'OLED-Status'),' · ',h('a',{href:'#/rf/diag'},'Funkdiagnose')))))})};
+
+// ------------------------------------------------------------ system
+routes['/sys/safety']=async m=>{const s=await GET('safety');const c={...s};m.append(h('h2',null,'System – Sicherheit'),h('div',{class:'card hint'},'Diese Grenzen gelten für alle Quellen (Web, Automationen, Funk, Home Assistant) und können nur hier lokal geändert werden. Automationen und MQTT haben keinen Zugriff.'));
+ m.append(h('div',{class:'card'},h('div',{class:'form'},...field('Min. Sollwert °C',inp(c,'minSetpoint','number',{step:0.5,class:'n'})),...field('Max. Sollwert °C',inp(c,'maxSetpoint','number',{step:0.5,class:'n'})),...field('Raum-Übertemperatur °C',inp(c,'maxRoomTemp','number',{step:0.5,class:'n'}),'Heizkreise des Raums werden sofort geschlossen.'),...field('Vorlauffühler',inp(c,'flowSensorId',null,{placeholder:'leer = Sensor mit Rolle Vorlauf'})),...field('Max. Vorlauf °C',inp(c,'maxFlowTemp','number',{class:'n'}),'Alle Heizkreise schließen (z. B. 55 °C Fußbodenheizung).'),...field('Hysterese Vorlauf K',inp(c,'flowHysteresis','number',{class:'n'})),...field('Vorlauffühler zwingend',inp(c,'flowSensorRequired','checkbox'),'Fehlt der Fühler, bleiben alle Heizkreise zu.'),
+  ...field('Max. Handbetrieb s',inp(c,'maxManualOverrideSec','number',{class:'n'})),...field('Max. Fernschaltung s',inp(c,'haMaxOutputSec','number',{class:'n'}),'Home Assistant / Automationen: nie unbegrenzt.'),...field('Min. Schaltabstand s',inp(c,'minSwitchIntervalSec','number',{class:'n'})),...field('Max. Schaltungen/h',inp(c,'maxSwitchesPerHour','number',{class:'n'})),...field('Watchdog s',inp(c,'watchdogSec','number',{class:'n'}),'Hängt die Regelung, gehen die Ausgänge in den sicheren Zustand.'),
+  ...field('Bei Fühlerausfall',sel([['off','Heizkreis schließen'],['duty','Notbetrieb Taktung']],c.sensorFailMode,v=>c.sensorFailMode=v)),...field('Notbetrieb %',inp(c,'sensorFailDutyPct','number',{class:'n'})),...field('Taktzyklus min',inp(c,'sensorFailCycleMin','number',{class:'n'}))),
+  h('button',{class:'p',style:'margin-top:10px',onclick:()=>{const b={};for(const k of ['minSetpoint','maxSetpoint','maxRoomTemp','maxFlowTemp','flowHysteresis','maxManualOverrideSec','haMaxOutputSec','minSwitchIntervalSec','maxSwitchesPerHour','watchdogSec','sensorFailDutyPct','sensorFailCycleMin'])b[k]=+c[k];b.flowSensorId=c.flowSensorId;b.flowSensorRequired=c.flowSensorRequired;b.sensorFailMode=c.sensorFailMode;act(()=>PUT('safety',b),'Gespeichert')}},'Speichern'),h('p',null,s.flowTrip?chip('Vorlaufschutz ausgelöst','bad'):chip('Vorlaufschutz bereit','ok'),' ',s.flowValid?'Vorlauf '+fmt(s.flowTemp)+' °C':'kein Vorlauffühler',' · Auslösungen: '+s.trips)))};
+function cfgPage(m,section,title,fields,after){return GET('config/'+section).then(d=>{const c={...d};m.append(h('h2',null,title));const f=h('div',{class:'form'});for(const[k,l,t,hint]of fields)f.append(...field(l,t==='checkbox'?inp(c,k,'checkbox'):inp(c,k,t,t==='number'?{class:'n'}:{}),hint));
+ m.append(h('div',{class:'card'},f,h('button',{class:'p',style:'margin-top:10px',onclick:()=>act(()=>PUT('config/'+section,c),'Gespeichert')},'Speichern')));after&&after(m)})}
+routes['/sys/network']=async m=>{const[c0,st0]=await Promise.all([GET('config/network'),GET('network/status').catch(()=>({}))]);const c={...c0};
+ m.append(h('h2',null,'System – Netzwerk'),h('div',{class:'card hint'},'LAN hat immer Vorrang: Mit LAN-Verbindung ist WLAN aus. Ohne LAN verbindet sich die Steuerung mit dem eingerichteten WLAN. Gibt es keine Verbindung (oder ist kein WLAN eingerichtet), öffnet sie den Zugangspunkt „HeatCore-xxxx“ zur Einrichtung (Adresse 192.168.4.1 – die Seite öffnet sich auf dem Handy meist von selbst). Sobald eine Verbindung besteht, geht der Zugangspunkt wieder aus; kommt LAN zurück, wird WLAN abgeschaltet.'));
+ const stat=h('div');const showStat=s=>{stat.innerHTML='';stat.append(h('table',null,[['Zustand',h('b',null,s.state||'–')],['Verbindung',s.kind==='ETH'?'LAN':s.kind==='WLAN'?'WLAN':s.kind==='AP'?'nur Zugangspunkt':(s.kind||'keine')],['Adresse',s.ip?h('span',null,s.ip,' · ',h('a',{href:'http://'+(s.hostname||'heatcore')+'.local'},(s.hostname||'heatcore')+'.local')):'–'],['Details',s.detail||'–'],s.apSsid?['Zugangspunkt',s.apSsid+' (192.168.4.1)']:null].filter(Boolean).map(([k,v])=>h('tr',null,h('td',{class:'muted'},k),h('td',null,v)))))};showStat(st0);
+ m.append(h('div',{class:'card'},h('h3',{style:'margin-top:0'},'Status'),stat));
+ const ssid=inp(c,'wifiSsid',null,{list:'hc-ssids',autocomplete:'off',style:'width:260px'});const dl=h('datalist',{id:'hc-ssids'});const nets=h('div');
+ const showNets=s=>{const n=(s.scan&&s.scan.networks)||[];dl.innerHTML='';n.forEach(w=>dl.append(h('option',{value:w.ssid})));nets.innerHTML='';if(s.scan&&s.scan.running){nets.append(h('span',{class:'muted'},'Suche läuft …'));return}
+  if(n.length)nets.append(h('div',{class:'row',style:'margin-top:6px'},n.map(w=>h('button',{onclick:()=>{c.wifiSsid=w.ssid;ssid.value=w.ssid}},w.ssid+' '+(w.rssi>-60?'▂▄▆':w.rssi>-75?'▂▄':'▂')+(w.open?' (offen)':'')))))};showNets(st0);
+ const scan=async()=>{await act(()=>POST('network/scan'));for(let i=0;i<20;i++){await new Promise(r=>setTimeout(r,1000));const s=await GET('network/status');showNets(s);if(!(s.scan&&s.scan.running))break}};
+ const f=h('div',{class:'form'},...field('Hostname',inp(c,'hostname'),'Erreichbar als <name>.local'),...field('Ethernet (LAN)',inp(c,'ethernet','checkbox')),...field('WLAN als Ersatz',inp(c,'wifi','checkbox'),'Wird nur ohne LAN-Verbindung benutzt.'),
+  ...field('WLAN-Name (SSID)',h('div',null,h('div',{class:'row'},ssid,dl,h('button',{onclick:scan},'Netze suchen')),nets)),...field('WLAN-Passwort',inp(c,'wifiPassword','password',{autocomplete:'new-password'})),
+  ...field('Passwort Zugangspunkt',inp(c,'apPassword','password'),'Mindestens 8 Zeichen; bitte ändern.'),...field('Statische IP',inp(c,'staticIp','checkbox'),'Gilt für LAN bzw. WLAN – es ist immer nur eine Verbindung aktiv.'),...field('IP',inp(c,'ip')),...field('Gateway',inp(c,'gateway')),...field('Subnetz',inp(c,'subnet')),...field('DNS',inp(c,'dns')));
+ const after=h('div',{class:'hint',style:'margin-top:8px'});
+ m.append(h('div',{class:'card'},h('h3',{style:'margin-top:0'},'Einstellungen'),f,h('button',{class:'p',style:'margin-top:10px',onclick:async()=>{const changedWifi=c.wifiSsid!==c0.wifiSsid||c.wifiPassword!==c0.wifiPassword;const r=await act(()=>PUT('config/network',c),'Gespeichert');if(!r)return;
+  if(changedWifi&&c.wifi&&c.wifiSsid&&st0.kind!=='ETH'){after.textContent='Verbinde mit „'+c.wifiSsid+'“ …';for(let i=0;i<45;i++){await new Promise(r=>setTimeout(r,2000));let s;try{s=await GET('network/status')}catch(e){continue}showStat(s);
+   if(s.wifiConnected){after.innerHTML='';after.append('Verbunden. Neue Adresse: ',h('b',null,s.ip),' bzw. ',h('a',{href:'http://'+(s.hostname||'heatcore')+'.local'},(s.hostname||'heatcore')+'.local'),'. Der Zugangspunkt bleibt noch einige Minuten aktiv – danach das Handy wieder mit dem normalen WLAN verbinden und diese Adresse öffnen.');return}}
+   after.textContent='Noch keine Verbindung – SSID und Passwort prüfen. Der Zugangspunkt bleibt aktiv; die Steuerung versucht es alle 3 Minuten erneut.'}}},'Speichern'),after));
+ every(5000,async()=>{try{showStat(await GET('network/status'))}catch(e){}})};
+routes['/sys/mqtt']=m=>cfgPage(m,'mqtt','System – MQTT / Home Assistant',[['enabled','MQTT aktiv','checkbox','Optional – die Heizung arbeitet ohne MQTT und Home Assistant vollständig lokal.'],['host','Broker'],['port','Port','number'],['user','Benutzer'],['password','Passwort','password'],['baseTopic','Basisthema','text','leer = heatcore/<geräte-id>'],['discovery','Home Assistant Discovery','checkbox'],['discoveryPrefix','Discovery-Präfix'],['stateIntervalSec','Statusintervall s','number']],m2=>m2.append(h('div',{class:'card hint'},'Home Assistant darf Sollwerte und Modi setzen, Regeln mit manuellem Trigger auslösen, Displayseiten wählen, freigegebene Funkbefehle senden und freigegebene allgemeine Ausgänge zeitlich begrenzt schalten. Sicherheitsgrenzen, Heizkreis-Ausgänge und der Übertemperaturschutz sind nicht erreichbar. Eigene Automationseingänge: <basis>/in/<thema>, Ausgaben: <basis>/out/<thema>.')));
+routes['/sys/general']=async m=>{await cfgPage(m,'system','System – Allgemein',[['deviceName','Gerätename'],['timezone','Zeitzone (POSIX)','text','Deutschland: CET-1CEST,M3.5.0,M10.5.0/3'],['ntpServer','NTP-Server'],['controlIntervalSec','Regelintervall s','number'],['outdoorFromSensor','Außenfühler für Lernmodell','checkbox'],['webUser','Web-Benutzer'],['webPassword','Web-Passwort','password','leer = kein Passwort (nur im vertrauenswürdigen Netz!)']]);
+ m.append(h('div',{class:'card'},h('h3',{style:'margin-top:0'},'Backup'),h('div',{class:'row'},h('button',{onclick:async()=>{const d=await GET('config/export');const a=h('a',{href:URL.createObjectURL(new Blob([JSON.stringify(d,null,1)],{type:'application/json'})),download:'heatcore-config.json'});a.click()}},'Konfiguration exportieren'),h('input',{type:'file',accept:'.json',onchange:async e=>{const t=await e.target.files[0].text();if(confirm('Konfiguration importieren? (Passwörter bleiben erhalten)'))act(()=>POST('config/import',t),'Importiert')}})),h('p',{class:'hint'},'Der Export enthält keine Passwörter.')),
+  h('div',{class:'card'},h('h3',{style:'margin-top:0'},'Firmware'),h('a',{href:'#/sys/firmware'},'Firmware-Update, Online-Update und Rückkehr zur vorherigen Version →')),
+  h('div',{class:'card row'},h('button',{onclick:()=>confirm('Neu starten?')&&act(()=>POST('system/reboot'),'Neustart ...')},'Neustart'),h('button',{class:'d',onclick:()=>confirm('Alle Einstellungen löschen?')&&act(()=>POST('system/factory_reset'),'Werkseinstellungen – Neustart')},'Werkseinstellungen')))};
+
+// ------------------------------------------------------------ firmware update
+function cmpVer(a,b){const p=s=>{s=String(s||'').replace(/^[vV]/,'');const pre=(s.split('+')[0].split('-')[1])||'';const n=s.split(/[-+]/)[0].split('.').map(x=>parseInt(x)||0);while(n.length<4)n.push(0);return{n,pre}};const x=p(a),y=p(b);for(let i=0;i<4;i++)if(x.n[i]!==y.n[i])return x.n[i]<y.n[i]?-1:1;if(x.pre===y.pre)return 0;if(!x.pre)return 1;if(!y.pre)return -1;return x.pre<y.pre?-1:1}
+function otaUpload(blob,name,q,prog,stat){return new Promise((res,rej)=>{const x=new XMLHttpRequest();const fd=new FormData();fd.append('firmware',blob,name);x.upload.onprogress=e=>{if(e.lengthComputable){prog.value=e.loaded/e.total*100;stat.textContent='Übertragung zum Gerät '+Math.round(prog.value)+' %'}};
+ x.onload=()=>{let j={};try{j=JSON.parse(x.responseText)}catch(e){}x.status===200?res(j):rej(new Error(j.error||('HTTP '+x.status)))};x.onerror=()=>rej(new Error('Verbindung zum Gerät unterbrochen'));
+ x.open('POST','/api/ota?'+new URLSearchParams(q).toString());x.send(fd)})}
+async function waitForRestart(stat,oldVer){stat.textContent='Neustart – alle Heizkreise wurden vorher in den sicheren Zustand gebracht. Warte auf das Gerät …';const t0=Date.now();await new Promise(r=>setTimeout(r,8000));
+ while(Date.now()-t0<180000){try{const f=await GET('firmware');stat.textContent='Gerät läuft wieder mit Firmware '+f.version+(f.pendingVerify?' (Probelauf – wird nach der Selbstprüfung bestätigt)':'');toast('Gerät läuft mit Firmware '+f.version,f.version===oldVer&&!f.lastResult);setTimeout(route,2500);return}catch(e){}await new Promise(r=>setTimeout(r,3000))}
+ stat.textContent='Das Gerät antwortet nicht. Bitte Netzwerk prüfen; nach einem fehlgeschlagenen Start kehrt es automatisch zur vorherigen Firmware zurück.'}
+routes['/sys/firmware']=async m=>{const f=await GET('firmware');const busy={v:false};
+ m.append(h('h2',null,'System – Firmware-Update'),h('div',{class:'card hint'},'Während der Übertragung regelt die Heizung normal weiter. Vor dem Neustart werden alle Heizkreise in den sicheren Zustand gebracht. Eine neue Firmware läuft zunächst auf Probe: Erst wenn Regelung und Netzwerk mindestens 2 Minuten fehlerfrei laufen, wird sie bestätigt – startet sie nicht sauber, kehrt das Gerät automatisch zur vorherigen Version zurück.'));
+ m.append(h('div',{class:'card'},h('h3',{style:'margin-top:0'},'Installiert'),h('table',null,[['Version',h('b',null,f.version)],['Platine',f.board],['Erstellt',f.buildDate],['Aktiver Speicherbereich',f.runningPartition+(f.slotSize?' ('+Math.round(f.slotSize/1048576)+' MB)':'')],['Status',f.busy?chip('Update wird geschrieben','warn'):f.pendingVerify?chip('Probelauf – Bestätigung nach Selbstprüfung','warn'):chip('bestätigt','ok')],['Vorherige Version',f.previousVersion||'–'],['Letztes Ergebnis',f.lastResult||'–']].map(([k,v])=>h('tr',null,h('td',{class:'muted'},k),h('td',null,v))))));
+ // online update via the project's GitHub Pages (fetched by the browser)
+ const on=h('div');const oprog=h('progress',{max:100,value:0,style:'width:260px;display:none'});const ostat=h('div',{class:'muted'});const src={url:f.updateUrl||''};
+ const check=async()=>{on.innerHTML='';ostat.textContent='';if(!src.url){on.append(h('p',{class:'muted'},'Keine Update-Quelle eingetragen.'));return}
+  let rel;try{const r=await fetch(src.url+'firmware/release.json',{cache:'no-store'});if(!r.ok)throw new Error('HTTP '+r.status);rel=await r.json()}catch(e){on.append(h('p',{class:'bad'},'Update-Quelle nicht erreichbar ('+e.message+'). Der Browser (nicht das Gerät) braucht dafür Internet; GitHub Pages muss für das Projekt aktiviert und ein Release veröffentlicht sein. Alternativ die Datei heatcore-ota.bin aus den GitHub-Releases herunterladen und unten hochladen.'));return}
+  if(rel.board&&rel.board!==f.board){on.append(h('p',{class:'bad'},'Release ist für '+rel.board+', dieses Gerät ist '+f.board+'.'));return}
+  const c=cmpVer(rel.version,f.version);
+  on.append(h('div',{class:'row'},h('b',null,'Verfügbar: '+rel.version),rel.date?h('span',{class:'muted'},rel.date):null,c>0?chip('neuer','ok'):c===0?chip('bereits installiert'):chip('älter als installiert','warn'),rel.releaseUrl?h('a',{href:rel.releaseUrl,target:'_blank',rel:'noopener'},'Release auf GitHub'):null),
+   rel.notes?h('pre',{style:'white-space:pre-wrap;max-height:220px;overflow:auto;background:var(--chip);padding:8px;border-radius:6px'},rel.notes):null,
+   h('button',{class:'p',onclick:async e=>{if(busy.v)return;if(c<=0&&!confirm(c===0?'Diese Version ist bereits installiert. Erneut installieren?':'Ältere Version installieren (Downgrade)? Gespeicherte Einstellungen bleiben erhalten, neuere Optionen gehen ggf. verloren.'))return;
+    busy.v=true;e.target.disabled=true;oprog.style.display='';try{ostat.textContent='Lade Firmware von GitHub …';const r=await fetch(src.url+'firmware/'+rel.ota.file,{cache:'no-store'});if(!r.ok)throw new Error('Download: HTTP '+r.status);
+     const total=+r.headers.get('content-length')||rel.ota.size;const rd=r.body.getReader();const parts=[];let got=0;for(;;){const{done,value}=await rd.read();if(done)break;parts.push(value);got+=value.length;oprog.value=got/total*100;ostat.textContent='Download '+Math.round(got/1024)+' / '+Math.round(total/1024)+' KB'}
+     const blob=new Blob(parts);if(blob.size!==rel.ota.size)throw new Error('Download unvollständig');
+     await otaUpload(blob,rel.ota.file,{size:rel.ota.size,sha256:rel.ota.sha256,source:'GitHub '+rel.version},oprog,ostat);await waitForRestart(ostat,f.version)}
+    catch(err){ostat.textContent='';toast('Update fehlgeschlagen: '+err.message,true);busy.v=false;e.target.disabled=false;oprog.style.display='none'}}},c>0?'Jetzt installieren':'Trotzdem installieren'))};
+ m.append(h('div',{class:'card'},h('h3',{style:'margin-top:0'},'Online-Update von GitHub'),h('p',{class:'muted'},'Der Browser lädt das Release von der Update-Quelle und überträgt es ins Gerät; das Gerät selbst braucht keinen Internetzugang. Größe und SHA-256-Prüfsumme werden im Gerät gegen das Release geprüft, bevor die Firmware aktiviert wird.'),
+  h('div',{class:'row'},h('button',{onclick:check},'Nach Updates suchen'),src.url?h('a',{href:src.url,target:'_blank',rel:'noopener'},'Web-Flasher (USB)'):null),on,oprog,ostat,
+  h('details',{style:'margin-top:8px'},h('summary',null,'Update-Quelle'),h('div',{class:'row',style:'margin-top:6px'},inp(src,'url',null,{style:'width:340px',placeholder:'https://<benutzer>.github.io/<repo>/'}),h('button',{onclick:()=>act(()=>PUT('config/system',{updateUrl:src.url}),'Gespeichert').then(route)},'Speichern')),h('div',{class:'hint'},'GitHub-Pages-Adresse des Projekts (leer = Online-Update aus).'))));
+ // manual upload
+ const file=h('input',{type:'file',accept:'.bin'});const sha={v:''};const prog=h('progress',{max:100,value:0,style:'width:260px;display:none'});const stat=h('div',{class:'muted'});
+ m.append(h('div',{class:'card'},h('h3',{style:'margin-top:0'},'Firmware-Datei hochladen'),h('p',{class:'muted'},'Datei heatcore-ota.bin aus einem GitHub-Release oder .pio/build/kc868_a16v3/firmware.bin. Das Gerät nimmt nur HeatCore-Firmware für '+f.board+' an (kein Factory-Image, keine fremde Firmware).'),
+  h('div',{class:'row'},file,inp(sha,'v',null,{style:'width:300px',placeholder:'SHA-256 (optional, aus dem Release)'}),h('button',{class:'p',onclick:async e=>{const fl=file.files[0];if(!fl||busy.v)return;busy.v=true;e.target.disabled=true;prog.style.display='';
+   const q={size:fl.size,source:'Upload'};if(sha.v.trim())q.sha256=sha.v.trim().toLowerCase();try{await otaUpload(fl,fl.name,q,prog,stat);await waitForRestart(stat,f.version)}catch(err){stat.textContent='';toast('Update fehlgeschlagen: '+err.message,true);busy.v=false;e.target.disabled=false;prog.style.display='none'}}},'Hochladen und installieren')),prog,stat));
+ // rollback
+ m.append(h('div',{class:'card'},h('h3',{style:'margin-top:0'},'Vorherige Firmware'),f.rollbackAvailable?h('div',null,h('p',{class:'muted'},'Im zweiten Speicherbereich liegt '+(f.previousVersion?'Version '+f.previousVersion:'die vorherige Firmware')+'. Die Konfiguration bleibt erhalten.'),h('button',{onclick:()=>confirm('Zur vorherigen Firmware zurückkehren und neu starten?')&&act(()=>POST('firmware/rollback'),'Neustart mit vorheriger Firmware …').then(r=>{if(r)waitForRestart(stat,f.version)})},'Vorherige Firmware starten')):h('p',{class:'muted'},'Keine vorherige Firmware vorhanden (z. B. nach dem ersten Flashen per USB).')));
+};
+
+// ------------------------------------------------------------ statistics
+const nf=(v,d=1)=>v==null||isNaN(v)?'–':Number(v).toFixed(d).replace('.',',');
+// Temperature (Ist/Soll) and valve duty for one room: two plots sharing the time axis,
+// window periods shaded, crosshair tooltip. Colours: --s1/--s2/--s3 (validated palette).
+function historyChart(d){
+ const wrap=h('div',{class:'chart'}),tip=h('div',{class:'tip'});const n=d.t.length;if(!n)return h('p',{class:'muted'},'Noch keine Daten (Aufzeichnung alle 15 Minuten).');
+ const W=Math.max(320,Math.min(1100,(document.querySelector('main')||document.body).clientWidth-60)),L=44,R=70,T=8,H1=200,G=26,H2=70,B=22,H=T+H1+G+H2+B,pw=W-L-R;
+ const vals=[...d.temp,...d.setpoint].filter(v=>v!=null);let lo=Math.floor(Math.min(...vals)-0.5),hi=Math.ceil(Math.max(...vals)+0.5);if(!vals.length){lo=15;hi=25}if(hi-lo<3)hi=lo+3;
+ const step=hi-lo>8?2:1,x=i=>L+(n<2?pw/2:i*pw/(n-1)),y=v=>T+H1-(v-lo)/(hi-lo)*H1,y2=v=>T+H1+G+H2-v/100*H2;
+ let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Temperaturverlauf und Ventil-Einschaltdauer">`;
+ const bw=n<2?8:pw/(n-1);
+ d.windowMin.forEach((w,i)=>{if(w>0)s+=`<rect x="${x(i)-bw/2}" y="${T}" width="${bw}" height="${H1}" fill="var(--chip)"/>`});
+ for(let v=lo;v<=hi;v+=step)s+=`<line x1="${L}" x2="${L+pw}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${L-6}" y="${y(v)+4}" text-anchor="end">${v}°</text>`;
+ for(const v of [0,50,100])s+=`<line x1="${L}" x2="${L+pw}" y1="${y2(v)}" y2="${y2(v)}" stroke="var(--line)"/><text x="${L-6}" y="${y2(v)+4}" text-anchor="end">${v}%</text>`;
+ const path=(arr,stepped)=>{let p='',pen=false;arr.forEach((v,i)=>{if(v==null){pen=false;return}if(!pen){p+=`M${x(i)} ${y(v)}`;pen=true}else{if(stepped)p+=`H${x(i)}`;p+=`L${x(i)} ${y(v)}`}});return p};
+ s+=`<path d="${path(d.setpoint,true)}" fill="none" stroke="var(--s2)" stroke-width="2" stroke-linejoin="round"/>`;
+ s+=`<path d="${path(d.temp,false)}" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round"/>`;
+ const gap=bw>6?2:0,bar=Math.max(1,bw-gap);
+ d.dutyPct.forEach((v,i)=>{if(!v)return;const top=y2(v),hgt=T+H1+G+H2-top,x0=Math.max(L,x(i)-bar/2),x1=Math.min(L+pw,x(i)+bar/2);if(x1-x0<0.5)return;s+=`<rect x="${x0}" y="${top}" width="${x1-x0}" height="${hgt}" fill="var(--s3)" ${x1-x0>=6?'rx="2"':''}/>`});
+ const last=a=>{for(let i=a.length-1;i>=0;i--)if(a[i]!=null)return i;return -1};
+ const lt=last(d.temp),ls=last(d.setpoint);let yl1=lt>=0?y(d.temp[lt]):null,yl2=ls>=0?y(d.setpoint[ls]):null;
+ if(yl1!=null&&yl2!=null&&Math.abs(yl1-yl2)<13){if(yl1<yl2){yl1-=7;yl2+=7}else{yl1+=7;yl2-=7}}
+ if(lt>=0)s+=`<text x="${L+pw+6}" y="${yl1+4}" style="fill:var(--text)">Ist ${nf(d.temp[lt])}°</text>`;
+ if(ls>=0)s+=`<text x="${L+pw+6}" y="${yl2+4}" style="fill:var(--text)">Soll ${nf(d.setpoint[ls])}°</text>`;
+ const ticks=Math.min(6,n),long=n>1&&d.t[0].slice(0,10)!==d.t[n-1].slice(0,10);
+ for(let k=0;k<ticks;k++){const i=Math.round(k*(n-1)/Math.max(1,ticks-1));const t=d.t[i]||'';const lab=long?t.slice(8,10)+'.'+t.slice(5,7)+'. '+t.slice(11):t.slice(11);s+=`<text x="${x(i)}" y="${H-4}" text-anchor="${k===0?'start':k===ticks-1?'end':'middle'}">${lab}</text>`}
+ s+=`<text x="${L}" y="${T+H1+G-8}">Ventil offen</text>`;
+ s+=`<g class="hover" style="display:none"><line class="cx" y1="${T}" y2="${T+H1+G+H2}" stroke="var(--muted)" stroke-width="1"/><circle class="m1" r="4" fill="var(--s1)" stroke="var(--panel)" stroke-width="2"/><circle class="m2" r="4" fill="var(--s2)" stroke="var(--panel)" stroke-width="2"/></g>`;
+ s+=`<rect x="${L}" y="${T}" width="${pw}" height="${H1+G+H2}" fill="transparent" class="ov"/></svg>`;
+ wrap.innerHTML=s;wrap.append(tip);
+ const svg=wrap.querySelector('svg'),g=svg.querySelector('.hover'),cx=g.querySelector('.cx'),m1=g.querySelector('.m1'),m2=g.querySelector('.m2');
+ const move=e=>{const r=svg.getBoundingClientRect(),px=(e.clientX-r.left)*W/r.width;const i=Math.max(0,Math.min(n-1,Math.round((px-L)/(n<2?1:pw/(n-1)))));
+  g.style.display='';cx.setAttribute('x1',x(i));cx.setAttribute('x2',x(i));
+  for(const[m,a]of[[m1,d.temp],[m2,d.setpoint]]){if(a[i]==null)m.style.display='none';else{m.style.display='';m.setAttribute('cx',x(i));m.setAttribute('cy',y(a[i]))}}
+  tip.innerHTML='';tip.append(h('b',null,d.t[i]),h('br'),'Ist '+nf(d.temp[i])+' °C · Soll '+nf(d.setpoint[i])+' °C',h('br'),'Ventil offen '+d.dutyPct[i]+' %'+(d.windowMin[i]?' · Fenster '+d.windowMin[i]+' min':''));
+  tip.style.display='block';const left=x(i)*r.width/W;tip.style.left=Math.min(r.width-tip.offsetWidth,Math.max(0,left+12))+'px';tip.style.top='4px'};
+ svg.querySelector('.ov').addEventListener('pointermove',move);svg.querySelector('.ov').addEventListener('pointerleave',()=>{g.style.display='none';tip.style.display='none'});
+ return wrap}
+const KPI_COLS=[['date','Tag'],['meanTemp','Ø Ist °C'],['meanSetpoint','Ø Soll °C'],['comfortMeanDevK','Abw. Komfort K'],['belowSetpointHours','h unter Soll'],['aboveSetpointHours','h über Soll'],['maxOvershootK','Überschw. K'],['warmupMeanMin','Aufheizen min'],['heatingHours','Heiz-h'],['switches','Schaltungen'],['windowHours','Fenster h'],['meanOutdoor','Ø außen °C']];
+routes['/stats']=async m=>{const heat=await GET('heating');m.append(h('h2',null,'Statistik'),h('p',{class:'muted'},'15-Minuten-Werte der letzten 14 Tage je Raum (bleiben bei Neustart und Update erhalten). Zeiten mit offenem Fenster, Handbetrieb oder Störung sind aus den Komfortkennzahlen ausgeklammert. Dieselben Daten stehen der KI über die MCP-Schnittstelle zur Verfügung.'));
+ if(!heat.rooms.length){m.append(h('p',{class:'muted'},'Keine Räume angelegt.'));return}
+ const st={room:sessionStorage.getItem('hcStatsRoom')||heat.rooms[0].id,hours:+(sessionStorage.getItem('hcStatsHours')||48)};if(!heat.rooms.some(r=>r.id===st.room))st.room=heat.rooms[0].id;
+ const body=h('div');const load=async()=>{try{sessionStorage.setItem('hcStatsRoom',st.room);sessionStorage.setItem('hcStatsHours',st.hours)}catch(e){}
+  body.innerHTML='';const res=st.hours<=48?15:st.hours<=168?60:120;const[ser,sum]=await Promise.all([GET('stats/'+st.room+'?hours='+st.hours+'&res='+res),GET('stats?days='+Math.max(1,Math.round(st.hours/24)))]);const k=ser.kpis;
+  body.append(h('div',{class:'tiles'},[[nf(k.comfortMeanDevK,2)+' K','Ø Abweichung in Komfortzeiten'],[nf(k.warmupMeanMin,0)+' min','Ø Aufheizdauer ('+(k.warmups||0)+'×)'],[nf(k.belowSetpointHours)+' h','unter Soll (> 0,5 K)'],[nf(k.maxOvershootK)+' K','max. Überschwingen'],[nf(k.heatingHours)+' h','Ventil offen'],[(k.switches||0)+'','Ventilschaltungen']].map(([v,l])=>h('div',{class:'tile'},h('b',null,v),h('span',null,l)))),
+   h('div',{class:'card'},h('h3',{style:'margin-top:0'},ser.room+' – letzte '+(st.hours>48?st.hours/24+' Tage':st.hours+' h')+' ('+ser.resolutionMin+'-min-Werte)'),
+    h('div',{class:'legend'},h('span',null,h('i',{style:'background:var(--s1)'}),'Ist-Temperatur'),h('span',null,h('i',{style:'background:var(--s2)'}),'Sollwert'),h('span',null,h('i',{style:'background:var(--s3);height:8px'}),'Ventil offen (%)'),h('span',null,h('i',{style:'background:var(--chip);height:10px;border:1px solid var(--line)'}),'Fenster offen')),
+    historyChart(ser.data),
+    h('details',{style:'margin-top:8px'},h('summary',null,'Tabelle'),h('div',{class:'tbl'},h('table',null,h('tr',null,['Zeit','Ist °C','Soll °C','Ventil %','Fenster min','Schaltungen'].map(x=>h('th',null,x))),ser.data.t.map((t,i)=>h('tr',null,h('td',null,t),h('td',null,nf(ser.data.temp[i])),h('td',null,nf(ser.data.setpoint[i])),h('td',null,ser.data.dutyPct[i]),h('td',null,ser.data.windowMin[i]),h('td',null,ser.data.switches[i]))).reverse())))));
+  const rs=sum.rooms.find(r=>r.id===st.room);if(rs&&rs.days.length)body.append(h('div',{class:'card tbl'},h('h3',{style:'margin-top:0'},'Kennzahlen je Tag'),h('table',null,h('tr',null,KPI_COLS.map(c=>h('th',null,c[1]))),[...rs.days].reverse().map(d=>h('tr',null,KPI_COLS.map(([c])=>h('td',null,c==='date'?d.date:c==='switches'?(d[c]||0):nf(d[c],c==='comfortMeanDevK'||c==='maxOvershootK'?2:c==='warmupMeanMin'?0:1))))))));
+ };
+ m.append(h('div',{class:'row',style:'margin-bottom:12px'},sel(heat.rooms.map(r=>[r.id,r.name]),st.room,v=>{st.room=v;load()}),sel([[24,'24 Stunden'],[48,'48 Stunden'],[168,'7 Tage'],[336,'14 Tage']],st.hours,v=>{st.hours=+v;load()})),body);await load()};
+
+// ------------------------------------------------------------ AI / MCP
+routes['/sys/ai']=async m=>{const a=await GET('ai');const c={access:a.access,maxDirectPerDay:a.maxDirectPerDay};let fresh='';const host=location.host||'heatcore.local';
+ m.append(h('h2',null,'System – KI / MCP'),h('div',{class:'card hint'},'Über das Model Context Protocol (MCP) kann ein KI-Assistent wie Claude die aufgezeichnete Statistik, die Einstellungen und das Lernmodell auswerten und Optimierungen vorschlagen. Erreichbar sind nur Raumtemperaturen, Hysterese, Komfortzeiten, Ventil-Mindestzeiten und die Modellberatung – in engen Grenzen. Sicherheitsgrenzen, Ausgänge, Regeln, Funk, Netzwerk und Passwörter sind für die KI nicht erreichbar. Jede Änderung wird protokolliert und kann zurückgenommen werden.'));
+ const tokBox=h('div');const showTok=()=>{tokBox.innerHTML='';tokBox.append(fresh?h('div',null,h('pre',{class:'code'},fresh),h('div',{class:'hint'},'Jetzt kopieren – das Token wird nach dem Speichern nicht mehr angezeigt.')):h('span',{class:'muted'},a.tokenSet?'gesetzt (verborgen)':'kein Token'))};showTok();
+ m.append(h('div',{class:'card'},h('h3',{style:'margin-top:0'},'Zugang'),h('div',{class:'form'},
+  ...field('Zugriff',sel([['off','aus'],['read','nur lesen (Analyse)'],['approve','Vorschläge – Freigabe hier im Webinterface'],['direct','direkt anwenden (begrenzt)']],c.access,v=>c.access=v),'Empfehlung: „Vorschläge“. Bei „direkt“ gelten zusätzlich ein Tageslimit und dieselben Grenzen.'),
+  ...field('Token',h('div',null,tokBox,h('button',{style:'margin-top:6px',onclick:()=>{const b=new Uint8Array(20);crypto.getRandomValues(b);fresh=[...b].map(x=>x.toString(16).padStart(2,'0')).join('');showTok();conn()}},a.tokenSet?'Neues Token erzeugen':'Token erzeugen'))),
+  ...field('Direkte Änderungen pro Tag',inp(c,'maxDirectPerDay','number',{class:'n',min:1,max:50}))),
+  h('button',{class:'p',style:'margin-top:10px',onclick:()=>{const b={access:c.access,maxDirectPerDay:+c.maxDirectPerDay};if(fresh)b.token=fresh;act(()=>PUT('ai',b),'Gespeichert').then(r=>{if(r){fresh='';route()}})}},'Speichern'),
+  a.lastClient?h('p',{class:'hint'},'Zuletzt verbunden: '+a.lastClient):null));
+ const cbox=h('div');const conn=()=>{const tk=fresh||'<TOKEN>';cbox.innerHTML='';cbox.append(
+   h('p',null,h('b',null,'Claude Code'),' (Terminal):'),h('pre',{class:'code'},`claude mcp add --transport http heatcore http://${host}/mcp --header "Authorization: Bearer ${tk}"`),
+   h('p',null,h('b',null,'Claude Desktop'),' (lokales Netz, über die Brücke mcp-remote; Node.js erforderlich) – in claude_desktop_config.json:'),
+   h('pre',{class:'code'},JSON.stringify({mcpServers:{heatcore:{command:'npx',args:['-y','mcp-remote',`http://${host}/mcp`,'--allow-http','--header','Authorization: Bearer '+tk]}}},null,1)),
+   h('p',{class:'hint'},'Danach z. B. fragen: „Werte die Heizungsstatistik der letzten Woche aus und schlage Optimierungen vor.“ oder den Prompt „optimize_heating“ verwenden. Die Steuerung selbst braucht dafür keinen Internetzugang; der KI-Client muss sie im lokalen Netz erreichen.'))};conn();
+ m.append(h('div',{class:'card'},h('h3',{style:'margin-top:0'},'Verbindung einrichten'),cbox));
+ const list=a.journal||[];const pend=list.filter(x=>x.status==='pending'),done=list.filter(x=>x.status!=='pending');
+ const ST={pending:['offen','warn'],applied:['angewendet','ok'],rejected:['abgelehnt',''],reverted:['zurückgenommen',''],failed:['fehlgeschlagen','bad']};
+ const date=e=>e?new Date(e*1000).toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'}):'';
+ const item=x=>h('div',{class:'card'},h('div',{class:'row'},h('b',null,'#'+x.id),chip(...ST[x.status]||[x.status]),h('span',{class:'muted'},date(x.epoch)+(x.client?' · '+x.client:''))),
+  h('pre',{class:'code'},x.summary),h('div',null,h('span',{class:'muted'},'Begründung: '),x.reason),x.note?h('div',{class:'hint'},x.note):null,
+  h('div',{class:'row',style:'margin-top:8px'},x.status==='pending'?[h('button',{class:'p',onclick:()=>act(()=>POST('ai/changes/'+x.id+'/accept'),'Angewendet').then(route)},'Freigeben und anwenden'),h('button',{onclick:()=>act(()=>POST('ai/changes/'+x.id+'/reject'),'Abgelehnt').then(route)},'Ablehnen')]:null,
+   x.status==='applied'?h('button',{onclick:()=>confirm('Änderung #'+x.id+' zurücknehmen?')&&act(()=>POST('ai/changes/'+x.id+'/revert'),'Zurückgenommen').then(route)},'Zurücknehmen'):null));
+ m.append(h('h3',null,'Offene Vorschläge ('+pend.length+')'),h('div',null,pend.length?pend.map(item):h('p',{class:'muted'},'Keine offenen Vorschläge.')),
+  h('h3',null,'Journal'),h('div',null,done.length?done.slice(0,15).map(item):h('p',{class:'muted'},'Noch keine KI-Änderungen.')),
+  h('details',{class:'card'},h('summary',null,'Grenzen für KI-Änderungen'),h('table',null,Object.entries(a.limits).filter(([k])=>k!=='access').map(([k,v])=>h('tr',null,h('td',{class:'muted'},k),h('td',null,typeof v==='object'?Object.entries(v).map(([a2,b2])=>a2+': '+b2).join(' · '):String(v)))))));
+};
+
+// ------------------------------------------------------------ start
+buildNav();route();header();setInterval(header,10000);connectWs();
+wsHandlers.push(j=>{if(j.t==='event'&&j.type==='alarm')header()});
+</script>
+</body>
+</html>

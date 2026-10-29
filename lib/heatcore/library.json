@@ -1,0 +1,15 @@
+{
+  "name": "heatcore",
+  "version": "0.4.0",
+  "description": "HeatCore platform-independent core: heating control, RF433 codec, automation engine, thermal model, display rendering",
+  "frameworks": "*",
+  "platforms": "*",
+  "dependencies": {
+    "bblanchon/ArduinoJson": "7.4.2"
+  },
+  "build": {
+    "srcDir": "src",
+    "includeDir": "src",
+    "flags": ["-std=gnu++17"]
+  }
+}
