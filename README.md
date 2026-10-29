@@ -42,9 +42,9 @@ Webinterface.
   Webinterface per End-to-End-Test im Simulator geprüft.
 * **Auf der echten Platine noch nicht getestet.** Hardwareabhängige Punkte sind
   in `docs/tests-und-abnahme.md` als „unbestätigt (HW)“ markiert. Vor dem
-  Anschluss echter Ventile den Testaufbau in `docs/hardware.md` durchführen –
-  insbesondere den **Signalpegel des 433-MHz-Empfängers** (ESP32-S3 ist nicht
-  5-V-tolerant).
+  Anschluss echter Ventile den Testaufbau in `docs/hardware.md` durchführen.
+  Die Ausgänge sind laut Schaltplan Low-Side-MOSFET-Schalter (nur DC-Lasten;
+  230-V-/24-V-AC-Stellantriebe über Koppelrelais).
 
 ## Dokumentation
 

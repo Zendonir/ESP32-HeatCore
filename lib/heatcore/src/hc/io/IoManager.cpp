@@ -37,9 +37,9 @@ IoManager::IoManager(EventBus& bus, const IClock& clock) : bus_(bus), clock_(clo
   for (int i = 0; i < kNumInputs; ++i) inCfg[i].name = "Eingang " + std::to_string(i + 1);
   for (int i = 0; i < kNumAnalog; ++i) {
     aiCfg[i].name = "A" + std::to_string(i + 1);
-    // KC868-A16 V3 analog inputs are specified for 0..5 V; the board divides
-    // them for the 3.3 V ADC. The exact ratio is board-specific: calibrate!
-    aiCfg[i].dividerGain = 5.0f / 3.3f;
+    // 0..5 V inputs: 5.1 kOhm / 10 kOhm divider on the KC868-A16 (schematic),
+    // i.e. pin voltage x 1.51. Calibrate with a known voltage.
+    aiCfg[i].dividerGain = 1.51f;
   }
 }
 
