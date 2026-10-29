@@ -366,7 +366,7 @@ TEST(system_config_roundtrip_all_sections) {
   const ConfigSection order[] = {ConfigSection::System, ConfigSection::Network, ConfigSection::Mqtt,
                                  ConfigSection::Safety, ConfigSection::Heating, ConfigSection::Sensors,
                                  ConfigSection::Io,     ConfigSection::Rf,      ConfigSection::Display,
-                                 ConfigSection::Model,  ConfigSection::Rules};
+                                 ConfigSection::Model,  ConfigSection::Rules,   ConfigSection::Ai};
   for (auto s : order) b.load(s, dump[static_cast<int>(s)].c_str());
   for (int s = 0; s < static_cast<int>(ConfigSection::Count); ++s) {
     JsonDocument d;

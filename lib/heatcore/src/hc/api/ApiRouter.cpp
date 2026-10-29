@@ -1015,6 +1015,41 @@ ApiResponse ApiRouter::handle(const ApiRequest& req) {
         } else {
           c.fail(404, "?");
         }
+      } else if (head == "ai") {
+        // AI / MCP access (web interface only - MCP itself cannot reach this)
+        if (p.size() == 1 && c.is("GET")) {
+          sys.ai.toJson(out, false);
+          out.remove("journal");
+          out["tokenSet"] = !sys.ai.cfg.token.empty();
+          out["lastClient"] = sys.ai.lastClient;
+          aiLimitsToJson(sys, out["limits"].to<JsonObject>());
+          sys.ai.journalToJson(out["journal"].to<JsonArray>(), AiState::kMaxJournal);
+        } else if (p.size() == 1 && c.is("PUT")) {
+          JsonDocument d;
+          d.set(c.body());
+          d.remove("journal");
+          c.okOrFail(sys.sectionFromJson(ConfigSection::Ai, d.as<JsonObjectConst>()));
+        } else if (p.size() == 4 && p[1] == "changes" && c.is("POST")) {
+          uint16_t id = static_cast<uint16_t>(toInt(p[2]));
+          std::string err;
+          if (p[3] == "accept") err = aiDecide(sys, id, true, out);
+          else if (p[3] == "reject") err = aiDecide(sys, id, false, out);
+          else if (p[3] == "revert") err = aiRevert(sys, id, "im Webinterface", out);
+          else err = "?";
+          if (err == "?") c.fail(404, err);
+          else if (!err.empty()) c.fail(409, err);
+        } else {
+          c.fail(404, "?");
+        }
+      } else if (head == "stats" && c.is("GET")) {
+        if (p.size() == 1) {
+          sys.statsSummaryJson(static_cast<uint16_t>(std::min<uint32_t>(c.qu("days", 7), kHistDays)), out);
+        } else if (p.size() == 2) {
+          std::string err = sys.historyJson(p[1], c.qu("hours", 48), static_cast<uint16_t>(c.qu("res", 15)), out);
+          if (!err.empty()) c.fail(404, err);
+        } else {
+          c.fail(404, "?");
+        }
       } else if (head == "firmware") {
         if (p.size() == 1 && c.is("GET")) {
           firmwareJson(sys, out);
@@ -1227,7 +1262,7 @@ ApiResponse ApiRouter::handle(const ApiRequest& req) {
           const ConfigSection order[] = {ConfigSection::System, ConfigSection::Network, ConfigSection::Mqtt,
                                          ConfigSection::Safety, ConfigSection::Heating, ConfigSection::Sensors,
                                          ConfigSection::Io,     ConfigSection::Rf,      ConfigSection::Display,
-                                         ConfigSection::Model,  ConfigSection::Rules};
+                                         ConfigSection::Model,  ConfigSection::Rules,   ConfigSection::Ai};
           std::string err;
           for (auto sec : order) {
             JsonObjectConst o = c.body()[configSectionName(sec)];

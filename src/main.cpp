@@ -61,6 +61,7 @@ std::atomic<bool> g_factoryReset{false};
 std::atomic<bool> g_shutdown{false};   // reboot pending: io task keeps outputs safe
 std::atomic<bool> g_owRescan{false};   // 1-Wire rescan requested via web
 std::atomic<uint32_t> g_busyUs{0};
+std::atomic<uint32_t> g_historySavedRev{0};
 std::atomic<uint32_t> g_controlBeatMs{0};  // last completed control cycle (OTA probation)
 std::atomic<uint32_t> g_netBeatMs{0};      // last network task cycle
 std::atomic<uint32_t> g_rfEdgesPerSec{0};
@@ -403,6 +404,17 @@ void netTask(void*) {
   }
 }
 
+void saveHistory() {
+  std::string blob;
+  {
+    Lock lk(g_sys->mutex());
+    if (g_sys->history.revision() == g_historySavedRev.load()) return;
+    g_historySavedRev = g_sys->history.revision();
+    blob = g_sys->history.serialize();
+  }
+  if (!g_storage.saveHistory(blob)) HC_LOGE("storage", "saving statistics failed");
+}
+
 void storageTask(void*) {
   for (;;) {
     std::vector<std::pair<hc::ConfigSection, std::string>> todo;
@@ -423,10 +435,20 @@ void storageTask(void*) {
     for (auto& t : todo) {
       if (!g_storage.save(t.first, t.second)) HC_LOGE("storage", "saving %s failed", hc::configSectionName(t.first));
     }
+    // statistics: hourly snapshot (4 new buckets per room and hour)
+    static uint32_t lastHistorySave = 0;
+    if (millis() - lastHistorySave > 3600000u) {
+      lastHistorySave = millis();
+      saveHistory();
+    }
     std::string line;
     hc::LocalTime lt = g_clock.local();
     for (int i = 0; i < 32 && g_sdLog.pop(line); ++i) g_storage.sdLog(line, lt);
     if (g_factoryReset.exchange(false)) {
+      {
+        Lock lk(g_sys->mutex());
+        g_sys->history.clear();
+      }
       g_storage.factoryReset();
       g_web->requestReboot();
     }
@@ -579,7 +601,7 @@ void loadConfiguration() {
   const hc::ConfigSection order[] = {hc::ConfigSection::System, hc::ConfigSection::Network, hc::ConfigSection::Mqtt,
                                      hc::ConfigSection::Safety, hc::ConfigSection::Heating, hc::ConfigSection::Sensors,
                                      hc::ConfigSection::Io,     hc::ConfigSection::Rf,      hc::ConfigSection::Display,
-                                     hc::ConfigSection::Model,  hc::ConfigSection::Rules};
+                                     hc::ConfigSection::Model,  hc::ConfigSection::Rules,   hc::ConfigSection::Ai};
   for (auto s : order) {
     std::string json;
     if (!g_storage.load(s, json)) continue;
@@ -614,6 +636,13 @@ void setup() {
   g_ota.begin();  // slot state; a new firmware starts on probation
   g_storage.begin();
   loadConfiguration();
+  {
+    std::string blob;
+    if (g_storage.loadHistory(blob) && g_sys->history.deserialize(blob)) {
+      g_historySavedRev = g_sys->history.revision();
+      HC_LOGI("main", "statistics restored (%u bytes)", static_cast<unsigned>(blob.size()));
+    }
+  }
   EspClock::setTimezone(g_sys->sysCfg.timezone.c_str());
   if (g_rtc.begin()) {
     time_t t;
@@ -689,6 +718,7 @@ void safeShutdown() {
     g_sys->display.cfg.enabled = false;
   }
   writeSafeOutputs();
+  saveHistory();  // keep the statistics across the restart
 }
 }  // namespace
 

@@ -3,6 +3,7 @@
 // optional event log on the SD card.
 #include <Arduino.h>
 
+#include <mutex>
 #include <string>
 
 #include "hc/system/HeatCoreSystem.h"
@@ -16,6 +17,9 @@ class Storage {
   // Reads /cfg/<section>.json into `out`; false if missing or corrupt.
   bool load(hc::ConfigSection s, std::string& out);
   bool save(hc::ConfigSection s, const std::string& json);
+  // Recorded statistics (binary snapshot of hc::History).
+  bool saveHistory(const std::string& blob) { return saveFile("/hist.bin", blob); }
+  bool loadHistory(std::string& blob) { return loadFile("/hist.bin", blob); }
   void factoryReset();
   size_t usedBytes() const;
   size_t totalBytes() const;
@@ -29,6 +33,9 @@ class Storage {
   uint64_t sdUsed() const;
 
  private:
+  bool saveFile(const char* path, const std::string& data);  // atomic: tmp + rename
+  bool loadFile(const char* path, std::string& out);
+  std::mutex fsMutex_;  // storage task and shutdown path may write concurrently
   bool fsOk_ = false;
   bool sdOk_ = false;
   uint32_t sdErrors_ = 0;

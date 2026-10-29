@@ -56,6 +56,7 @@ enum class EventSource : uint8_t {
   Safety,
   Model,
   Display,
+  Ai,  // settings changed through the MCP / AI interface
   Count
 };
 

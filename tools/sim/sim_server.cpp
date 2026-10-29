@@ -22,6 +22,7 @@
 #include <cstring>
 #include <ctime>
 #include <fstream>
+#include <cctype>
 #include <map>
 #include <mutex>
 #include <sstream>
@@ -30,6 +31,7 @@
 
 #include "hc/api/ApiRouter.h"
 #include "hc/system/Firmware.h"
+#include "hc/mcp/McpServer.h"
 #include "hc/core/Log.h"
 #include "hc/rf/RfCodec.h"
 #include "hc/system/HeatCoreSystem.h"
@@ -191,6 +193,19 @@ ApiResponse simOta(const std::string& head, const std::string& body, const std::
   return ApiResponse{200, "{\"ok\":true}"};
 }
 
+// Case-insensitive header lookup in the raw request head.
+std::string header(const std::string& head, const char* name) {
+  std::string lower = head, key = std::string("\r\n") + name + ":";
+  for (auto& ch : lower) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+  for (auto& ch : key) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+  size_t p = lower.find(key);
+  if (p == std::string::npos) return std::string();
+  size_t s = p + key.size(), e = head.find("\r\n", s);
+  std::string v = head.substr(s, e == std::string::npos ? std::string::npos : e - s);
+  while (!v.empty() && v.front() == ' ') v.erase(v.begin());
+  return v;
+}
+
 void reply(int fd, int status, const char* type, const std::string& body) {
   char head[256];
   int n = std::snprintf(head, sizeof(head),
@@ -274,6 +289,29 @@ void serve(int port, const std::string& webPath) {
     std::string target = line.substr(method.size() + 1, line.rfind(' ') - method.size() - 1);
     std::string body = req.substr(headerEnd + 4);
     std::string path = target.substr(0, target.find('?'));
+    if (path == "/mcp" || path == "/mcp/") {
+      // same rules as the controller (platform/WebUi.cpp McpHandler)
+      std::string head = req.substr(0, headerEnd);
+      std::lock_guard<std::recursive_mutex> lk(g_sys->mutex());
+      const std::string& token = g_sys->ai.cfg.token;
+      std::string origin = header(head, "Origin");
+      if (g_sys->ai.cfg.access == AiAccess::Off || token.empty()) {
+        reply(c, 404, "application/json", "{\"error\":\"MCP ist deaktiviert\"}");
+      } else if (!origin.empty() && origin != "http://" + header(head, "Host")) {
+        reply(c, 403, "application/json", "{\"error\":\"Origin nicht erlaubt\"}");
+      } else if (header(head, "Authorization") != "Bearer " + token) {
+        reply(c, 401, "application/json", "{\"error\":\"Token fehlt oder falsch\"}");
+      } else if (method != "POST") {
+        reply(c, 405, "application/json", "{\"error\":\"nur POST\"}");
+      } else {
+        static McpServer mcp(*g_sys);
+        std::string out;
+        int st = mcp.handle(body, out);
+        reply(c, st, "application/json", out);
+      }
+      close(c);
+      continue;
+    }
     if (path.rfind("/api/", 0) == 0) {
       ApiRequest r;
       r.method = method;

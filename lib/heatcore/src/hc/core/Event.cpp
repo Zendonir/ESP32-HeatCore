@@ -14,7 +14,7 @@ static_assert(sizeof(kTypeNames) / sizeof(kTypeNames[0]) == static_cast<size_t>(
               "event type name table out of sync");
 
 const char* const kSourceNames[] = {"system", "di",       "rf",     "sensor", "web",    "mqtt",
-                                    "automation", "schedule", "safety", "model",  "display"};
+                                    "automation", "schedule", "safety", "model",  "display", "ai"};
 static_assert(sizeof(kSourceNames) / sizeof(kSourceNames[0]) == static_cast<size_t>(EventSource::Count),
               "event source name table out of sync");
 

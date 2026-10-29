@@ -24,16 +24,16 @@ bool Storage::begin() {
   return fsOk_;
 }
 
-bool Storage::load(hc::ConfigSection s, std::string& out) {
+bool Storage::loadFile(const char* path, std::string& out) {
   if (!fsOk_) return false;
-  String p = pathFor(s);
+  std::lock_guard<std::mutex> lk(fsMutex_);
   // An interrupted save leaves the .tmp file: the previous version stays valid.
-  File f = LittleFS.open(p, "r");
+  File f = LittleFS.open(path, "r");
   if (!f) return false;
   out.clear();
   out.reserve(f.size());
   while (f.available()) {
-    char buf[256];
+    char buf[512];
     size_t n = f.readBytes(buf, sizeof(buf));
     out.append(buf, n);
   }
@@ -41,29 +41,35 @@ bool Storage::load(hc::ConfigSection s, std::string& out) {
   return !out.empty();
 }
 
-bool Storage::save(hc::ConfigSection s, const std::string& json) {
+bool Storage::saveFile(const char* path, const std::string& data) {
   if (!fsOk_) return false;
-  String p = pathFor(s);
+  std::lock_guard<std::mutex> lk(fsMutex_);
+  String p = path;
   String tmp = p + ".tmp";
   File f = LittleFS.open(tmp, "w");
   if (!f) return false;
-  size_t n = f.write(reinterpret_cast<const uint8_t*>(json.data()), json.size());
+  size_t n = f.write(reinterpret_cast<const uint8_t*>(data.data()), data.size());
   f.close();
-  if (n != json.size()) {
+  if (n != data.size()) {
     LittleFS.remove(tmp);
-    HC_LOGE(TAG, "write %s incomplete", p.c_str());
+    HC_LOGE(TAG, "write %s incomplete", path);
     return false;
   }
   LittleFS.remove(p);
   bool ok = LittleFS.rename(tmp, p);
-  if (!ok) HC_LOGE(TAG, "rename %s failed", p.c_str());
+  if (!ok) HC_LOGE(TAG, "rename %s failed", path);
   return ok;
 }
+
+bool Storage::load(hc::ConfigSection s, std::string& out) { return loadFile(pathFor(s).c_str(), out); }
+
+bool Storage::save(hc::ConfigSection s, const std::string& json) { return saveFile(pathFor(s).c_str(), json); }
 
 void Storage::factoryReset() {
   if (!fsOk_) return;
   for (int i = 0; i < static_cast<int>(hc::ConfigSection::Count); ++i)
     LittleFS.remove(pathFor(static_cast<hc::ConfigSection>(i)));
+  LittleFS.remove("/hist.bin");
 }
 
 size_t Storage::usedBytes() const { return fsOk_ ? LittleFS.usedBytes() : 0; }

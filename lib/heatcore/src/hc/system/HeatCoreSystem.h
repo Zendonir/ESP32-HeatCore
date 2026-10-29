@@ -22,6 +22,8 @@
 #include "hc/heating/Safety.h"
 #include "hc/io/IoManager.h"
 #include "hc/model/ThermalModel.h"
+#include "hc/stats/History.h"
+#include "hc/ai/AiChanges.h"
 #include "hc/rf/RfDevices.h"
 #include "hc/rf/RfReceiver.h"
 #include "hc/rf/RfSensors.h"
@@ -32,7 +34,7 @@
 
 namespace hc {
 
-enum class ConfigSection : uint8_t { System = 0, Network, Mqtt, Io, Heating, Sensors, Safety, Rf, Display, Rules, Model, Count };
+enum class ConfigSection : uint8_t { System = 0, Network, Mqtt, Io, Heating, Sensors, Safety, Rf, Display, Rules, Model, Ai, Count };
 const char* configSectionName(ConfigSection s);
 bool configSectionFromName(const char* s, ConfigSection& out);
 
@@ -94,6 +96,10 @@ class HeatCoreSystem : public IAutomationContext {
   HeatCoreSystem(const HeatCoreSystem&) = delete;
   HeatCoreSystem& operator=(const HeatCoreSystem&) = delete;
 
+  // Recorded statistics (REST and MCP). historyJson returns an error text.
+  std::string historyJson(const std::string& series, uint32_t hours, uint16_t resolutionMin, JsonObject o) const;
+  void statsSummaryJson(uint16_t days, JsonObject o) const;
+
   std::recursive_mutex& mutex() { return mtx_; }
   const IClock& clock() const { return clock_; }
 
@@ -110,6 +116,8 @@ class HeatCoreSystem : public IAutomationContext {
   rf::RfSensorHub rfSensors;
   rf::NexusThDecoder nexusDecoder;
   ThermalModelManager model;
+  History history;  // recorded operating data (statistics, AI analysis)
+  AiState ai;       // MCP access level, token and change journal
   DisplayManager display;
   AutomationEngine automation;
 
@@ -234,6 +242,7 @@ class HeatCoreSystem : public IAutomationContext {
     float totalSec = 0.f;
   };
   std::vector<DutyAcc> duty_;
+  std::array<bool, kNumOutputs> histCircuitOpen_{};  // for counting valve switch-ons
   // automation/HA timed output requests
   std::array<Millis, kNumOutputs> requestUntil_{};
   std::array<bool, kNumOutputs> requestTimed_{};

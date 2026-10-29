@@ -128,7 +128,7 @@ Schreibvorgänge). Vor größeren Versionssprüngen trotzdem: System → Allgeme
 ```bash
 cmake -S . -B build/host
 cmake --build build/host -j
-./build/host/heatcore_tests            # 71 Tests
+./build/host/heatcore_tests            # 81 Tests
 ./build/host/heatcore_sim --demo       # http://127.0.0.1:8080/
 ```
 
@@ -138,3 +138,6 @@ liefert das echte Webinterface aus. Simulierte Funktasten:
 `curl -X POST localhost:8080/sim/rf -d '{"code":"0xA5C3E1"}'`.
 End-to-End-Test des Webinterfaces (Playwright):
 `node tools/sim/ui_test.js` bei laufendem Simulator (`--port 8099`).
+MCP-Interop-Test mit dem offiziellen MCP-Python-SDK (`pip install mcp`):
+`python3 tools/sim/mcp_client_test.py` (Simulator mit `--speed 600` starten,
+damit Statistikdaten entstehen).

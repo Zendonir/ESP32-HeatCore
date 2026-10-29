@@ -8,6 +8,7 @@
 #include <string>
 
 #include "hc/api/ApiRouter.h"
+#include "hc/mcp/McpServer.h"
 #include "platform/Ota.h"
 #include "platform/Queues.h"
 
@@ -29,6 +30,7 @@ class WebUi {
 
   hc::HeatCoreSystem& sys_;
   hc::ApiRouter api_;
+  hc::McpServer mcp_;
   AsyncWebServer server_{80};
   AsyncWebSocket ws_{"/ws"};
   BoundedQueue<std::string> wsOut_{64};
@@ -37,6 +39,7 @@ class WebUi {
   std::atomic<AsyncWebServerRequest*> otaOwner_{nullptr};
   uint32_t lastCleanup_ = 0;
   friend class ApiHandler;
+  friend class McpHandler;
 };
 
 }  // namespace platform

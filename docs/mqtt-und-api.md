@@ -44,6 +44,9 @@ Alle Antworten JSON, Fehler als `{"error": "..."}` mit HTTP-Status.
 |---|---|
 | `GET /api/status`, `/api/alarms`, `/api/events?since=` | Übersicht, Alarme, Ereignisprotokoll |
 | `GET /api/hardware`, `POST /api/hardware/selftest` | Hardwarestatus, Selbsttest |
+| `GET /api/stats?days=`, `GET /api/stats/<raum>?hours=&res=` | Statistik: Kennzahlen je Tag, Verlauf (15-Minuten-Werte, verdichtet) |
+| `GET/PUT /api/ai`, `POST /api/ai/changes/<id>/accept`, `/reject`, `/revert` | KI-Zugriff, Token, Journal; Vorschläge freigeben/ablehnen/zurücknehmen |
+| `POST /mcp` (Bearer-Token) | MCP-Server für KI-Assistenten, siehe `docs/ki-und-mcp.md` |
 | `GET /api/firmware`, `POST /api/firmware/rollback` | Firmware-Version, Speicherbereich, Probelauf, letztes Update-Ergebnis; Rückkehr zur vorherigen Firmware |
 | `POST /api/ota?size=&sha256=&source=` (multipart) | Firmware-Update; nur HeatCore-Images dieser Platine, optional mit Größe/SHA-256 aus dem Release |
 | `GET/PUT /api/io`, `POST/DELETE /api/outputs/<n>/manual`, `POST /api/outputs/<n>/request` | Ein-/Ausgänge |

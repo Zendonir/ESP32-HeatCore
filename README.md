@@ -33,6 +33,10 @@ Webinterface.
 * **Lernmodell:** RLS-Raummodell mit Totzeit, Klassifizierung von
   Lüftungs-, Stör-, manuellen und unvollständigen Perioden, Prognosen mit
   Unsicherheit, begrenzte Beratung der Hysterese-Regelung mit Rückfallebene.
+* **Statistik und KI-Optimierung:** 15-Minuten-Aufzeichnung je Raum über
+  14 Tage mit Kennzahlen (Aufheizdauer, Überschwingen, Komfortabweichung,
+  Heizstunden), MCP-Server für KI-Assistenten wie Claude – Vorschläge mit
+  Freigabe im Webinterface, enge Grenzen, Journal mit Rücknahme.
 * **Firmware:** Flashen direkt im Browser über GitHub (Web-Flasher), Updates
   im Webinterface – online aus den GitHub-Releases oder per Datei – mit
   Prüfsumme, Probelauf und automatischer Rückkehr zur vorherigen Version.
@@ -41,7 +45,7 @@ Webinterface.
 
 ## Status
 
-* Firmware kompiliert für ESP32-S3 (CI), Host-Testsuite grün (71 Tests),
+* Firmware kompiliert für ESP32-S3 (CI), Host-Testsuite grün (81 Tests),
   Webinterface per End-to-End-Test im Simulator geprüft.
 * **Auf der echten Platine noch nicht getestet.** Hardwareabhängige Punkte sind
   in `docs/tests-und-abnahme.md` als „unbestätigt (HW)“ markiert. Vor dem
@@ -56,6 +60,7 @@ Webinterface.
 * [OLED-Display](docs/display.md)
 * [Automationen, Sicherheit, Lernmodell](docs/automation-und-lernmodell.md)
 * [MQTT / Home Assistant und REST-API](docs/mqtt-und-api.md)
+* [Statistik und KI-Optimierung (MCP)](docs/ki-und-mcp.md)
 * [Build-, Flash- und Simulator-Anleitung](docs/build-und-flash.md)
 * [Tests und Abnahmekriterien](docs/tests-und-abnahme.md)
 
@@ -64,7 +69,7 @@ Webinterface.
 ```
 lib/heatcore/src/hc/   plattformunabhängiger Kern (auch auf dem PC testbar)
   core/  rf/  sensors/  heating/  io/  automation/  model/  display/
-  system/  mqtt/  api/
+  system/  mqtt/  api/  stats/  ai/  mcp/
 src/                   ESP32-S3: main.cpp (Tasks), platform/ (Treiber)
 web/index.html         Webinterface (wird eingebettet)
 test/host/             Unit- und Integrationstests

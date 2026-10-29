@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HeatCore</title>
 <style>
-:root{--bg:#f3f5f8;--panel:#fff;--text:#1d2430;--muted:#667085;--line:#dde2ea;--accent:#d9480f;--accent2:#1c7ed6;--ok:#2b8a3e;--warn:#e67700;--bad:#c92a2a;--chip:#eef1f5}
-@media (prefers-color-scheme:dark){:root{--bg:#12161c;--panel:#1b2129;--text:#e6e9ee;--muted:#98a2b3;--line:#2c3440;--chip:#252d38}}
+:root{--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--bg:#f3f5f8;--panel:#fff;--text:#1d2430;--muted:#667085;--line:#dde2ea;--accent:#d9480f;--accent2:#1c7ed6;--ok:#2b8a3e;--warn:#e67700;--bad:#c92a2a;--chip:#eef1f5}
+@media (prefers-color-scheme:dark){:root{--s1:#3987e5;--s2:#d95926;--s3:#199e70;--bg:#12161c;--panel:#1b2129;--text:#e6e9ee;--muted:#98a2b3;--line:#2c3440;--chip:#252d38}}
 *{box-sizing:border-box}
 body{margin:0;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text)}
 header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
@@ -45,6 +45,11 @@ button:disabled{opacity:.5}
 .form{display:grid;grid-template-columns:minmax(120px,220px) 1fr;gap:8px 12px;align-items:center}
 .form label{color:var(--muted)}
 .hint{font-size:12px;color:var(--muted);margin-top:4px}
+.chart{position:relative}.chart svg{display:block;width:100%;height:auto;overflow:visible}.chart text{font-size:11px;fill:var(--muted)}
+.chart .tip{position:absolute;pointer-events:none;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,.15);white-space:nowrap;display:none}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:2px 0 6px}.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:5px}
+.tiles{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));margin-bottom:14px}.tile{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}.tile b{display:block;font-size:20px}.tile span{font-size:12px;color:var(--muted)}
+pre.code{white-space:pre-wrap;word-break:break-all;background:var(--chip);padding:8px;border-radius:6px;font-size:12px}
 .box{border:1px dashed var(--line);border-radius:8px;padding:10px;margin:8px 0}
 .tabs{display:flex;gap:4px;margin-bottom:12px;flex-wrap:wrap}
 .tabs a{padding:6px 12px;border-radius:6px;text-decoration:none;color:var(--text);background:var(--chip)}
@@ -91,12 +96,12 @@ const DAYS=['Mo','Di','Mi','Do','Fr','Sa','So'];
 
 // ------------------------------------------------------------ navigation
 const NAV=[
- ['Übersicht',[['#/','Dashboard'],['#/rooms','Räume & Heizkreise'],['#/sensors','Sensoren'],['#/model','Lernmodell']]],
+ ['Übersicht',[['#/','Dashboard'],['#/rooms','Räume & Heizkreise'],['#/sensors','Sensoren'],['#/model','Lernmodell'],['#/stats','Statistik']]],
  ['Funkgeräte',[['#/rf','Übersicht'],['#/rf/learn','Gerät anlernen'],['#/rf/monitor','Empfangsmonitor'],['#/rf/tx','Sender'],['#/rf/sensors','Temperaturfunksensoren'],['#/rf/diag','Funkdiagnose']]],
  ['Display',[['#/display','Live-Vorschau'],['#/display/pages','Anzeigeseiten'],['#/display/settings','Einstellungen'],['#/display/status','Status & Diagnose']]],
  ['Automationen',[['#/rules','Regeln'],['#/rules/catalog','Trigger, Bedingungen, Aktionen'],['#/rules/test','Testmodus'],['#/rules/log','Ereignisprotokoll']]],
  ['Hardware',[['#/hw/outputs','16 Ausgänge'],['#/hw/inputs','16 Digitaleingänge'],['#/hw/analog','Analogeingänge'],['#/hw/onewire','1-Wire-Busse'],['#/hw/selftest','Selbsttest & Status']]],
- ['System',[['#/sys/safety','Sicherheit'],['#/sys/network','Netzwerk'],['#/sys/mqtt','MQTT / Home Assistant'],['#/sys/general','Allgemein & Backup'],['#/sys/firmware','Firmware-Update']]]];
+ ['System',[['#/sys/safety','Sicherheit'],['#/sys/network','Netzwerk'],['#/sys/mqtt','MQTT / Home Assistant'],['#/sys/general','Allgemein & Backup'],['#/sys/firmware','Firmware-Update'],['#/sys/ai','KI / MCP']]]];
 function buildNav(){const n=$('#nav');n.innerHTML='';for(const[g,items]of NAV){n.append(h('div',{class:'grp'},g));for(const[href,l]of items)n.append(h('a',{href},l))}}
 function markNav(){const cur=location.hash||'#/';document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('active',a.getAttribute('href')===cur));$('nav').classList.remove('open')}
 const routes={};
@@ -451,6 +456,87 @@ routes['/sys/firmware']=async m=>{const f=await GET('firmware');const busy={v:fa
    const q={size:fl.size,source:'Upload'};if(sha.v.trim())q.sha256=sha.v.trim().toLowerCase();try{await otaUpload(fl,fl.name,q,prog,stat);await waitForRestart(stat,f.version)}catch(err){stat.textContent='';toast('Update fehlgeschlagen: '+err.message,true);busy.v=false;e.target.disabled=false;prog.style.display='none'}}},'Hochladen und installieren')),prog,stat));
  // rollback
  m.append(h('div',{class:'card'},h('h3',{style:'margin-top:0'},'Vorherige Firmware'),f.rollbackAvailable?h('div',null,h('p',{class:'muted'},'Im zweiten Speicherbereich liegt '+(f.previousVersion?'Version '+f.previousVersion:'die vorherige Firmware')+'. Die Konfiguration bleibt erhalten.'),h('button',{onclick:()=>confirm('Zur vorherigen Firmware zurückkehren und neu starten?')&&act(()=>POST('firmware/rollback'),'Neustart mit vorheriger Firmware …').then(r=>{if(r)waitForRestart(stat,f.version)})},'Vorherige Firmware starten')):h('p',{class:'muted'},'Keine vorherige Firmware vorhanden (z. B. nach dem ersten Flashen per USB).')));
+};
+
+// ------------------------------------------------------------ statistics
+const nf=(v,d=1)=>v==null||isNaN(v)?'–':Number(v).toFixed(d).replace('.',',');
+// Temperature (Ist/Soll) and valve duty for one room: two plots sharing the time axis,
+// window periods shaded, crosshair tooltip. Colours: --s1/--s2/--s3 (validated palette).
+function historyChart(d){
+ const wrap=h('div',{class:'chart'}),tip=h('div',{class:'tip'});const n=d.t.length;if(!n)return h('p',{class:'muted'},'Noch keine Daten (Aufzeichnung alle 15 Minuten).');
+ const W=Math.max(320,Math.min(1100,(document.querySelector('main')||document.body).clientWidth-60)),L=44,R=70,T=8,H1=200,G=26,H2=70,B=22,H=T+H1+G+H2+B,pw=W-L-R;
+ const vals=[...d.temp,...d.setpoint].filter(v=>v!=null);let lo=Math.floor(Math.min(...vals)-0.5),hi=Math.ceil(Math.max(...vals)+0.5);if(!vals.length){lo=15;hi=25}if(hi-lo<3)hi=lo+3;
+ const step=hi-lo>8?2:1,x=i=>L+(n<2?pw/2:i*pw/(n-1)),y=v=>T+H1-(v-lo)/(hi-lo)*H1,y2=v=>T+H1+G+H2-v/100*H2;
+ let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Temperaturverlauf und Ventil-Einschaltdauer">`;
+ const bw=n<2?8:pw/(n-1);
+ d.windowMin.forEach((w,i)=>{if(w>0)s+=`<rect x="${x(i)-bw/2}" y="${T}" width="${bw}" height="${H1}" fill="var(--chip)"/>`});
+ for(let v=lo;v<=hi;v+=step)s+=`<line x1="${L}" x2="${L+pw}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${L-6}" y="${y(v)+4}" text-anchor="end">${v}°</text>`;
+ for(const v of [0,50,100])s+=`<line x1="${L}" x2="${L+pw}" y1="${y2(v)}" y2="${y2(v)}" stroke="var(--line)"/><text x="${L-6}" y="${y2(v)+4}" text-anchor="end">${v}%</text>`;
+ const path=(arr,stepped)=>{let p='',pen=false;arr.forEach((v,i)=>{if(v==null){pen=false;return}if(!pen){p+=`M${x(i)} ${y(v)}`;pen=true}else{if(stepped)p+=`H${x(i)}`;p+=`L${x(i)} ${y(v)}`}});return p};
+ s+=`<path d="${path(d.setpoint,true)}" fill="none" stroke="var(--s2)" stroke-width="2" stroke-linejoin="round"/>`;
+ s+=`<path d="${path(d.temp,false)}" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round"/>`;
+ const gap=bw>6?2:0,bar=Math.max(1,bw-gap);
+ d.dutyPct.forEach((v,i)=>{if(!v)return;const top=y2(v),hgt=T+H1+G+H2-top,x0=Math.max(L,x(i)-bar/2),x1=Math.min(L+pw,x(i)+bar/2);if(x1-x0<0.5)return;s+=`<rect x="${x0}" y="${top}" width="${x1-x0}" height="${hgt}" fill="var(--s3)" ${x1-x0>=6?'rx="2"':''}/>`});
+ const last=a=>{for(let i=a.length-1;i>=0;i--)if(a[i]!=null)return i;return -1};
+ const lt=last(d.temp),ls=last(d.setpoint);let yl1=lt>=0?y(d.temp[lt]):null,yl2=ls>=0?y(d.setpoint[ls]):null;
+ if(yl1!=null&&yl2!=null&&Math.abs(yl1-yl2)<13){if(yl1<yl2){yl1-=7;yl2+=7}else{yl1+=7;yl2-=7}}
+ if(lt>=0)s+=`<text x="${L+pw+6}" y="${yl1+4}" style="fill:var(--text)">Ist ${nf(d.temp[lt])}°</text>`;
+ if(ls>=0)s+=`<text x="${L+pw+6}" y="${yl2+4}" style="fill:var(--text)">Soll ${nf(d.setpoint[ls])}°</text>`;
+ const ticks=Math.min(6,n),long=n>1&&d.t[0].slice(0,10)!==d.t[n-1].slice(0,10);
+ for(let k=0;k<ticks;k++){const i=Math.round(k*(n-1)/Math.max(1,ticks-1));const t=d.t[i]||'';const lab=long?t.slice(8,10)+'.'+t.slice(5,7)+'. '+t.slice(11):t.slice(11);s+=`<text x="${x(i)}" y="${H-4}" text-anchor="${k===0?'start':k===ticks-1?'end':'middle'}">${lab}</text>`}
+ s+=`<text x="${L}" y="${T+H1+G-8}">Ventil offen</text>`;
+ s+=`<g class="hover" style="display:none"><line class="cx" y1="${T}" y2="${T+H1+G+H2}" stroke="var(--muted)" stroke-width="1"/><circle class="m1" r="4" fill="var(--s1)" stroke="var(--panel)" stroke-width="2"/><circle class="m2" r="4" fill="var(--s2)" stroke="var(--panel)" stroke-width="2"/></g>`;
+ s+=`<rect x="${L}" y="${T}" width="${pw}" height="${H1+G+H2}" fill="transparent" class="ov"/></svg>`;
+ wrap.innerHTML=s;wrap.append(tip);
+ const svg=wrap.querySelector('svg'),g=svg.querySelector('.hover'),cx=g.querySelector('.cx'),m1=g.querySelector('.m1'),m2=g.querySelector('.m2');
+ const move=e=>{const r=svg.getBoundingClientRect(),px=(e.clientX-r.left)*W/r.width;const i=Math.max(0,Math.min(n-1,Math.round((px-L)/(n<2?1:pw/(n-1)))));
+  g.style.display='';cx.setAttribute('x1',x(i));cx.setAttribute('x2',x(i));
+  for(const[m,a]of[[m1,d.temp],[m2,d.setpoint]]){if(a[i]==null)m.style.display='none';else{m.style.display='';m.setAttribute('cx',x(i));m.setAttribute('cy',y(a[i]))}}
+  tip.innerHTML='';tip.append(h('b',null,d.t[i]),h('br'),'Ist '+nf(d.temp[i])+' °C · Soll '+nf(d.setpoint[i])+' °C',h('br'),'Ventil offen '+d.dutyPct[i]+' %'+(d.windowMin[i]?' · Fenster '+d.windowMin[i]+' min':''));
+  tip.style.display='block';const left=x(i)*r.width/W;tip.style.left=Math.min(r.width-tip.offsetWidth,Math.max(0,left+12))+'px';tip.style.top='4px'};
+ svg.querySelector('.ov').addEventListener('pointermove',move);svg.querySelector('.ov').addEventListener('pointerleave',()=>{g.style.display='none';tip.style.display='none'});
+ return wrap}
+const KPI_COLS=[['date','Tag'],['meanTemp','Ø Ist °C'],['meanSetpoint','Ø Soll °C'],['comfortMeanDevK','Abw. Komfort K'],['belowSetpointHours','h unter Soll'],['aboveSetpointHours','h über Soll'],['maxOvershootK','Überschw. K'],['warmupMeanMin','Aufheizen min'],['heatingHours','Heiz-h'],['switches','Schaltungen'],['windowHours','Fenster h'],['meanOutdoor','Ø außen °C']];
+routes['/stats']=async m=>{const heat=await GET('heating');m.append(h('h2',null,'Statistik'),h('p',{class:'muted'},'15-Minuten-Werte der letzten 14 Tage je Raum (bleiben bei Neustart und Update erhalten). Zeiten mit offenem Fenster, Handbetrieb oder Störung sind aus den Komfortkennzahlen ausgeklammert. Dieselben Daten stehen der KI über die MCP-Schnittstelle zur Verfügung.'));
+ if(!heat.rooms.length){m.append(h('p',{class:'muted'},'Keine Räume angelegt.'));return}
+ const st={room:sessionStorage.getItem('hcStatsRoom')||heat.rooms[0].id,hours:+(sessionStorage.getItem('hcStatsHours')||48)};if(!heat.rooms.some(r=>r.id===st.room))st.room=heat.rooms[0].id;
+ const body=h('div');const load=async()=>{try{sessionStorage.setItem('hcStatsRoom',st.room);sessionStorage.setItem('hcStatsHours',st.hours)}catch(e){}
+  body.innerHTML='';const res=st.hours<=48?15:st.hours<=168?60:120;const[ser,sum]=await Promise.all([GET('stats/'+st.room+'?hours='+st.hours+'&res='+res),GET('stats?days='+Math.max(1,Math.round(st.hours/24)))]);const k=ser.kpis;
+  body.append(h('div',{class:'tiles'},[[nf(k.comfortMeanDevK,2)+' K','Ø Abweichung in Komfortzeiten'],[nf(k.warmupMeanMin,0)+' min','Ø Aufheizdauer ('+(k.warmups||0)+'×)'],[nf(k.belowSetpointHours)+' h','unter Soll (> 0,5 K)'],[nf(k.maxOvershootK)+' K','max. Überschwingen'],[nf(k.heatingHours)+' h','Ventil offen'],[(k.switches||0)+'','Ventilschaltungen']].map(([v,l])=>h('div',{class:'tile'},h('b',null,v),h('span',null,l)))),
+   h('div',{class:'card'},h('h3',{style:'margin-top:0'},ser.room+' – letzte '+(st.hours>48?st.hours/24+' Tage':st.hours+' h')+' ('+ser.resolutionMin+'-min-Werte)'),
+    h('div',{class:'legend'},h('span',null,h('i',{style:'background:var(--s1)'}),'Ist-Temperatur'),h('span',null,h('i',{style:'background:var(--s2)'}),'Sollwert'),h('span',null,h('i',{style:'background:var(--s3);height:8px'}),'Ventil offen (%)'),h('span',null,h('i',{style:'background:var(--chip);height:10px;border:1px solid var(--line)'}),'Fenster offen')),
+    historyChart(ser.data),
+    h('details',{style:'margin-top:8px'},h('summary',null,'Tabelle'),h('div',{class:'tbl'},h('table',null,h('tr',null,['Zeit','Ist °C','Soll °C','Ventil %','Fenster min','Schaltungen'].map(x=>h('th',null,x))),ser.data.t.map((t,i)=>h('tr',null,h('td',null,t),h('td',null,nf(ser.data.temp[i])),h('td',null,nf(ser.data.setpoint[i])),h('td',null,ser.data.dutyPct[i]),h('td',null,ser.data.windowMin[i]),h('td',null,ser.data.switches[i]))).reverse())))));
+  const rs=sum.rooms.find(r=>r.id===st.room);if(rs&&rs.days.length)body.append(h('div',{class:'card tbl'},h('h3',{style:'margin-top:0'},'Kennzahlen je Tag'),h('table',null,h('tr',null,KPI_COLS.map(c=>h('th',null,c[1]))),[...rs.days].reverse().map(d=>h('tr',null,KPI_COLS.map(([c])=>h('td',null,c==='date'?d.date:c==='switches'?(d[c]||0):nf(d[c],c==='comfortMeanDevK'||c==='maxOvershootK'?2:c==='warmupMeanMin'?0:1))))))));
+ };
+ m.append(h('div',{class:'row',style:'margin-bottom:12px'},sel(heat.rooms.map(r=>[r.id,r.name]),st.room,v=>{st.room=v;load()}),sel([[24,'24 Stunden'],[48,'48 Stunden'],[168,'7 Tage'],[336,'14 Tage']],st.hours,v=>{st.hours=+v;load()})),body);await load()};
+
+// ------------------------------------------------------------ AI / MCP
+routes['/sys/ai']=async m=>{const a=await GET('ai');const c={access:a.access,maxDirectPerDay:a.maxDirectPerDay};let fresh='';const host=location.host||'heatcore.local';
+ m.append(h('h2',null,'System – KI / MCP'),h('div',{class:'card hint'},'Über das Model Context Protocol (MCP) kann ein KI-Assistent wie Claude die aufgezeichnete Statistik, die Einstellungen und das Lernmodell auswerten und Optimierungen vorschlagen. Erreichbar sind nur Raumtemperaturen, Hysterese, Komfortzeiten, Ventil-Mindestzeiten und die Modellberatung – in engen Grenzen. Sicherheitsgrenzen, Ausgänge, Regeln, Funk, Netzwerk und Passwörter sind für die KI nicht erreichbar. Jede Änderung wird protokolliert und kann zurückgenommen werden.'));
+ const tokBox=h('div');const showTok=()=>{tokBox.innerHTML='';tokBox.append(fresh?h('div',null,h('pre',{class:'code'},fresh),h('div',{class:'hint'},'Jetzt kopieren – das Token wird nach dem Speichern nicht mehr angezeigt.')):h('span',{class:'muted'},a.tokenSet?'gesetzt (verborgen)':'kein Token'))};showTok();
+ m.append(h('div',{class:'card'},h('h3',{style:'margin-top:0'},'Zugang'),h('div',{class:'form'},
+  ...field('Zugriff',sel([['off','aus'],['read','nur lesen (Analyse)'],['approve','Vorschläge – Freigabe hier im Webinterface'],['direct','direkt anwenden (begrenzt)']],c.access,v=>c.access=v),'Empfehlung: „Vorschläge“. Bei „direkt“ gelten zusätzlich ein Tageslimit und dieselben Grenzen.'),
+  ...field('Token',h('div',null,tokBox,h('button',{style:'margin-top:6px',onclick:()=>{const b=new Uint8Array(20);crypto.getRandomValues(b);fresh=[...b].map(x=>x.toString(16).padStart(2,'0')).join('');showTok();conn()}},a.tokenSet?'Neues Token erzeugen':'Token erzeugen'))),
+  ...field('Direkte Änderungen pro Tag',inp(c,'maxDirectPerDay','number',{class:'n',min:1,max:50}))),
+  h('button',{class:'p',style:'margin-top:10px',onclick:()=>{const b={access:c.access,maxDirectPerDay:+c.maxDirectPerDay};if(fresh)b.token=fresh;act(()=>PUT('ai',b),'Gespeichert').then(r=>{if(r){fresh='';route()}})}},'Speichern'),
+  a.lastClient?h('p',{class:'hint'},'Zuletzt verbunden: '+a.lastClient):null));
+ const cbox=h('div');const conn=()=>{const tk=fresh||'<TOKEN>';cbox.innerHTML='';cbox.append(
+   h('p',null,h('b',null,'Claude Code'),' (Terminal):'),h('pre',{class:'code'},`claude mcp add --transport http heatcore http://${host}/mcp --header "Authorization: Bearer ${tk}"`),
+   h('p',null,h('b',null,'Claude Desktop'),' (lokales Netz, über die Brücke mcp-remote; Node.js erforderlich) – in claude_desktop_config.json:'),
+   h('pre',{class:'code'},JSON.stringify({mcpServers:{heatcore:{command:'npx',args:['-y','mcp-remote',`http://${host}/mcp`,'--allow-http','--header','Authorization: Bearer '+tk]}}},null,1)),
+   h('p',{class:'hint'},'Danach z. B. fragen: „Werte die Heizungsstatistik der letzten Woche aus und schlage Optimierungen vor.“ oder den Prompt „optimize_heating“ verwenden. Die Steuerung selbst braucht dafür keinen Internetzugang; der KI-Client muss sie im lokalen Netz erreichen.'))};conn();
+ m.append(h('div',{class:'card'},h('h3',{style:'margin-top:0'},'Verbindung einrichten'),cbox));
+ const list=a.journal||[];const pend=list.filter(x=>x.status==='pending'),done=list.filter(x=>x.status!=='pending');
+ const ST={pending:['offen','warn'],applied:['angewendet','ok'],rejected:['abgelehnt',''],reverted:['zurückgenommen',''],failed:['fehlgeschlagen','bad']};
+ const date=e=>e?new Date(e*1000).toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'}):'';
+ const item=x=>h('div',{class:'card'},h('div',{class:'row'},h('b',null,'#'+x.id),chip(...ST[x.status]||[x.status]),h('span',{class:'muted'},date(x.epoch)+(x.client?' · '+x.client:''))),
+  h('pre',{class:'code'},x.summary),h('div',null,h('span',{class:'muted'},'Begründung: '),x.reason),x.note?h('div',{class:'hint'},x.note):null,
+  h('div',{class:'row',style:'margin-top:8px'},x.status==='pending'?[h('button',{class:'p',onclick:()=>act(()=>POST('ai/changes/'+x.id+'/accept'),'Angewendet').then(route)},'Freigeben und anwenden'),h('button',{onclick:()=>act(()=>POST('ai/changes/'+x.id+'/reject'),'Abgelehnt').then(route)},'Ablehnen')]:null,
+   x.status==='applied'?h('button',{onclick:()=>confirm('Änderung #'+x.id+' zurücknehmen?')&&act(()=>POST('ai/changes/'+x.id+'/revert'),'Zurückgenommen').then(route)},'Zurücknehmen'):null));
+ m.append(h('h3',null,'Offene Vorschläge ('+pend.length+')'),h('div',null,pend.length?pend.map(item):h('p',{class:'muted'},'Keine offenen Vorschläge.')),
+  h('h3',null,'Journal'),h('div',null,done.length?done.slice(0,15).map(item):h('p',{class:'muted'},'Noch keine KI-Änderungen.')),
+  h('details',{class:'card'},h('summary',null,'Grenzen für KI-Änderungen'),h('table',null,Object.entries(a.limits).filter(([k])=>k!=='access').map(([k,v])=>h('tr',null,h('td',{class:'muted'},k),h('td',null,typeof v==='object'?Object.entries(v).map(([a2,b2])=>a2+': '+b2).join(' · '):String(v)))))));
 };
 
 // ------------------------------------------------------------ start

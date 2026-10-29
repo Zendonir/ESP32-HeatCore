@@ -13,7 +13,7 @@ namespace hc {
 namespace {
 constexpr const char* TAG = "system";
 const char* const kSectionNames[] = {"system", "network", "mqtt",    "io",      "heating", "sensors",
-                                     "safety", "rf",      "display", "rules",   "model"};
+                                     "safety", "rf",      "display", "rules",   "model",   "ai"};
 static_assert(sizeof(kSectionNames) / sizeof(kSectionNames[0]) == static_cast<size_t>(ConfigSection::Count), "");
 
 bool validTopic(const std::string& t) {
@@ -344,9 +344,70 @@ void HeatCoreSystem::computeOutputs(Millis now) {
   }
 }
 
+std::string HeatCoreSystem::historyJson(const std::string& series, uint32_t hours, uint16_t res, JsonObject o) const {
+  bool known = series == kHistSystemSeries || heating.room(series);
+  if (!known) return "Raum unbekannt: " + series;
+  if (hours < 1) hours = 1;
+  if (hours > kHistDays * 24u) hours = kHistDays * 24u;
+  // at most ~600 points per answer: coarser resolution for long periods
+  uint32_t minRes = (hours * 60u + 599u) / 600u;
+  if (res < minRes) res = static_cast<uint16_t>(minRes);
+  res = static_cast<uint16_t>(((res + kHistBucketMin - 1) / kHistBucketMin) * kHistBucketMin);
+  if (res > 240) res = 240;
+  int32_t off = utcOffsetSec(clock_);
+  o["series"] = series;
+  if (const Room* r = heating.room(series)) o["room"] = r->name;
+  o["hours"] = hours;
+  o["resolutionMin"] = res;
+  std::vector<HistPoint> raw = history.query(series, hours);
+  o["points"] = History::downsample(raw, res).size();
+  History::pointsToJson(History::downsample(raw, res), o["data"].to<JsonObject>(), off);
+  History::kpisToJson(History::computeKpis(raw), o["kpis"].to<JsonObject>());
+  return std::string();
+}
+
+void HeatCoreSystem::statsSummaryJson(uint16_t days, JsonObject o) const {
+  int64_t ep = clock_.epoch();
+  uint32_t nowMin = ep > 0 ? static_cast<uint32_t>(ep / 60) : 0;
+  int32_t off = utcOffsetSec(clock_);
+  o["bucketMin"] = kHistBucketMin;
+  o["retentionDays"] = kHistDays;
+  o["days"] = days;
+  JsonArray arr = o["rooms"].to<JsonArray>();
+  for (const Room& r : heating.rooms) {
+    JsonObject x = arr.add<JsonObject>();
+    x["id"] = r.id;
+    x["name"] = r.name;
+    x["points"] = history.points(r.id);
+    history.dailyKpisToJson(r.id, nowMin, off, days, x);
+  }
+  JsonObject sys = o["system"].to<JsonObject>();
+  sys["points"] = history.points(kHistSystemSeries);
+  std::vector<HistPoint> pts = history.query(kHistSystemSeries, static_cast<uint32_t>(days) * 24u);
+  RoomKpis k = History::computeKpis(pts);
+  if (!std::isnan(k.meanTemp)) sys["meanFlowTemp"] = std::round(k.meanTemp * 100.f) / 100.f;
+  if (!std::isnan(k.meanOutdoor)) sys["meanOutdoor"] = std::round(k.meanOutdoor * 100.f) / 100.f;
+  float dutyMin = 0.f, minutes = 0.f;
+  for (const HistPoint& p : pts) {
+    dutyMin += p.duty * p.minutes;
+    minutes += p.minutes;
+  }
+  if (minutes > 0.f) sys["meanCircuitsOpenPct"] = std::round(dutyMin / minutes * 10.f) / 10.f;
+}
+
 void HeatCoreSystem::minuteTasks(Millis now) {
   float outdoor = 0.f;
   bool haveOutdoor = sysCfg.outdoorFromSensor && sensors.firstOfRole(SensorRole::Outdoor, outdoor);
+  int64_t ep = clock_.epoch();
+  uint32_t epochMin = ep > 0 ? static_cast<uint32_t>(ep / 60) : 0;
+  LocalTime lt = clock_.local();
+  int openCircuits = 0, usedCircuits = 0;
+  for (int i = 0; i < kNumOutputs; ++i) {
+    const Circuit& c = heating.circuits[static_cast<size_t>(i)];
+    if (c.room.empty() || !c.enabled) continue;
+    ++usedCircuits;
+    if (c.open) ++openCircuits;
+  }
   for (auto& r : heating.rooms) {
     ThermalInput in;
     in.tempValid = r.hasTemp;
@@ -355,21 +416,53 @@ void HeatCoreSystem::minuteTasks(Millis now) {
     in.outdoorValid = haveOutdoor;
     in.outdoor = outdoor;
     auto it = std::find_if(duty_.begin(), duty_.end(), [&](const DutyAcc& d) { return d.room == r.id; });
-    if (it == duty_.end() || it->totalSec <= 0.f) continue;  // room without circuits: nothing to learn
-    in.duty = it->openSec / it->totalSec;
-    it->openSec = it->totalSec = 0.f;
+    bool hasDuty = it != duty_.end() && it->totalSec > 0.f;
+    if (hasDuty) {
+      in.duty = it->openSec / it->totalSec;
+      it->openSec = it->totalSec = 0.f;
+    }
     in.windowOpen = r.windowOpen();
     in.manualSetpoint = r.manualActive;
     bool circuitFault = false;
+    uint8_t switches = 0;
     for (int i = 0; i < kNumOutputs; ++i) {
       const Circuit& c = heating.circuits[static_cast<size_t>(i)];
       if (c.room != r.id) continue;
       if (io.out[static_cast<size_t>(i)].manualActive) in.manualOutput = true;
       if (!io.out[static_cast<size_t>(i)].hwOk) circuitFault = true;
+      if (c.open && !histCircuitOpen_[static_cast<size_t>(i)]) ++switches;
     }
     in.fault = r.overTemp || r.sensorFail || safety.flowTripped() || circuitFault;
-    model.observe(r.id, in, now);
+
+    HistSample hs;
+    hs.tempValid = r.hasTemp;
+    hs.temp = r.temperature;
+    hs.setpointValid = r.setpoint > 0.f;
+    hs.setpoint = r.setpoint;
+    hs.outdoorValid = haveOutdoor;
+    hs.outdoor = outdoor;
+    hs.duty = in.duty;
+    hs.windowOpen = in.windowOpen;
+    hs.switches = switches;
+    bool comfort = false;
+    if (lt.valid) HeatingManager::scheduleSlot(r, lt, &comfort);
+    hs.flags = static_cast<uint8_t>((in.manualSetpoint ? kHistManualSetpoint : 0) |
+                                    (in.manualOutput ? kHistManualOutput : 0) | (in.fault ? kHistFault : 0) |
+                                    (r.tempFallback ? kHistSensorFallback : 0) | (comfort ? kHistComfortSlot : 0) |
+                                    (r.assistOnShift != 0.f || r.assistOffShift != 0.f ? kHistModelAssist : 0));
+    history.record(r.id, hs, epochMin);
+
+    if (hasDuty) model.observe(r.id, in, now);  // room without circuits: nothing to learn
   }
+  for (int i = 0; i < kNumOutputs; ++i) histCircuitOpen_[static_cast<size_t>(i)] = heating.circuits[static_cast<size_t>(i)].open;
+  HistSample sys;
+  sys.tempValid = safety.flowValid();
+  sys.temp = safety.flowTemp();
+  sys.outdoorValid = haveOutdoor;
+  sys.outdoor = outdoor;
+  sys.duty = usedCircuits ? static_cast<float>(openCircuits) / usedCircuits : 0.f;
+  sys.flags = safety.flowTripped() ? kHistFault : 0;
+  history.record(kHistSystemSeries, sys, epochMin);
 }
 
 // ------------------------------------------------------------ hardware
@@ -972,6 +1065,7 @@ void HeatCoreSystem::sectionToJson(ConfigSection s, JsonObject o, bool includeSe
       automation.toJson(o["rules"].to<JsonArray>(), false);
       break;
     case ConfigSection::Model: model.toJson(o, false); break;
+    case ConfigSection::Ai: ai.toJson(o, includeSecrets); break;
     default: break;
   }
 }
@@ -1007,7 +1101,12 @@ std::string HeatCoreSystem::sectionFromJson(ConfigSection s, JsonObjectConst o) 
     }
     case ConfigSection::Heating:
       err = heating.fromJson(o);
-      if (err.empty()) model.removeMissing(heating.rooms);
+      if (err.empty()) {
+        model.removeMissing(heating.rooms);
+        std::vector<std::string> ids;
+        for (auto& r : heating.rooms) ids.push_back(r.id);
+        history.keepOnly(ids);
+      }
       break;
     case ConfigSection::Sensors:
       sensors.autoAdoptOneWire = o["autoAdoptOneWire"] | false;
@@ -1068,6 +1167,7 @@ std::string HeatCoreSystem::sectionFromJson(ConfigSection s, JsonObjectConst o) 
       err = automation.fromJson(o["rules"].as<JsonArrayConst>());
       break;
     case ConfigSection::Model: model.fromJson(o); break;
+    case ConfigSection::Ai: err = ai.fromJson(o); break;
     default: err = "unbekannter Abschnitt";
   }
   if (err.empty()) {

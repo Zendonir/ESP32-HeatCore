@@ -2,6 +2,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <mutex>
 
 #include "generated/web_assets.h"
@@ -55,7 +56,78 @@ class ApiHandler : public AsyncWebHandler {
   WebUi& ui_;
 };
 
-WebUi::WebUi(hc::HeatCoreSystem& sys, Ota& ota) : sys_(sys), api_(sys), ota_(ota) {}
+// MCP endpoint (Streamable HTTP, JSON responses only): POST /mcp with
+// "Authorization: Bearer <token>". Requests from web pages of other origins
+// are refused (DNS rebinding protection required by the MCP specification).
+class McpHandler : public AsyncWebHandler {
+ public:
+  explicit McpHandler(WebUi& ui) : ui_(ui) {}
+  bool canHandle(AsyncWebServerRequest* r) const override { return r->url() == "/mcp" || r->url() == "/mcp/"; }
+  void handleBody(AsyncWebServerRequest* r, uint8_t* data, size_t len, size_t index, size_t total) override {
+    if (total > kMaxMcpBody) return;
+    if (index == 0 && !r->_tempObject) r->_tempObject = calloc(total + 1, 1);
+    if (r->_tempObject && index + len <= total) memcpy(static_cast<uint8_t*>(r->_tempObject) + index, data, len);
+  }
+  void handleRequest(AsyncWebServerRequest* r) override {
+    std::string token;
+    bool enabled;
+    {
+      std::lock_guard<std::recursive_mutex> lk(ui_.sys_.mutex());
+      token = ui_.sys_.ai.cfg.token;
+      enabled = ui_.sys_.ai.cfg.access != hc::AiAccess::Off;
+    }
+    if (!enabled || token.empty()) return reply(r, 404, "{\"error\":\"MCP ist im Webinterface deaktiviert\"}");
+    if (r->hasHeader("Origin")) {
+      String origin = r->header("Origin");
+      String host = r->header("Host");
+      if (origin != "http://" + host && origin != "https://" + host) return reply(r, 403, "{\"error\":\"Origin nicht erlaubt\"}");
+    }
+    String auth = r->hasHeader("Authorization") ? r->header("Authorization") : String();
+    std::string expected = "Bearer " + token;
+    if (!equalConstTime(auth.c_str(), expected)) {
+      AsyncWebServerResponse* resp = r->beginResponse(401, "application/json", "{\"error\":\"Token fehlt oder falsch\"}");
+      resp->addHeader("WWW-Authenticate", "Bearer");
+      r->send(resp);
+      return;
+    }
+    if (r->method() != HTTP_POST) {
+      AsyncWebServerResponse* resp = r->beginResponse(405, "application/json", "{\"error\":\"nur POST\"}");
+      resp->addHeader("Allow", "POST");
+      r->send(resp);
+      return;
+    }
+    if (r->contentLength() > kMaxMcpBody || !r->_tempObject) return reply(r, 413, "{\"error\":\"Anfrage zu gross oder leer\"}");
+    std::string out;
+    int status;
+    {
+      std::lock_guard<std::recursive_mutex> lk(ui_.sys_.mutex());
+      status = ui_.mcp_.handle(static_cast<const char*>(r->_tempObject), out);
+    }
+    if (status == 202) {
+      r->send(202);
+      return;
+    }
+    reply(r, status, out.c_str());
+  }
+  bool isRequestHandlerTrivial() const override { return false; }
+
+ private:
+  static constexpr size_t kMaxMcpBody = 16 * 1024;
+  static void reply(AsyncWebServerRequest* r, int status, const char* body) {
+    AsyncWebServerResponse* resp = r->beginResponse(status, "application/json", body);
+    resp->addHeader("Cache-Control", "no-store");
+    r->send(resp);
+  }
+  static bool equalConstTime(const char* a, const std::string& b) {
+    size_t la = std::strlen(a);
+    unsigned diff = static_cast<unsigned>(la ^ b.size());
+    for (size_t i = 0; i < b.size(); ++i) diff |= static_cast<unsigned>(static_cast<uint8_t>(i < la ? a[i] : 0) ^ static_cast<uint8_t>(b[i]));
+    return diff == 0;
+  }
+  WebUi& ui_;
+};
+
+WebUi::WebUi(hc::HeatCoreSystem& sys, Ota& ota) : sys_(sys), api_(sys), mcp_(sys), ota_(ota) {}
 
 bool WebUi::authorized(AsyncWebServerRequest* r) {
   std::string user, pass;
@@ -155,6 +227,7 @@ void WebUi::begin() {
   ws_.setFilter([this](AsyncWebServerRequest* r) { return authorized(r); });
   server_.addHandler(&ws_);
   setupOta();
+  server_.addHandler(new McpHandler(*this));
   server_.addHandler(new ApiHandler(*this));
   auto index = [this](AsyncWebServerRequest* r) {
     if (!authorized(r)) return r->requestAuthentication();

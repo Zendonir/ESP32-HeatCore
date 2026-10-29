@@ -4,9 +4,10 @@
 
 | Ebene | Werkzeug | Umfang |
 |---|---|---|
-| Unit- und Integrationstests | `build/host/heatcore_tests` (CMake, ASan/UBSan) | 71 Tests, 689 Prüfungen: Funk-Codec, Empfangskette, Sender, Sensor-Decoder, Sensor-Manager, Heizung, Sicherheit, Automationen, Lernmodell mit simulierter Raumthermik, REST-API, MQTT/Discovery, Konfiguration, Analog-Betriebsarten (0–5 V / 4–20 mA, Drahtbruch), Eingangsbank-Tausch, Firmware-Image-Prüfung (SHA-256-Testvektoren, Chip, Factory-Image, fremde Firmware, Kennung über Blockgrenzen), Versionsvergleich |
+| Unit- und Integrationstests | `build/host/heatcore_tests` (CMake, ASan/UBSan) | 81 Tests, 933 Prüfungen: Funk-Codec, Empfangskette, Sender, Sensor-Decoder, Sensor-Manager, Heizung, Sicherheit, Automationen, Lernmodell mit simulierter Raumthermik, REST-API, MQTT/Discovery, Konfiguration, Analog-Betriebsarten (0–5 V / 4–20 mA, Drahtbruch), Eingangsbank-Tausch, Firmware-Image-Prüfung (SHA-256-Testvektoren, Chip, Factory-Image, fremde Firmware, Kennung über Blockgrenzen), Versionsvergleich, Statistik (Buckets, Ring, Verdichtung, Kennzahlen, Persistenz, REST), MCP (Protokoll, Werkzeuge, Grenzen, Freigabe, Rücknahme, Tageslimit, Journal) |
 | Firmware-Build | GitHub Actions `pio run` + `tools/make_release.py` | Kompilieren und Linken für ESP32-S3 inkl. aller Treiber; OTA- und Factory-Image werden wie im Gerät geprüft |
 | Webinterface End-to-End | `tools/sim/ui_test.js` (Playwright) gegen `heatcore_sim` | alle Seiten ohne JS-Fehler, Anlernen eines Funkgeräts über die Oberfläche, Regel anlegen, Displayvorschau, Online-Update aus einem (simulierten) GitHub-Release, Abweisung fremder Firmware |
+| MCP-Interop | `tools/sim/mcp_client_test.py` mit offiziellem MCP-Python-SDK 2.3.0 gegen `heatcore_sim` | Discovery-Rückfall auf den Handshake, Werkzeuge, Prompts, Token (401), fremder Origin (403), Grenzen, Vorschlag und Freigabe |
 | Schaltplanprüfung | KinCony `KC868-A16-schematic.pdf` (ESP32-Ausführung) | Expander-Adressen, Ausgangs-/Eingangspolarität, RF-Pegelanpassung, RS485-Richtungsumschaltung, Analogteiler – für die V3 sinngemäß |
 | Produktseite A16v3 | KinCony-Produktseite mit Blockschaltbild und Fotos der V3.1 | GPIO-Belegung inkl. Analog (A1/A2 0–5 V, A3/A4 4–20 mA), Ausstattung, S1/S2 nur Reset/Boot, freie GPIO39–41, I²C-Steckleiste, U17 am RF-Empfänger; Widerspruch bei der Eingangs-Expander-Reihenfolge → umschaltbar |
 | Hardware-Integration | Testaufbau laut `docs/hardware.md` | **noch nicht durchgeführt** |
@@ -36,6 +37,7 @@ Gekennzeichnet: **bestätigt** = automatisiert nachgewiesen;
 | 16 | OTA/Neustart schaltet keine Heizkreise ungewollt ein | `system_boot_outputs_safe_and_off`; Bootreihenfolge (sicherer Zustand zuerst), `g_shutdown` vor Neustart; Image-Prüfung `firmware_image_*`; Probelauf mit Bootloader-Rollback | Logik bestätigt; **unbestätigt (HW)** – Update, Rückkehr zur vorherigen Version und automatischen Rollback auf der Platine prüfen |
 | 17 | Modell berücksichtigt Fenster und Störungen | `model_excludes_ventilation_periods`, `model_window_event_in_full_system_classified`, `model_detects_missing_heating_effect`, `model_incomplete_and_manual_periods_not_learned` | bestätigt |
 | 18 | Speicher und Echtzeit im ESP32-S3-Rahmen | CI-Build: Programm 1,70 MB von 4 MB (40,6 %), statischer RAM 63,7 KB (19,4 %); Systemobjekt im PSRAM | statisch bestätigt; Laufzeit (Heap, PSRAM, Zykluszeit) **unbestätigt (HW)** |
+| 19 | KI kann Einstellungen nur in engen Grenzen ändern, Sicherheit nie | `mcp_limits_protect_safety_and_comfort`, `mcp_approve_flow_accept_and_revert`, `mcp_direct_mode_rate_limit_and_manual_change_guard`, Interop-Test | bestätigt (Simulator); mit echtem KI-Client am Gerät **unbestätigt (HW)** |
 
 ## Hardware-Integrationstest (Checkliste)
 

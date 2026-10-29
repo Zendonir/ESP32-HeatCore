@@ -12,7 +12,7 @@ const crypto = require('crypto');
   const base = 'http://127.0.0.1:' + (process.env.HC_PORT || 8099) + '/';
   const routes = ['#/', '#/rooms', '#/sensors', '#/model', '#/rf', '#/rf/learn', '#/rf/monitor', '#/rf/tx', '#/rf/sensors', '#/rf/diag',
     '#/display', '#/display/pages', '#/display/settings', '#/display/status', '#/rules', '#/rules/catalog', '#/rules/test', '#/rules/log',
-    '#/hw/outputs', '#/hw/inputs', '#/hw/analog', '#/hw/onewire', '#/hw/selftest', '#/sys/safety', '#/sys/network', '#/sys/mqtt', '#/sys/general', '#/sys/firmware'];
+    '#/hw/outputs', '#/hw/inputs', '#/hw/analog', '#/hw/onewire', '#/hw/selftest', '#/sys/safety', '#/sys/network', '#/sys/mqtt', '#/sys/general', '#/sys/firmware', '#/stats', '#/sys/ai'];
   await p.goto(base);
   for (const r of routes) {
     await p.goto(base + r); await p.waitForTimeout(900);
