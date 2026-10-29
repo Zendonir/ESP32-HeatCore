@@ -252,14 +252,17 @@ std::string SensorManager::adopt(const std::string& id, const std::string& name,
   s.role = role;
   s.kind = sensorKindFromKey(id);
   if (s.kind == SensorKind::Rf || s.kind == SensorKind::External) s.timeoutSec = 900;  // RF sensors send rarely
+  // keep the last discovered reading: upsert() removes the discovery entry
+  bool haveLast = false;
+  DiscoveredSensor last;
+  for (auto& d : discovered_)
+    if (d.id == id) {
+      last = d;
+      haveLast = true;
+    }
   std::string err = upsert(s);
   if (!err.empty()) return err;
-  for (auto& d : discovered_) {
-    if (d.id == id) {
-      updateExtended(id, d.lastValue, d.hasHumidity, d.humidity, d.batteryOk, 100, d.lastMs);
-      break;
-    }
-  }
+  if (haveLast) updateExtended(id, last.lastValue, last.hasHumidity, last.humidity, last.batteryOk, 100, last.lastMs);
   return std::string();
 }
 

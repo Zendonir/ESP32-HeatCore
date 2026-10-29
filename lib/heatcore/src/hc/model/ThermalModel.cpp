@@ -36,7 +36,7 @@ const char* modelStatusName(ModelStatus s) { return kStatusNames[static_cast<int
 ThermalModel::ThermalModel(const ModelConfig* cfg) : cfg_(cfg) { reset(); }
 
 void ThermalModel::reset() {
-  theta_ = {1.0f, 0.05f, 0.f};  // weak prior: 1 K/h heating gain
+  theta_ = {1.0f, 0.05f, -0.5f};  // weak prior: 1 K/h heating gain, slow cooling
   for (int i = 0; i < kParams; ++i)
     for (int j = 0; j < kParams; ++j) P_[i][j] = i == j ? kPInit : 0.f;
   sigma2_ = 0.04f;
@@ -91,7 +91,7 @@ float ThermalModel::delayedDuty(float delayMin, float spanMin) const {
 
 void ThermalModel::trackDelay(const ThermalInput& in, Millis now, bool disturbed) {
   bool heating = in.duty > 0.5f;
-  bool longOff = !wasHeating_ && (lastHeatOffMs_ == 0 || elapsed(now, lastHeatOffMs_) >= 30u * 60000u);
+  bool longOff = !wasHeating_ && (lastHeatOffMs_ == 0 || elapsed(now, lastHeatOffMs_) >= 15u * 60000u);
   if (heating && !wasHeating_ && longOff && in.tempValid && !disturbed) {
     delayTracking_ = true;
     heatStartMs_ = now;
@@ -176,13 +176,18 @@ void ThermalModel::finishInterval(Millis now) {
   if (cls == PeriodClass::Normal && temps_.size() >= 3) {
     float y = slope(temps_) * 60.f;  // K/h
     float tMean = tSum_ / tCount_;
-    float tref = outCount_ ? outSum_ / outCount_ : 0.f;
     float u = delayedDuty(delayMean_, c.sampleMin);
-    float phi[kParams] = {u, tref - tMean, 1.f};
+    // With an outdoor sensor the physical loss term b*(Tout-T) is used; without
+    // one only a drift constant c (b and c are not separately identifiable when
+    // the room temperature hardly varies).
+    float phi[kParams] = {u, 0.f, 0.f};
+    if (outCount_) phi[1] = outSum_ / outCount_ - tMean;
+    else phi[2] = 1.f;
     float pred = theta_[0] * phi[0] + theta_[1] * phi[1] + theta_[2] * phi[2];
     // Plausibility of the heating response: full duty but clearly less
     // warming than the trusted model predicts -> suspected heating fault.
-    if (status_ == ModelStatus::Ready && u > 0.8f && pred - y > std::max(3.f * residualStd(), 0.3f)) {
+    bool trusted = status_ == ModelStatus::Ready || faultSuspected_;
+    if (trusted && u > 0.8f && pred - y > std::max(3.f * residualStd(), 0.3f)) {
       if (++poorResponseCount_ >= 6) faultSuspected_ = true;
       cls = PeriodClass::HeatingFault;
     } else {
@@ -274,7 +279,7 @@ Prediction ThermalModel::predict(float horizonMin, float futureDuty) const {
     } else {
       u = clampf(futureDuty, 0.f, 1.f);
     }
-    float phi[kParams] = {u, tref - T, 1.f};
+    float phi[kParams] = {u, haveOutdoor_ ? tref - T : 0.f, haveOutdoor_ ? 0.f : 1.f};
     float dTdt = theta_[0] * phi[0] + theta_[1] * phi[1] + theta_[2] * phi[2];
     T += dTdt / 60.f;
     float q = 0.f;

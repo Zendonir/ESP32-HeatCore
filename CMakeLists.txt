@@ -38,7 +38,7 @@ target_link_libraries(heatcore_core PUBLIC Threads::Threads)
 file(GLOB HC_TEST_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/test/host/*.cpp)
 add_executable(heatcore_tests ${HC_TEST_SOURCES})
 target_link_libraries(heatcore_tests PRIVATE heatcore_core)
-target_compile_options(heatcore_tests PRIVATE -Wall -Wextra -Wno-unused-parameter)
+target_compile_options(heatcore_tests PRIVATE -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers)
 
 if(HC_SANITIZE)
   foreach(t heatcore_core heatcore_tests)
