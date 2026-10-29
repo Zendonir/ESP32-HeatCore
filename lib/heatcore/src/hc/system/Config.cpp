@@ -31,6 +31,7 @@ void systemConfigToJson(const SystemConfig& c, JsonObject o, bool includeSecrets
   o["outdoorFromSensor"] = c.outdoorFromSensor;
   o["webUser"] = c.webUser;
   secret(o, "webPassword", c.webPassword, includeSecrets);
+  o["updateUrl"] = c.updateUrl;
 }
 
 std::string systemConfigFromJson(SystemConfig& c, JsonObjectConst o) {
@@ -42,6 +43,10 @@ std::string systemConfigFromJson(SystemConfig& c, JsonObjectConst o) {
   n.outdoorFromSensor = o["outdoorFromSensor"] | n.outdoorFromSensor;
   n.webUser = o["webUser"] | n.webUser.c_str();
   readSecret(o, "webPassword", n.webPassword);
+  n.updateUrl = o["updateUrl"] | n.updateUrl.c_str();
+  if (!n.updateUrl.empty() && n.updateUrl.back() != '/') n.updateUrl += '/';
+  if (!n.updateUrl.empty() && (n.updateUrl.rfind("https://", 0) != 0 || n.updateUrl.size() > 200))
+    return "Update-Quelle: https://-Adresse (max. 200 Zeichen) oder leer";
   if (n.deviceName.empty() || n.deviceName.size() > 31) return "Geraetename 1..31 Zeichen";
   if (n.controlIntervalSec < 2 || n.controlIntervalSec > 60) return "Regelintervall 2..60 s";
   if (n.timezone.size() > 63) return "Zeitzone zu lang";

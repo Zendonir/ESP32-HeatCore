@@ -28,6 +28,7 @@
 #include "platform/I2cBus.h"
 #include "platform/MqttLink.h"
 #include "platform/Net.h"
+#include "platform/Ota.h"
 #include "platform/Peripherals.h"
 #include "platform/Queues.h"
 #include "platform/Storage.h"
@@ -50,6 +51,7 @@ Storage g_storage;
 NetManager g_net;
 MqttLink* g_mqtt = nullptr;
 WebUi* g_web = nullptr;
+Ota g_ota;
 BoundedQueue<std::string> g_sdLog(64);
 
 std::atomic<bool> g_selfTestRunning{false};
@@ -59,6 +61,8 @@ std::atomic<bool> g_factoryReset{false};
 std::atomic<bool> g_shutdown{false};   // reboot pending: io task keeps outputs safe
 std::atomic<bool> g_owRescan{false};   // 1-Wire rescan requested via web
 std::atomic<uint32_t> g_busyUs{0};
+std::atomic<uint32_t> g_controlBeatMs{0};  // last completed control cycle (OTA probation)
+std::atomic<uint32_t> g_netBeatMs{0};      // last network task cycle
 std::atomic<uint32_t> g_rfEdgesPerSec{0};
 bool g_rtcWritten = false;
 
@@ -129,6 +133,7 @@ void controlTask(void*) {
     }
     uint32_t d = micros() - t0;
     if (d > maxUs) maxUs = d;
+    g_controlBeatMs = millis();
     esp_task_wdt_reset();
     vTaskDelay(pdMS_TO_TICKS(50));
   }
@@ -375,10 +380,14 @@ void netTask(void*) {
         g_rtcWritten = g_rtc.write(time(nullptr)) || !g_rtc.present();
       }
       uint32_t now = millis();
+      g_netBeatMs = now;
       if (now - lastStat > 1000) {
         lastStat = now;
+        hc::FirmwareStatus fw;
+        g_ota.fillStatus(fw);
         Lock lk(g_sys->mutex());
         auto& p = g_sys->platform;
+        p.firmware = fw;
         p.ip = g_net.ip();
         p.network = g_net.kind();
         p.netDetail = g_net.detail();
@@ -554,6 +563,11 @@ std::string platformCommand(const std::string& cmd, JsonObjectConst) {
     g_applySystem = true;
     return "";
   }
+  if (cmd == "ota_rollback") {
+    std::string err = g_ota.rollback();
+    if (err.empty()) g_web->requestReboot();
+    return err;
+  }
   if (cmd == "onewire_rescan") {
     g_owRescan = true;  // executed by the sensor task (owns the 1-Wire buses)
     return "";
@@ -597,6 +611,7 @@ void setup() {
   g_sys->platform.deviceId = deviceIdFromMac();
   g_sys->platform.resetReason = std::to_string(static_cast<int>(esp_reset_reason()));
 
+  g_ota.begin();  // slot state; a new firmware starts on probation
   g_storage.begin();
   loadConfiguration();
   EspClock::setTimezone(g_sys->sysCfg.timezone.c_str());
@@ -623,7 +638,7 @@ void setup() {
 
   // 3) network services
   g_mqtt = new MqttLink(*g_sys);
-  g_web = new WebUi(*g_sys);
+  g_web = new WebUi(*g_sys, g_ota);
   {
     Lock lk(g_sys->mutex());
     g_sys->onEvent = [](const hc::Event& e) {
@@ -666,16 +681,37 @@ void setup() {
   startSelfTest();
 }
 
+namespace {
+void safeShutdown() {
+  g_shutdown = true;
+  {
+    Lock lk(g_sys->mutex());
+    g_sys->display.cfg.enabled = false;
+  }
+  writeSafeOutputs();
+}
+}  // namespace
+
+// Arduino core hook: do not confirm a freshly installed firmware during
+// startup; HeatCore confirms it after its own probation (see platform::Ota).
+extern "C" bool verifyRollbackLater() { return true; }
+
 void loop() {
+  // OTA probation: confirm the new firmware once control and network tasks
+  // run healthy; otherwise return to the previous firmware.
+  uint32_t now = millis();
+  bool healthy = now - g_controlBeatMs.load() < 5000 && now - g_netBeatMs.load() < 10000;
+  if (g_ota.probation(healthy, now)) {
+    safeShutdown();
+    HC_LOGE("main", "OTA probation failed - rollback");
+    delay(200);
+    g_ota.rejectAndRestart();
+  }
   // Reboot (OTA, user request): close all valves first, then restart.
   if (g_web && g_web->rebootRequested()) {
     g_shutdown = true;
     delay(800);  // let the HTTP response go out
-    {
-      Lock lk(g_sys->mutex());
-      g_sys->display.cfg.enabled = false;
-    }
-    writeSafeOutputs();
+    safeShutdown();
     HC_LOGW("main", "restart");
     delay(200);
     ESP.restart();

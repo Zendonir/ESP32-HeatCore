@@ -1,7 +1,6 @@
 #include "platform/WebUi.h"
 
-#include <Update.h>
-
+#include <cstdio>
 #include <cstdlib>
 #include <mutex>
 
@@ -56,7 +55,7 @@ class ApiHandler : public AsyncWebHandler {
   WebUi& ui_;
 };
 
-WebUi::WebUi(hc::HeatCoreSystem& sys) : sys_(sys), api_(sys) {}
+WebUi::WebUi(hc::HeatCoreSystem& sys, Ota& ota) : sys_(sys), api_(sys), ota_(ota) {}
 
 bool WebUi::authorized(AsyncWebServerRequest* r) {
   std::string user, pass;
@@ -69,31 +68,83 @@ bool WebUi::authorized(AsyncWebServerRequest* r) {
   return r->authenticate(user.c_str(), pass.c_str());
 }
 
+namespace {
+// Per-request upload state (freed by the web server with free()).
+struct OtaUpload {
+  bool started;
+  bool failed;
+  bool done;
+  char error[160];
+};
+
+void setError(OtaUpload* u, const std::string& e) {
+  u->failed = true;
+  std::snprintf(u->error, sizeof(u->error), "%s", e.c_str());
+}
+
+std::string jsonEscape(const char* s) {
+  std::string o;
+  for (; *s; ++s) {
+    if (*s == '"' || *s == '\\') o += '\\';
+    if (static_cast<unsigned char>(*s) >= 0x20) o += *s;
+  }
+  return o;
+}
+}  // namespace
+
+// POST /api/ota?size=<bytes>&sha256=<hex>&source=<text>  (multipart file)
+// size and sha256 are optional; the online update passes the values of the
+// release so that a damaged download is never installed.
 void WebUi::setupOta() {
   server_.on(
       "/api/ota", HTTP_POST,
       [this](AsyncWebServerRequest* r) {
         if (!authorized(r)) return r->requestAuthentication();
-        bool ok = !Update.hasError() && otaError_.empty();
-        r->send(ok ? 200 : 500, "application/json",
-                ok ? "{\"ok\":true,\"message\":\"Update erfolgreich - Neustart\"}"
-                   : (std::string("{\"error\":\"") + otaError_ + "\"}").c_str());
-        otaRunning_ = false;
-        if (ok) reboot_ = true;
+        auto* u = static_cast<OtaUpload*>(r->_tempObject);
+        if (!u || !u->done || u->failed) {
+          std::string msg = u && u->error[0] ? u->error : "keine Firmware-Datei empfangen";
+          r->send(u && u->started ? 422 : 409, "application/json", ("{\"error\":\"" + jsonEscape(msg.c_str()) + "\"}").c_str());
+          return;
+        }
+        r->send(200, "application/json", "{\"ok\":true,\"message\":\"Firmware geprueft und installiert - Neustart\"}");
+        reboot_ = true;
       },
       [this](AsyncWebServerRequest* r, const String& filename, size_t index, uint8_t* data, size_t len, bool final) {
         if (index == 0) {
-          otaError_.clear();
-          if (!authorized(r)) {
-            otaError_ = "nicht angemeldet";
-            return;
-          }
-          otaRunning_ = true;
-          HC_LOGI(TAG, "OTA start: %s", filename.c_str());
-          if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)) otaError_ = Update.errorString();
+          if (!r->_tempObject) r->_tempObject = calloc(1, sizeof(OtaUpload));
+          auto* u = static_cast<OtaUpload*>(r->_tempObject);
+          if (!u || u->started || u->failed) return;
+          if (!authorized(r)) return setError(u, "nicht angemeldet");
+          size_t size = r->hasParam("size") ? static_cast<size_t>(r->getParam("size")->value().toInt()) : 0;
+          std::string sha = r->hasParam("sha256") ? r->getParam("sha256")->value().c_str() : "";
+          std::string src = r->hasParam("source") ? r->getParam("source")->value().c_str() : "Upload";
+          if (src.size() > 24) src.resize(24);
+          std::string err = ota_.start(size, sha, src.c_str());
+          if (!err.empty()) return setError(u, err);
+          u->started = true;
+          otaOwner_ = r;
+          HC_LOGI(TAG, "OTA upload %s", filename.c_str());
+          // connection lost mid-transfer: discard the partial image
+          r->onDisconnect([this, r]() {
+            AsyncWebServerRequest* owner = r;
+            if (otaOwner_.compare_exchange_strong(owner, nullptr)) ota_.abort("Verbindung abgebrochen");
+          });
         }
-        if (otaError_.empty() && len && Update.write(data, len) != len) otaError_ = Update.errorString();
-        if (final && otaError_.empty() && !Update.end(true)) otaError_ = Update.errorString();
+        auto* u = static_cast<OtaUpload*>(r->_tempObject);
+        if (!u || !u->started || u->failed || u->done) return;
+        if (len && !ota_.write(data, len)) {
+          setError(u, ota_.lastError());
+          AsyncWebServerRequest* owner = r;
+          if (otaOwner_.compare_exchange_strong(owner, nullptr)) ota_.abort(u->error);
+          return;
+        }
+        if (final) {
+          AsyncWebServerRequest* owner = r;
+          if (!otaOwner_.compare_exchange_strong(owner, nullptr)) return setError(u, "Update abgebrochen");
+          std::string err = ota_.finish();
+          if (!err.empty()) return setError(u, err);
+          u->done = true;
+        }
       });
 }
 

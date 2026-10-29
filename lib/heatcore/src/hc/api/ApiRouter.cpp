@@ -111,6 +111,21 @@ void statusJson(HeatCoreSystem& sys, JsonObject o) {
   o["sensorsTotal"] = static_cast<int>(sys.sensors.sensors().size());
 }
 
+void firmwareJson(HeatCoreSystem& sys, JsonObject o) {
+  const FirmwareStatus& f = sys.platform.firmware;
+  o["version"] = kFirmwareVersion;
+  o["board"] = kBoardId;
+  o["buildDate"] = kFirmwareBuildDate;
+  o["runningPartition"] = f.runningPartition;
+  o["slotSize"] = f.slotSize;
+  o["pendingVerify"] = f.pendingVerify;
+  o["rollbackAvailable"] = f.rollbackAvailable;
+  o["previousVersion"] = f.previousVersion;
+  o["lastResult"] = f.lastResult;
+  o["busy"] = f.busy;
+  o["updateUrl"] = sys.sysCfg.updateUrl;
+}
+
 void hardwareJson(HeatCoreSystem& sys, JsonObject o) {
   const PlatformStatus& pl = sys.platform;
   JsonObject p = o["platform"].to<JsonObject>();
@@ -997,6 +1012,15 @@ ApiResponse ApiRouter::handle(const ApiRequest& req) {
           c.okOrFail(r);
         } else if (p.size() == 1 && c.is("GET")) {
           hardwareJson(sys, out);
+        } else {
+          c.fail(404, "?");
+        }
+      } else if (head == "firmware") {
+        if (p.size() == 1 && c.is("GET")) {
+          firmwareJson(sys, out);
+        } else if (p.size() == 2 && p[1] == "rollback" && c.is("POST")) {
+          if (!sys.platformCommand) c.fail(501, "nicht verfuegbar");
+          else c.okOrFail(sys.platformCommand("ota_rollback", JsonObjectConst()));
         } else {
           c.fail(404, "?");
         }

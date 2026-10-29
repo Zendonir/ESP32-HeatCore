@@ -15,6 +15,9 @@ struct SystemConfig {
   bool outdoorFromSensor = true;
   std::string webUser = "admin";
   std::string webPassword;  // empty = no authentication (local network only!)
+  // Release source for updates in the web UI (GitHub Pages of the project).
+  // Only the browser contacts it; the controller itself needs no internet.
+  std::string updateUrl = "https://zendonir.github.io/ESP32-HeatCore/";
 };
 
 struct NetworkConfig {

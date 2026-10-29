@@ -28,14 +28,24 @@
 #include "hc/rf/RfTransmitter.h"
 #include "hc/sensors/SensorManager.h"
 #include "hc/system/Config.h"
+#include "hc/system/Firmware.h"
 
 namespace hc {
-
-constexpr const char* kFirmwareVersion = "0.4.0";
 
 enum class ConfigSection : uint8_t { System = 0, Network, Mqtt, Io, Heating, Sensors, Safety, Rf, Display, Rules, Model, Count };
 const char* configSectionName(ConfigSection s);
 bool configSectionFromName(const char* s, ConfigSection& out);
+
+// Firmware slot / update state reported by the ESP32 layer.
+struct FirmwareStatus {
+  std::string runningPartition;   // "app0" / "app1"
+  uint32_t slotSize = 0;          // bytes per OTA slot
+  bool pendingVerify = false;     // new image on probation (rollback armed)
+  bool rollbackAvailable = false; // other slot holds a valid image
+  std::string previousVersion;    // version before the last update
+  std::string lastResult;         // result of the last update / rollback
+  bool busy = false;              // an update is being written
+};
 
 // Hardware / platform facts reported by the ESP32 layer.
 struct PlatformStatus {
@@ -68,6 +78,7 @@ struct PlatformStatus {
   std::string rs485 = "-";
   uint32_t rs485Lines = 0, rs485Errors = 0;
   bool rfRxHw = false, rfTxHw = false;
+  FirmwareStatus firmware;
 };
 
 struct SelfTestItem {
