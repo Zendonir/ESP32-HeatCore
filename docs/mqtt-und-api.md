@@ -44,6 +44,8 @@ Alle Antworten JSON, Fehler als `{"error": "..."}` mit HTTP-Status.
 |---|---|
 | `GET /api/status`, `/api/alarms`, `/api/events?since=` | Übersicht, Alarme, Ereignisprotokoll |
 | `GET /api/hardware`, `POST /api/hardware/selftest` | Hardwarestatus, Selbsttest |
+| `GET /api/firmware`, `POST /api/firmware/rollback` | Firmware-Version, Speicherbereich, Probelauf, letztes Update-Ergebnis; Rückkehr zur vorherigen Firmware |
+| `POST /api/ota?size=&sha256=&source=` (multipart) | Firmware-Update; nur HeatCore-Images dieser Platine, optional mit Größe/SHA-256 aus dem Release |
 | `GET/PUT /api/io`, `POST/DELETE /api/outputs/<n>/manual`, `POST /api/outputs/<n>/request` | Ein-/Ausgänge |
 | `GET/PUT /api/heating`, `POST /api/rooms/<id>/{setpoint,adjust,mode}`, `POST /api/mode` | Räume, Heizkreise |
 | `GET /api/sensors`, `PUT/DELETE /api/sensors/<id>`, `POST /api/sensors/adopt` | Sensor-Manager |

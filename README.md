@@ -33,12 +33,15 @@ Webinterface.
 * **Lernmodell:** RLS-Raummodell mit Totzeit, Klassifizierung von
   Lüftungs-, Stör-, manuellen und unvollständigen Perioden, Prognosen mit
   Unsicherheit, begrenzte Beratung der Hysterese-Regelung mit Rückfallebene.
+* **Firmware:** Flashen direkt im Browser über GitHub (Web-Flasher), Updates
+  im Webinterface – online aus den GitHub-Releases oder per Datei – mit
+  Prüfsumme, Probelauf und automatischer Rückkehr zur vorherigen Version.
 * **Home Assistant (optional):** MQTT-Discovery für alle Komponenten,
   eingeschränkte Rechte.
 
 ## Status
 
-* Firmware kompiliert für ESP32-S3 (CI), Host-Testsuite grün (65 Tests),
+* Firmware kompiliert für ESP32-S3 (CI), Host-Testsuite grün (71 Tests),
   Webinterface per End-to-End-Test im Simulator geprüft.
 * **Auf der echten Platine noch nicht getestet.** Hardwareabhängige Punkte sind
   in `docs/tests-und-abnahme.md` als „unbestätigt (HW)“ markiert. Vor dem

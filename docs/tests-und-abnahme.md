@@ -4,9 +4,9 @@
 
 | Ebene | Werkzeug | Umfang |
 |---|---|---|
-| Unit- und Integrationstests | `build/host/heatcore_tests` (CMake, ASan/UBSan) | 65 Tests, 618 Prüfungen: Funk-Codec, Empfangskette, Sender, Sensor-Decoder, Sensor-Manager, Heizung, Sicherheit, Automationen, Lernmodell mit simulierter Raumthermik, REST-API, MQTT/Discovery, Konfiguration, Analog-Betriebsarten (0–5 V / 4–20 mA, Drahtbruch), Eingangsbank-Tausch |
-| Firmware-Build | GitHub Actions `pio run` | Kompilieren und Linken für ESP32-S3 inkl. aller Treiber |
-| Webinterface End-to-End | `tools/sim/ui_test.js` (Playwright) gegen `heatcore_sim` | alle Seiten ohne JS-Fehler, Anlernen eines Funkgeräts über die Oberfläche, Regel anlegen, Displayvorschau |
+| Unit- und Integrationstests | `build/host/heatcore_tests` (CMake, ASan/UBSan) | 71 Tests, 689 Prüfungen: Funk-Codec, Empfangskette, Sender, Sensor-Decoder, Sensor-Manager, Heizung, Sicherheit, Automationen, Lernmodell mit simulierter Raumthermik, REST-API, MQTT/Discovery, Konfiguration, Analog-Betriebsarten (0–5 V / 4–20 mA, Drahtbruch), Eingangsbank-Tausch, Firmware-Image-Prüfung (SHA-256-Testvektoren, Chip, Factory-Image, fremde Firmware, Kennung über Blockgrenzen), Versionsvergleich |
+| Firmware-Build | GitHub Actions `pio run` + `tools/make_release.py` | Kompilieren und Linken für ESP32-S3 inkl. aller Treiber; OTA- und Factory-Image werden wie im Gerät geprüft |
+| Webinterface End-to-End | `tools/sim/ui_test.js` (Playwright) gegen `heatcore_sim` | alle Seiten ohne JS-Fehler, Anlernen eines Funkgeräts über die Oberfläche, Regel anlegen, Displayvorschau, Online-Update aus einem (simulierten) GitHub-Release, Abweisung fremder Firmware |
 | Schaltplanprüfung | KinCony `KC868-A16-schematic.pdf` (ESP32-Ausführung) | Expander-Adressen, Ausgangs-/Eingangspolarität, RF-Pegelanpassung, RS485-Richtungsumschaltung, Analogteiler – für die V3 sinngemäß |
 | Produktseite A16v3 | KinCony-Produktseite mit Blockschaltbild und Fotos der V3.1 | GPIO-Belegung inkl. Analog (A1/A2 0–5 V, A3/A4 4–20 mA), Ausstattung, S1/S2 nur Reset/Boot, freie GPIO39–41, I²C-Steckleiste, U17 am RF-Empfänger; Widerspruch bei der Eingangs-Expander-Reihenfolge → umschaltbar |
 | Hardware-Integration | Testaufbau laut `docs/hardware.md` | **noch nicht durchgeführt** |
@@ -33,7 +33,7 @@ Gekennzeichnet: **bestätigt** = automatisiert nachgewiesen;
 | 13 | Funktionen ohne Home Assistant | gesamte Testsuite läuft ohne MQTT; `system_runs_without_network_hooks` | bestätigt |
 | 14 | Funkgeräte im Webinterface hinzufügen/ändern/entfernen | API-Test (#2) + UI-E2E-Test | bestätigt (Simulator) |
 | 15 | Regelungsfähig bei WLAN-/Ethernet-/MQTT-Ausfall | Regelung im Control-Task ohne Netzabhängigkeit; MQTT im Netz-Task mit Warteschlange | Logik bestätigt; **unbestätigt (HW)** |
-| 16 | OTA/Neustart schaltet keine Heizkreise ungewollt ein | `system_boot_outputs_safe_and_off`; Bootreihenfolge (sicherer Zustand zuerst), `g_shutdown` vor Neustart | Logik bestätigt; **unbestätigt (HW)** |
+| 16 | OTA/Neustart schaltet keine Heizkreise ungewollt ein | `system_boot_outputs_safe_and_off`; Bootreihenfolge (sicherer Zustand zuerst), `g_shutdown` vor Neustart; Image-Prüfung `firmware_image_*`; Probelauf mit Bootloader-Rollback | Logik bestätigt; **unbestätigt (HW)** – Update, Rückkehr zur vorherigen Version und automatischen Rollback auf der Platine prüfen |
 | 17 | Modell berücksichtigt Fenster und Störungen | `model_excludes_ventilation_periods`, `model_window_event_in_full_system_classified`, `model_detects_missing_heating_effect`, `model_incomplete_and_manual_periods_not_learned` | bestätigt |
 | 18 | Speicher und Echtzeit im ESP32-S3-Rahmen | CI-Build: Programm 1,70 MB von 4 MB (40,6 %), statischer RAM 63,7 KB (19,4 %); Systemobjekt im PSRAM | statisch bestätigt; Laufzeit (Heap, PSRAM, Zykluszeit) **unbestätigt (HW)** |
 
@@ -56,5 +56,7 @@ Gekennzeichnet: **bestätigt** = automatisiert nachgewiesen;
    wieder anstecken.
 7. Vorlaufschutz und Raum-Übertemperatur mit erwärmtem Fühler auslösen.
 8. Netzwerk trennen, MQTT-Broker stoppen, OTA-Update einspielen – Ausgänge
-   beobachten.
+   beobachten. Nach dem Update „Probelauf“ → nach ca. 2 min „bestätigt“;
+   „Vorherige Firmware starten“ testen; Web-Flasher einmal ohne „Gerät
+   löschen“ ausführen (Einstellungen bleiben erhalten).
 9. 24-h-Dauerlauf: Regelzyklus max., freier Heap, Alarme.

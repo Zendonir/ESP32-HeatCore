@@ -29,6 +29,7 @@
 #include <thread>
 
 #include "hc/api/ApiRouter.h"
+#include "hc/system/Firmware.h"
 #include "hc/core/Log.h"
 #include "hc/rf/RfCodec.h"
 #include "hc/system/HeatCoreSystem.h"
@@ -163,6 +164,33 @@ std::string readFile(const std::string& path) {
   return ss.str();
 }
 
+// POST /api/ota: same image checks as the controller (multipart upload).
+ApiResponse simOta(const std::string& head, const std::string& body, const std::map<std::string, std::string>& q) {
+  auto fail = [](const std::string& e) { return ApiResponse{422, "{\"error\":\"" + e + "\"}"}; };
+  size_t b = head.find("boundary=");
+  if (b == std::string::npos) return fail("kein multipart");
+  std::string boundary = "--" + head.substr(b + 9, head.find("\r\n", b) - b - 9);
+  size_t start = body.find("\r\n\r\n");
+  size_t end = body.find("\r\n" + boundary, start == std::string::npos ? 0 : start);
+  if (start == std::string::npos || end == std::string::npos) return fail("Datei fehlt");
+  start += 4;
+  FirmwareImageCheck chk;
+  chk.feed(reinterpret_cast<const uint8_t*>(body.data() + start), end - start);
+  std::string err;
+  auto get = [&](const char* k) { auto it = q.find(k); return it == q.end() ? std::string() : it->second; };
+  size_t size = get("size").empty() ? 0 : std::stoul(get("size"));
+  FirmwareStatus& fw = g_sys->platform.firmware;
+  if (!chk.finish(err, get("sha256"), size)) {
+    fw.lastResult = "Update abgebrochen: " + err;
+    return fail(err);
+  }
+  fw.previousVersion = kFirmwareVersion;
+  fw.rollbackAvailable = true;
+  fw.lastResult = "Firmware " + chk.version() + " installiert (Simulator, SHA-256 " + chk.sha256().substr(0, 12) +
+                  "...) - kein Neustart im Simulator";
+  return ApiResponse{200, "{\"ok\":true}"};
+}
+
 void reply(int fd, int status, const char* type, const std::string& body) {
   char head[256];
   int n = std::snprintf(head, sizeof(head),
@@ -263,7 +291,8 @@ void serve(int port, const std::string& webPath) {
       ApiResponse res;
       {
         std::lock_guard<std::recursive_mutex> lk(g_sys->mutex());
-        if (path == "/api/system/reboot" || path == "/api/ota") res = {501, "{\"error\":\"im Simulator nicht verfuegbar\"}"};
+        if (path == "/api/system/reboot") res = {501, "{\"error\":\"im Simulator nicht verfuegbar\"}"};
+        else if (path == "/api/ota" && method == "POST") res = simOta(req.substr(0, headerEnd), body, r.query);
         else res = api.handle(r);
       }
       reply(c, res.status, res.contentType, res.body);
@@ -295,10 +324,17 @@ int main(int argc, char** argv) {
   g_clock.ms = 1000;
   g_sys = new HeatCoreSystem(g_clock);
   g_sys->platform.deviceId = "51a7e5";
+  g_sys->platform.firmware.runningPartition = "app0";
+  g_sys->platform.firmware.slotSize = 0x400000;
   g_sys->platformCommand = [](const std::string& cmd, JsonObjectConst) -> std::string {
     if (cmd == "selftest") {
       g_sys->selfTest = {{"Simulator", "ok", "alle Komponenten simuliert"},
                          {"433-MHz-Sender (GPIO18)", "unbestaetigt", "nur simulierte Funkstrecke"}};
+      return "";
+    }
+    if (cmd == "ota_rollback") {
+      if (!g_sys->platform.firmware.rollbackAvailable) return "keine vorherige Firmware vorhanden";
+      g_sys->platform.firmware.lastResult = "Zurueck zur vorherigen Firmware (Simulator)";
       return "";
     }
     return cmd.rfind("apply_", 0) == 0 ? "" : "im Simulator nicht verfuegbar";

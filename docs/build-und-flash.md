@@ -20,9 +20,53 @@ Webinterface (`web/index.html`) wird beim Build automatisch komprimiert und
 eingebettet (`tools/embed_web.py`).
 
 Jeder Push baut die Firmware auf GitHub Actions; die Binärdateien liegen als
-Artefakt `heatcore-firmware` am Workflow-Lauf.
+Artefakt `heatcore-firmware` am Workflow-Lauf (`dist/heatcore-ota.bin`,
+`dist/heatcore-factory.bin`, Prüfsummen).
 
-## Erstes Flashen
+Versionsnummer: Release-Builds übernehmen sie aus dem Git-Tag (`v0.5.0` →
+`0.5.0`), Entwicklungs-Builds heißen `<VERSION>-dev+<commit>` (Datei
+`VERSION`, `tools/version.py`). Die Version steht im Webinterface, auf dem
+Display und in Home Assistant.
+
+## Flashen direkt über GitHub (Web-Flasher, ohne Installation)
+
+Voraussetzung: einmalig GitHub Pages aktivieren und ein Release erstellen
+(siehe „Release veröffentlichen“).
+
+1. Die Pages-Seite des Projekts öffnen:
+   **https://zendonir.github.io/ESP32-HeatCore/** – mit Chrome oder Edge auf
+   einem Desktop-Rechner (Web Serial; Firefox/Safari und Smartphones können
+   das nicht).
+2. Platine per USB-C-Datenkabel anschließen, „Per USB installieren“ klicken,
+   Port „USB JTAG/serial debug unit“ wählen.
+3. Erstinstallation: „Gerät löschen“ bestätigen. Bei einer bestehenden
+   HeatCore-Installation nicht löschen – die Einstellungen bleiben erhalten.
+4. Erscheint kein Port: S2 (Download) halten, S1 (Reset) kurz drücken, S2
+   loslassen, erneut versuchen. Nach dem Flashen einmal S1 drücken.
+
+Der Web-Flasher (ESP Web Tools) schreibt `heatcore-factory.bin` (Bootloader,
+Partitionstabelle, Firmware) an Adresse 0x0 – dasselbe wie
+`esptool.py --chip esp32s3 write_flash 0x0 heatcore-factory.bin`.
+
+## Release veröffentlichen
+
+Einmalig: GitHub → Settings → Pages → Build and deployment → Source:
+**GitHub Actions**.
+
+* Actions → **Release** → „Run workflow“, Version eingeben (z. B. `v0.5.0`;
+  Vorabversion `v0.5.0-rc1`), oder
+* einen Tag pushen: `git tag v0.5.0 && git push origin v0.5.0`.
+
+Der Workflow führt die Host-Tests aus, baut die Firmware mit dieser Version,
+prüft beide Images mit denselben Regeln wie das Gerät (`tools/make_release.py`:
+ESP32-S3-Anwendungs-Image, HeatCore-Kennung, Version, Factory-Image-Aufbau)
+und veröffentlicht ein GitHub-Release mit `heatcore-ota.bin`,
+`heatcore-factory.bin`, `release.json`, `manifest.json` und `SHA256SUMS`.
+Danach aktualisiert der Workflow **Pages** automatisch den Web-Flasher und die
+Update-Quelle (`/firmware/release.json`, `/firmware/heatcore-ota.bin`).
+Beide Workflows müssen dafür auf dem Standard-Branch (`main`) liegen.
+
+## Erstes Flashen (PlatformIO / esptool)
 
 1. Board stromlos machen, alle Lasten/Ventile abklemmen (siehe
    `docs/hardware.md`, Testaufbau).
@@ -45,18 +89,46 @@ Artefakt `heatcore-firmware` am Workflow-Lauf.
 6. System → Sicherheit prüfen (Vorlaufgrenze für die Anlage!).
 7. Funkgeräte anlernen, Display einstellen, Regeln anlegen.
 
-## Updates
+## Updates im Webinterface (OTA)
 
-System → Allgemein → Firmware-Update (`firmware.bin`). Vor dem Neustart gehen
-alle Heizkreise in den sicheren Zustand. Konfiguration bleibt erhalten
-(LittleFS, atomare Schreibvorgänge). Backup: Konfiguration exportieren.
+System → **Firmware-Update**:
+
+* **Online-Update von GitHub:** „Nach Updates suchen“ liest
+  `release.json` von der Update-Quelle (Standard: GitHub-Pages-Seite des
+  Projekts), zeigt Version und Änderungen und installiert auf Knopfdruck. Der
+  **Browser** lädt die Datei und überträgt sie ins Gerät – die Steuerung
+  selbst braucht keinen Internetzugang. Größe und SHA-256 des Releases werden
+  im Gerät geprüft; eine beschädigte Übertragung wird nie aktiviert.
+* **Datei hochladen:** `heatcore-ota.bin` aus einem Release (optional mit
+  SHA-256) oder `.pio/build/kc868_a16v3/firmware.bin`.
+* **Vorherige Firmware starten:** die alte Version liegt im zweiten
+  OTA-Speicherbereich und kann jederzeit wieder gestartet werden.
+
+Prüfungen im Gerät (schon während der Übertragung): ESP32-S3-Anwendungs-Image
+(kein Factory-Image), HeatCore-Kennung dieser Platine (keine fremde Firmware,
+keine Firmware für andere Platinen), Größe und Prüfsumme, Image-Prüfung des
+Bootloaders. Bricht die Verbindung ab, wird das Teil-Image verworfen.
+
+Ablauf und Sicherheit:
+
+1. Während der Übertragung regelt die Heizung normal weiter.
+2. Vor dem Neustart gehen alle Heizkreise in den sicheren Zustand.
+3. Die neue Firmware startet **auf Probe** (Bootloader-Rollback aktiv). Sie
+   wird erst bestätigt, wenn Regelungs- und Netzwerk-Task mindestens 60 s
+   fehlerfrei laufen (frühestens 2 min nach dem Start). Stürzt sie ab, hängt
+   sie oder ist sie nach 10 min nicht gesund, kehrt das Gerät automatisch zur
+   vorherigen Version zurück; das Ergebnis steht unter „Letztes Ergebnis“.
+
+Die Konfiguration bleibt bei Updates erhalten (LittleFS, atomare
+Schreibvorgänge). Vor größeren Versionssprüngen trotzdem: System → Allgemein
+→ Konfiguration exportieren.
 
 ## Host-Tests und Simulator (ohne Hardware)
 
 ```bash
 cmake -S . -B build/host
 cmake --build build/host -j
-./build/host/heatcore_tests            # 65 Tests
+./build/host/heatcore_tests            # 71 Tests
 ./build/host/heatcore_sim --demo       # http://127.0.0.1:8080/
 ```
 
