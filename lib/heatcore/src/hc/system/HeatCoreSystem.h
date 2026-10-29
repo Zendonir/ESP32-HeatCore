@@ -212,6 +212,8 @@ class HeatCoreSystem : public IAutomationContext {
   int lastMinute_ = -1;
   Millis lastMinuteMs_ = 0;
   bool begun_ = false;
+  Millis begunMs_ = 0;
+  static constexpr uint32_t kSensorStartupGraceMs = 120000;
   bool outputWriteOk_ = true;
   uint32_t consecutiveWriteErrors_ = 0;
   // per room duty accumulation for the thermal model

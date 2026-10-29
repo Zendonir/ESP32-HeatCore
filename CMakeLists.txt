@@ -40,12 +40,17 @@ add_executable(heatcore_tests ${HC_TEST_SOURCES})
 target_link_libraries(heatcore_tests PRIVATE heatcore_core)
 target_compile_options(heatcore_tests PRIVATE -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers)
 
+
+enable_testing()
+add_test(NAME heatcore_tests COMMAND heatcore_tests)
+
+# Host simulator serving the real web UI against the simulated core
+add_executable(heatcore_sim tools/sim/sim_server.cpp)
+target_link_libraries(heatcore_sim PRIVATE heatcore_core)
+
 if(HC_SANITIZE)
-  foreach(t heatcore_core heatcore_tests)
+  foreach(t heatcore_core heatcore_tests heatcore_sim)
     target_compile_options(${t} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(${t} PRIVATE -fsanitize=address,undefined)
   endforeach()
 endif()
-
-enable_testing()
-add_test(NAME heatcore_tests COMMAND heatcore_tests)

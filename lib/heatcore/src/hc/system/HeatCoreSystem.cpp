@@ -56,6 +56,7 @@ void HeatCoreSystem::begin() {
   automation.revalidateAll();
   model.removeMissing(heating.rooms);
   Millis now = clock_.nowMs();
+  begunMs_ = now;
   lastSecond_ = now;
   lastMinuteMs_ = now;
   lastStatsSave_ = now;
@@ -228,6 +229,12 @@ void HeatCoreSystem::controlCycle(Millis now) {
     if (r.hasTemp && !r.tempFallback) adv = model.advice(r.id, r.demand, r.temperature);
     heating.updateDemand(r, adv, safety.cfg.sensorFailMode, safety.cfg.sensorFailDutyPct, safety.cfg.sensorFailCycleMin,
                          now);
+    // Start-up grace: sensors deliver their first value a few seconds after
+    // boot. Valves stay closed meanwhile, but no sensor alarm is raised yet.
+    if (!r.hasTemp && elapsed(now, begunMs_) < kSensorStartupGraceMs) {
+      r.sensorFail = false;
+      r.demand = false;
+    }
   }
   heating.updateCircuits(now);
   checkCircuitFaults(now);
