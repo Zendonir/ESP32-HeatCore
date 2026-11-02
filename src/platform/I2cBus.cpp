@@ -69,9 +69,14 @@ bool I2cBus::writeRead(uint8_t addr, const uint8_t* w, size_t wl, uint8_t* r, si
 }
 
 std::vector<uint8_t> I2cBus::scan() {
+  // Lock per address: an absent address may take until the transaction
+  // timeout, and holding the bus for the whole scan (> 1 s) starved the IO
+  // task (input read / output write failures, output watchdog alarm).
   std::vector<uint8_t> found;
-  for (uint8_t a = 0x08; a < 0x78; ++a)
-    if (probe(a)) found.push_back(a);
+  for (uint8_t a = 0x08; a < 0x78; ++a) {
+    I2cLock lk(*this, 200);
+    if (lk.ok() && probe(a)) found.push_back(a);
+  }
   return found;
 }
 

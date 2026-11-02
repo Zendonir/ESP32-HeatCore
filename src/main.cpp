@@ -470,11 +470,7 @@ void addResult(std::vector<hc::SelfTestItem>& r, const char* c, const char* st, 
 
 void selfTestTask(void*) {
   std::vector<hc::SelfTestItem> res;
-  std::vector<uint8_t> found;
-  {
-    I2cLock lk(g_i2c, 500);
-    if (lk.ok()) found = g_i2c.scan();
-  }
+  std::vector<uint8_t> found = g_i2c.scan();  // locks per address, the IO task keeps running
   auto has = [&](uint8_t a) { return std::find(found.begin(), found.end(), a) != found.end(); };
   auto addr = [](uint8_t a) {
     char b[8];
