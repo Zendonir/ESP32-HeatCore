@@ -24,7 +24,7 @@ class I2cBus {
   bool writeByte(uint8_t addr, uint8_t v) { return write(addr, &v, 1); }
   bool read(uint8_t addr, uint8_t* data, size_t len);
   bool writeRead(uint8_t addr, const uint8_t* w, size_t wl, uint8_t* r, size_t rl);
-  std::vector<uint8_t> scan();
+  std::vector<uint8_t> scan();  // takes the lock per address itself
   // Clocks SCL until SDA is released, then re-initialises the driver.
   void recover();
 

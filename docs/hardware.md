@@ -50,7 +50,9 @@ GPIO43/44 (UART0) sind mit dem W5500 belegt. Serielle Ausgaben laufen deshalb
 * Der I²C-Scan des Arduino-Cores 3.3 (leerer Schreibzugriff,
   `i2c_master_probe`) meldete auf der Platine Dutzende Geisteradressen und
   verfehlte DS3231/24C02. Die Firmware prüft Adressen deshalb per
-  1-Byte-Lesezugriff (`I2cBus::probe`).
+  1-Byte-Lesezugriff (`I2cBus::probe`). Der Scan sperrt den Bus nur pro
+  Adresse; vorher blockierte er ihn über eine Sekunde, was als Lese-/
+  Schreibfehler der Expander zählte und den Ausgangsalarm auslösen konnte.
 * WLAN mit −95 dBm: Der ESP32-S3-WROOM-1U braucht eine externe Antenne am
   IPEX-Anschluss; der Selbsttest weist unter −80 dBm darauf hin.
 * Ein üblicher 433-MHz-Superregenerativempfänger liefert im Ruhezustand
