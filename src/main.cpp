@@ -501,7 +501,12 @@ void selfTestTask(void*) {
     if (a != board::kPcfOut1 && a != board::kPcfOut2 && a != board::kPcfIn1 && a != board::kPcfIn2 &&
         a != board::kRtcAddr && a != board::kEepromAddr && a != board::kOledAddr)
       other += addr(a) + " ";
-  if (!other.empty()) addResult(res, "I2C weitere Geraete", "ok", other);
+  if (!other.empty()) {
+    // more than a handful of unknown addresses means the scan itself is not plausible
+    size_t n = static_cast<size_t>(std::count(other.begin(), other.end(), ' '));
+    addResult(res, "I2C weitere Geraete", n > 6 ? "fehler" : "ok",
+              n > 6 ? "unplausibel viele Adressen (" + std::to_string(n) + ") - Bus/Leitungen pruefen: " + other : other);
+  }
   time_t t;
   bool rtcValid = g_rtc.read(t);
   addResult(res, "RTC Uhrzeit", rtcValid ? "ok" : (g_rtc.present() ? "fehler" : "fehlt"),
@@ -540,8 +545,15 @@ void selfTestTask(void*) {
   }
   addResult(res, "SD-Karte", g_storage.sdMounted() ? "ok" : "fehlt", g_storage.sdStatus());
   addResult(res, "Ethernet W5500", g_net.ethLink() ? "ok" : "unbestaetigt", g_net.ethLink() ? "Link" : "kein Link");
-  addResult(res, "WLAN", g_net.wifiConnected() ? "ok" : "deaktiviert",
-            g_net.wifiConnected() ? "verbunden" : "aus (LAN hat Vorrang oder nicht eingerichtet)");
+  if (g_net.wifiConnected()) {
+    int rssi = g_net.rssi();
+    bool weak = rssi < -80;
+    addResult(res, "WLAN", weak ? "fehler" : "ok",
+              "verbunden, " + std::to_string(rssi) + " dBm" +
+                  (weak ? " - sehr schwach: externe Antenne am IPEX-Anschluss des ESP32-S3-WROOM-1U anschliessen" : ""));
+  } else {
+    addResult(res, "WLAN", "deaktiviert", "aus (LAN hat Vorrang oder nicht eingerichtet)");
+  }
   addResult(res, "MQTT", g_mqtt->connected() ? "ok" : "deaktiviert", g_mqtt->stateText());
   addResult(res, "RS485 (GPIO16/17)", g_rs485.active() ? "unbestaetigt" : "deaktiviert",
             "rtl_433-JSON-Eingang, 115200 Baud; Funktion erst mit Gateway pruefbar");

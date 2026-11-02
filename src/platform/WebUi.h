@@ -26,6 +26,9 @@ class WebUi {
 
  private:
   bool authorized(AsyncWebServerRequest* r);
+  // Request arrived through the setup access point (192.168.4.1): only the
+  // Wi-Fi setup page and /api/setup/* are served there.
+  static bool viaSetupAp(AsyncWebServerRequest* r);
   void setupOta();
 
   hc::HeatCoreSystem& sys_;

@@ -83,9 +83,13 @@ Beide Workflows müssen dafür auf dem Standard-Branch (`main`) liegen.
    (oder die IP aus dem Router/Display). **Ohne LAN:** nach ca. 20 s erscheint
    der Zugangspunkt `HeatCore-xxxx` (Passwort `heatcore123`, bitte ändern).
    Mit dem Handy verbinden – die Einrichtungsseite öffnet sich meist von selbst
-   (sonst `http://192.168.4.1/`). Unter System → Netzwerk „Netze suchen“, das
-   eigene WLAN wählen, Passwort eingeben, speichern: Die Seite zeigt die neue
-   Adresse an, der Zugangspunkt geht danach aus. Ablauf siehe unten.
+   (sonst `http://192.168.4.1/`). Über den Zugangspunkt gibt es **nur die
+   WLAN-Einrichtung**: Netz antippen, Passwort eingeben, „Verbinden“. Die Seite
+   zeigt danach die neue Adresse im Heimnetz an; dort ist das volle
+   Webinterface erreichbar, der Zugangspunkt geht kurz darauf aus.
+   **WLAN-Antenne:** Der ESP32-S3-WROOM-1U hat keine Leiterplattenantenne –
+   für WLAN eine externe Antenne am IPEX-Anschluss anschließen (ohne Antenne
+   nur ca. −90 dBm).
 2. System → Allgemein: Gerätename, Zeitzone, **Web-Passwort setzen**.
 3. Hardware → Selbsttest: I²C-Adressen, RTC, 1-Wire, RF, Display prüfen.
 4. Räume & Heizkreise anlegen, Ausgänge als „Heizkreis“ belassen.
@@ -108,7 +112,10 @@ Beide Workflows müssen dafür auf dem Standard-Branch (`main`) liegen.
 * Der Zugangspunkt bleibt nach einer erfolgreichen Verbindung noch 1 min an
   (5 min, solange noch ein Gerät damit verbunden ist), damit die neue Adresse
   abgelesen werden kann. Solange er aktiv ist, beantwortet ein DNS-Server alle
-  Namen mit 192.168.4.1 (Captive Portal).
+  Namen mit 192.168.4.1 (Captive Portal). Über den Zugangspunkt ist **nur**
+  die WLAN-Einrichtung erreichbar (Seite `setup.html`, API `/api/setup/*`);
+  Heizung, Einstellungen, Firmware-Update, MCP und WebSocket sind dort
+  gesperrt (HTTP 403). Ein gesetztes Web-Passwort gilt auch dort.
 * Neue WLAN-Zugangsdaten werden sofort ausprobiert.
 * Die Regelung arbeitet in jedem Zustand unabhängig vom Netzwerk weiter.
 * Logik: `lib/heatcore/src/hc/net/NetPolicy.*` (Host-Tests `net_*`),

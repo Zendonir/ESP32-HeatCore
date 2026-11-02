@@ -32,8 +32,14 @@ void I2cBus::noteResult(bool ok) {
 }
 
 bool I2cBus::probe(uint8_t addr) {
-  Wire.beginTransmission(addr);
-  return Wire.endTransmission() == 0;
+  // A one-byte read instead of an empty write: Arduino-ESP32 3.x maps the
+  // empty write to i2c_master_probe(), which on the KC868-A16 V3 reported
+  // ghost devices and missed the DS3231/24C02 (field self-test). Reading one
+  // byte is harmless for every device on this bus (PCF8574 port, DS3231 and
+  // 24C02 current address, SSD1306 status).
+  size_t n = Wire.requestFrom(addr, static_cast<size_t>(1));
+  while (Wire.available()) Wire.read();
+  return n == 1;
 }
 
 bool I2cBus::write(uint8_t addr, const uint8_t* data, size_t len) {

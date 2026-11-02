@@ -111,6 +111,30 @@ void statusJson(HeatCoreSystem& sys, JsonObject o) {
   o["sensorsTotal"] = static_cast<int>(sys.sensors.sensors().size());
 }
 
+void networkStatusJson(HeatCoreSystem& sys, JsonObject out) {
+  const PlatformStatus& pl = sys.platform;
+  out["state"] = pl.netState;
+  out["kind"] = pl.network;
+  out["ip"] = pl.ip;
+  out["detail"] = pl.netDetail;
+  out["ethLink"] = pl.ethLink;
+  out["wifiConnected"] = pl.wifiConnected;
+  out["wifiRssi"] = pl.wifiRssi;
+  out["apSsid"] = pl.apSsid;
+  out["hostname"] = sys.netCfg.hostname;
+  out["wifiSsid"] = sys.netCfg.wifiSsid;
+  JsonObject sc = out["scan"].to<JsonObject>();
+  sc["running"] = pl.wifiScanRunning;
+  JsonArray nets = sc["networks"].to<JsonArray>();
+  for (const WifiNetwork& w : pl.wifiScan) {
+    JsonObject x = nets.add<JsonObject>();
+    x["ssid"] = w.ssid;
+    x["rssi"] = w.rssi;
+    x["open"] = w.open;
+    x["channel"] = w.channel;
+  }
+}
+
 void firmwareJson(HeatCoreSystem& sys, JsonObject o) {
   const FirmwareStatus& f = sys.platform.firmware;
   o["version"] = kFirmwareVersion;
@@ -1041,28 +1065,36 @@ ApiResponse ApiRouter::handle(const ApiRequest& req) {
         } else {
           c.fail(404, "?");
         }
-      } else if (head == "network") {
-        const PlatformStatus& pl = sys.platform;
+      } else if (head == "setup") {
+        // Wi-Fi setup: the only API reachable through the setup access point
         if (p.size() == 2 && p[1] == "status" && c.is("GET")) {
-          out["state"] = pl.netState;
-          out["kind"] = pl.network;
-          out["ip"] = pl.ip;
-          out["detail"] = pl.netDetail;
-          out["ethLink"] = pl.ethLink;
-          out["wifiConnected"] = pl.wifiConnected;
-          out["wifiRssi"] = pl.wifiRssi;
-          out["apSsid"] = pl.apSsid;
-          out["hostname"] = sys.netCfg.hostname;
-          JsonObject sc = out["scan"].to<JsonObject>();
-          sc["running"] = pl.wifiScanRunning;
-          JsonArray nets = sc["networks"].to<JsonArray>();
-          for (const WifiNetwork& w : pl.wifiScan) {
-            JsonObject x = nets.add<JsonObject>();
-            x["ssid"] = w.ssid;
-            x["rssi"] = w.rssi;
-            x["open"] = w.open;
-            x["channel"] = w.channel;
+          networkStatusJson(sys, out);
+          out.remove("detail");  // no details about the installation for AP clients
+        } else if (p.size() == 2 && p[1] == "scan" && c.is("POST")) {
+          if (!sys.platformCommand) c.fail(501, "nicht verfuegbar");
+          else c.okOrFail(sys.platformCommand("wifi_scan", JsonObjectConst()));
+        } else if (p.size() == 2 && p[1] == "wifi" && c.is("POST")) {
+          std::string ssid = c.body()["ssid"] | "";
+          std::string pass = c.body()["password"] | "";
+          std::string err;
+          if (ssid.empty() || ssid.size() > 32) err = "WLAN-Name 1..32 Zeichen";
+          else if (!pass.empty() && (pass.size() < 8 || pass.size() > 63))
+            err = "WLAN-Passwort 8..63 Zeichen (leer bei offenem WLAN)";
+          if (err.empty()) {
+            JsonDocument d;
+            d["wifi"] = true;
+            d["wifiSsid"] = ssid;
+            d["wifiPassword"] = pass;
+            err = sys.sectionFromJson(ConfigSection::Network, d.as<JsonObjectConst>());
+            if (err.empty() && sys.platformCommand) sys.platformCommand("apply_network", d.as<JsonObjectConst>());
           }
+          c.okOrFail(err);
+        } else {
+          c.fail(404, "?");
+        }
+      } else if (head == "network") {
+        if (p.size() == 2 && p[1] == "status" && c.is("GET")) {
+          networkStatusJson(sys, out);
         } else if (p.size() == 2 && p[1] == "scan" && c.is("POST")) {
           if (!sys.platformCommand) c.fail(501, "nicht verfuegbar");
           else c.okOrFail(sys.platformCommand("wifi_scan", JsonObjectConst()));

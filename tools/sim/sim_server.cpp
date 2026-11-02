@@ -337,7 +337,10 @@ void serve(int port, const std::string& webPath) {
     } else if (path.rfind("/sim/", 0) == 0) {
       reply(c, 200, "application/json", simCommand(path, body));
     } else {
-      reply(c, 200, "text/html; charset=utf-8", readFile(webPath));
+      // /setup: Wi-Fi setup page (on the controller: every path through the setup access point)
+      std::string file = webPath;
+      if (path == "/setup") file = webPath.substr(0, webPath.find_last_of('/') + 1) + "setup.html";
+      reply(c, 200, "text/html; charset=utf-8", readFile(file));
     }
     close(c);
   }
