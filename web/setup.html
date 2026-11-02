@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HeatCore WLAN-Einrichtung</title>
+<style>
+:root{--bg:#f3f5f8;--panel:#fff;--text:#1d2430;--muted:#667085;--line:#dde2ea;--accent:#d9480f;--ok:#2b8a3e;--bad:#c92a2a;--chip:#eef1f5;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#12161c;--panel:#1b2129;--text:#e6e9ee;--muted:#98a2b3;--line:#2c3440;--chip:#252d38;--ok:#51cf66;--bad:#ff6b6b;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:480px;margin:0 auto;padding:20px 16px 40px}
+h1{font-size:22px;margin:0;color:var(--accent)}
+.sub{color:var(--muted);margin:2px 0 16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
+label{display:block;font-size:14px;color:var(--muted);margin:12px 0 4px}
+input{width:100%;font:inherit;padding:11px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text)}
+button{font:inherit;border:1px solid var(--line);background:var(--chip);color:var(--text);border-radius:8px;padding:10px 14px;cursor:pointer}
+button.p{background:var(--accent);border-color:var(--accent);color:#fff;width:100%;margin-top:16px;padding:13px}
+button:disabled{opacity:.6}
+.nets{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.net{display:flex;justify-content:space-between;align-items:center;text-align:left;width:100%}
+.net.sel{border-color:var(--accent);outline:1px solid var(--accent)}
+.bars{font-size:13px;color:var(--muted);white-space:nowrap}
+.row{display:flex;gap:8px;align-items:center}
+.muted{color:var(--muted);font-size:14px}
+.msg{margin-top:12px;font-size:15px}
+.ok{color:var(--ok)}.bad{color:var(--bad)}
+code{background:var(--chip);padding:1px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+<main>
+  <h1>HeatCore</h1>
+  <div class="sub">WLAN einrichten</div>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <b>Verfügbare Netze</b>
+      <button id="scan" type="button">Suchen</button>
+    </div>
+    <div id="nets" class="nets"><span class="muted">Suche läuft …</span></div>
+  </div>
+
+  <form class="card" id="form" autocomplete="off">
+    <label for="ssid">WLAN-Name</label>
+    <input id="ssid" maxlength="32" required autocapitalize="off" autocorrect="off" spellcheck="false">
+    <label for="pw">Passwort</label>
+    <input id="pw" type="password" maxlength="63" autocomplete="new-password">
+    <label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input id="show" type="checkbox" style="width:auto"> Passwort anzeigen</label>
+    <button class="p" id="go" type="submit">Verbinden</button>
+    <div id="msg" class="msg"></div>
+  </form>
+
+  <p class="muted">Diese Seite dient nur der WLAN-Einrichtung. Alle weiteren Einstellungen sind danach im Heimnetz unter der angezeigten Adresse erreichbar. Ist ein LAN-Kabel angeschlossen, hat LAN Vorrang und WLAN bleibt aus.</p>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const api=async(m,p,b)=>{const r=await fetch('/api/setup/'+p,{method:m,headers:b?{'Content-Type':'application/json'}:{},body:b?JSON.stringify(b):undefined,cache:'no-store'});let j={};try{j=await r.json()}catch(e){}if(!r.ok)throw new Error(j.error||('Fehler '+r.status));return j};
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const bars=r=>r>-60?'▂▄▆█':r>-70?'▂▄▆':r>-80?'▂▄':'▂';
+function showNets(list){const box=$('nets');box.textContent='';if(!list.length){const s=document.createElement('span');s.className='muted';s.textContent='Keine Netze gefunden – erneut suchen oder Namen unten eingeben.';box.append(s);return}
+ for(const w of list){const b=document.createElement('button');b.type='button';b.className='net'+(w.ssid===$('ssid').value?' sel':'');const n=document.createElement('span');n.textContent=w.ssid;const s=document.createElement('span');s.className='bars';s.textContent=(w.open?'offen  ':'🔒 ')+bars(w.rssi);b.append(n,s);
+  b.onclick=()=>{$('ssid').value=w.ssid;document.querySelectorAll('.net').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');$('pw').focus()};box.append(b)}}
+async function scan(){const btn=$('scan');btn.disabled=true;$('nets').innerHTML='<span class="muted">Suche läuft …</span>';
+ try{await api('POST','scan');for(let i=0;i<20;i++){await sleep(1000);const s=await api('GET','status');if(!s.scan.running){showNets(s.scan.networks);break}}}catch(e){$('nets').textContent=e.message}btn.disabled=false}
+$('scan').onclick=scan;
+$('show').onchange=e=>{$('pw').type=e.target.checked?'text':'password'};
+function msg(t,cls){const m=$('msg');m.className='msg '+(cls||'');m.textContent='';if(typeof t==='string')m.textContent=t;else m.append(...t)}
+$('form').onsubmit=async e=>{e.preventDefault();const ssid=$('ssid').value.trim(),pw=$('pw').value;if(!ssid)return;
+ $('go').disabled=true;msg('Verbinde mit „'+ssid+'“ …');
+ try{await api('POST','wifi',{ssid,password:pw})}catch(err){msg(err.message,'bad');$('go').disabled=false;return}
+ for(let i=0;i<45;i++){await sleep(2000);let s;try{s=await api('GET','status')}catch(err){continue}
+  if(s.wifiConnected){const host=(s.hostname||'heatcore')+'.local';const a=document.createElement('code');a.textContent='http://'+s.ip;const b=document.createElement('code');b.textContent='http://'+host;
+   msg(['Verbunden mit „'+ssid+'“. ','Die Steuerung ist jetzt im Heimnetz erreichbar unter ',a,' oder ',b,'. Verbinde dein Handy wieder mit deinem normalen WLAN und öffne diese Adresse. Dieser Zugangspunkt schaltet sich in wenigen Minuten ab.'],'ok');return}}
+ msg('Keine Verbindung zu „'+ssid+'“. Bitte Name und Passwort prüfen und erneut versuchen.','bad');$('go').disabled=false};
+api('GET','status').then(s=>{if(s.wifiSsid)$('ssid').value=s.wifiSsid;showNets(s.scan.networks||[]);scan()}).catch(()=>scan());
+</script>
+</body>
+</html>

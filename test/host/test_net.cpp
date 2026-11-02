@@ -132,3 +132,47 @@ TEST(net_lan_link_without_dhcp_falls_back) {
   n.run(61);
   CHECK(!n.d.ap);
 }
+
+#include "SimRig.h"
+#include "hc/api/ApiRouter.h"
+
+TEST(api_setup_wifi_only) {
+  sim::Rig r;
+  ApiRouter api(r.sys);
+  auto call = [&](const char* m, const char* path, const char* body = "") {
+    ApiRequest q;
+    q.method = m;
+    q.path = path;
+    q.body = body;
+    return api.handle(q);
+  };
+  std::string cmd;
+  r.sys.platformCommand = [&](const std::string& c, JsonObjectConst) {
+    cmd = c;
+    return std::string();
+  };
+  r.sys.platform.wifiScan = {{"Heimnetz", -50, false, 6}};
+  ApiResponse st = call("GET", "/api/setup/status");
+  CHECK_EQ(st.status, 200);
+  CHECK(st.body.find("Heimnetz") != std::string::npos);
+  CHECK(st.body.find("\"detail\"") == std::string::npos);  // no installation details for AP clients
+  CHECK_EQ(call("POST", "/api/setup/scan").status, 200);
+  CHECK_STR(cmd, "wifi_scan");
+  // validation
+  CHECK_EQ(call("POST", "/api/setup/wifi", R"({"ssid":"","password":"geheim123"})").status, 400);
+  CHECK_EQ(call("POST", "/api/setup/wifi", R"({"ssid":"Heimnetz","password":"kurz"})").status, 400);
+  CHECK(r.sys.netCfg.wifiSsid.empty());
+  // valid: only Wi-Fi fields change, the change is applied at once
+  std::string apPw = r.sys.netCfg.apPassword;
+  r.sys.netCfg.wifi = false;
+  CHECK_EQ(call("POST", "/api/setup/wifi", R"({"ssid":"Heimnetz","password":"geheim123"})").status, 200);
+  CHECK_STR(r.sys.netCfg.wifiSsid, "Heimnetz");
+  CHECK_STR(r.sys.netCfg.wifiPassword, "geheim123");
+  CHECK(r.sys.netCfg.wifi);
+  CHECK_STR(r.sys.netCfg.apPassword, apPw);
+  CHECK_STR(cmd, "apply_network");
+  // open network without password
+  CHECK_EQ(call("POST", "/api/setup/wifi", R"({"ssid":"Cafe","password":""})").status, 200);
+  CHECK(r.sys.netCfg.wifiPassword.empty());
+  CHECK_EQ(call("POST", "/api/setup/other").status, 404);
+}

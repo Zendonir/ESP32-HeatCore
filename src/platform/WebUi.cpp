@@ -1,5 +1,7 @@
 #include "platform/WebUi.h"
 
+#include <WiFi.h>
+
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -29,6 +31,10 @@ class ApiHandler : public AsyncWebHandler {
   }
   void handleRequest(AsyncWebServerRequest* r) override {
     if (!ui_.authorized(r)) return r->requestAuthentication();
+    if (WebUi::viaSetupAp(r) && !r->url().startsWith("/api/setup/")) {
+      r->send(403, "application/json", "{\"error\":\"Ueber den Einrichtungs-Zugangspunkt ist nur die WLAN-Einrichtung moeglich\"}");
+      return;
+    }
     if (r->contentLength() > kMaxBody) {
       r->send(413, "application/json", "{\"error\":\"Anfrage zu gross\"}");
       return;
@@ -69,6 +75,7 @@ class McpHandler : public AsyncWebHandler {
     if (r->_tempObject && index + len <= total) memcpy(static_cast<uint8_t*>(r->_tempObject) + index, data, len);
   }
   void handleRequest(AsyncWebServerRequest* r) override {
+    if (WebUi::viaSetupAp(r)) return reply(r, 403, "{\"error\":\"nicht ueber den Einrichtungs-Zugangspunkt\"}");
     std::string token;
     bool enabled;
     {
@@ -127,6 +134,11 @@ class McpHandler : public AsyncWebHandler {
   WebUi& ui_;
 };
 
+bool WebUi::viaSetupAp(AsyncWebServerRequest* r) {
+  if (!(WiFi.getMode() & WIFI_AP) || !r->client()) return false;
+  return r->client()->localIP() == WiFi.softAPIP();
+}
+
 WebUi::WebUi(hc::HeatCoreSystem& sys, Ota& ota) : sys_(sys), api_(sys), mcp_(sys), ota_(ota) {}
 
 bool WebUi::authorized(AsyncWebServerRequest* r) {
@@ -172,6 +184,10 @@ void WebUi::setupOta() {
       "/api/ota", HTTP_POST,
       [this](AsyncWebServerRequest* r) {
         if (!authorized(r)) return r->requestAuthentication();
+        if (viaSetupAp(r)) {
+          r->send(403, "application/json", "{\"error\":\"nicht ueber den Einrichtungs-Zugangspunkt\"}");
+          return;
+        }
         auto* u = static_cast<OtaUpload*>(r->_tempObject);
         if (!u || !u->done || u->failed) {
           std::string msg = u && u->error[0] ? u->error : "keine Firmware-Datei empfangen";
@@ -187,6 +203,7 @@ void WebUi::setupOta() {
           auto* u = static_cast<OtaUpload*>(r->_tempObject);
           if (!u || u->started || u->failed) return;
           if (!authorized(r)) return setError(u, "nicht angemeldet");
+          if (viaSetupAp(r)) return setError(u, "nicht ueber den Einrichtungs-Zugangspunkt");
           size_t size = r->hasParam("size") ? static_cast<size_t>(r->getParam("size")->value().toInt()) : 0;
           std::string sha = r->hasParam("sha256") ? r->getParam("sha256")->value().c_str() : "";
           std::string src = r->hasParam("source") ? r->getParam("source")->value().c_str() : "Upload";
@@ -224,20 +241,31 @@ void WebUi::begin() {
   ws_.onEvent([this](AsyncWebSocket*, AsyncWebSocketClient* c, AwsEventType type, void*, uint8_t*, size_t) {
     if (type == WS_EVT_CONNECT) c->text("{\"t\":\"hello\",\"fw\":\"" + String(hc::kFirmwareVersion) + "\"}");
   });
-  ws_.setFilter([this](AsyncWebServerRequest* r) { return authorized(r); });
+  ws_.setFilter([this](AsyncWebServerRequest* r) { return !viaSetupAp(r) && authorized(r); });
   server_.addHandler(&ws_);
   setupOta();
   server_.addHandler(new McpHandler(*this));
   server_.addHandler(new ApiHandler(*this));
-  auto index = [this](AsyncWebServerRequest* r) {
-    if (!authorized(r)) return r->requestAuthentication();
-    AsyncWebServerResponse* resp = r->beginResponse(200, "text/html", kIndexHtmlGz, kIndexHtmlGzLen);
+  auto page = [](AsyncWebServerRequest* r, const uint8_t* data, size_t len) {
+    AsyncWebServerResponse* resp = r->beginResponse(200, "text/html", data, len);
     resp->addHeader("Content-Encoding", "gzip");
-    resp->addHeader("Cache-Control", "no-cache");
+    resp->addHeader("Cache-Control", "no-store");
     r->send(resp);
+  };
+  // Every path through the setup access point leads to the Wi-Fi setup page;
+  // this also answers the captive portal checks of phones (generate_204,
+  // hotspot-detect.html, ...) so the page opens by itself.
+  auto index = [this, page](AsyncWebServerRequest* r) {
+    if (!authorized(r)) return r->requestAuthentication();
+    if (viaSetupAp(r)) return page(r, kSetupHtmlGz, kSetupHtmlGzLen);
+    page(r, kIndexHtmlGz, kIndexHtmlGzLen);
   };
   server_.on("/", HTTP_GET, index);
   server_.on("/index.html", HTTP_GET, index);
+  server_.on("/setup", HTTP_GET, [this, page](AsyncWebServerRequest* r) {
+    if (!authorized(r)) return r->requestAuthentication();
+    page(r, kSetupHtmlGz, kSetupHtmlGzLen);
+  });
   server_.onNotFound([index](AsyncWebServerRequest* r) {
     if (r->url().startsWith("/api/")) r->send(404, "application/json", "{\"error\":\"nicht gefunden\"}");
     else index(r);  // single page application

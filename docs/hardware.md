@@ -42,6 +42,21 @@ Definiert in `src/platform/Board.h`.
 GPIO43/44 (UART0) sind mit dem W5500 belegt. Serielle Ausgaben laufen deshalb
 über die native USB-Schnittstelle (`ARDUINO_USB_CDC_ON_BOOT=1`).
 
+## Erfahrungen vom ersten Test auf der Platine
+
+* Expander 0x24/0x25/0x22/0x21, SSD1306 (0x3C), DS3231 (Uhrzeit, Temperatur),
+  SD-Karte, PSRAM, 433-MHz-Empfänger und -Sender (Loopback 6/6 Rahmen)
+  funktionieren.
+* Der I²C-Scan des Arduino-Cores 3.3 (leerer Schreibzugriff,
+  `i2c_master_probe`) meldete auf der Platine Dutzende Geisteradressen und
+  verfehlte DS3231/24C02. Die Firmware prüft Adressen deshalb per
+  1-Byte-Lesezugriff (`I2cBus::probe`).
+* WLAN mit −95 dBm: Der ESP32-S3-WROOM-1U braucht eine externe Antenne am
+  IPEX-Anschluss; der Selbsttest weist unter −80 dBm darauf hin.
+* Ein üblicher 433-MHz-Superregenerativempfänger liefert im Ruhezustand
+  mehrere tausend Rauschflanken pro Sekunde – das ist normal und wird von der
+  Dekodierung herausgefiltert.
+
 ## Elektrische Kompatibilität – vor dem ersten Einschalten prüfen
 
 1. **433-MHz-Empfänger (GPIO8).** Der ESP32-S3 ist nicht 5-V-tolerant. Im
