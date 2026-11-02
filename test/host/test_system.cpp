@@ -436,6 +436,8 @@ TEST(io_analog_voltage_and_current_modes) {
   r.sys.io.onAnalog(2, 1.8f, r.clock.ms);  // 1.8 V / 150 Ohm = 12 mA
   CHECK_NEAR(r.sys.io.ai[2].milliamps, 12.f, 0.001f);
   CHECK(!r.sys.io.ai[2].loopFault);
+  r.sys.io.onAnalog(3, 0.f, r.clock.ms);  // unused (disabled) input: 0 mA is no wire break
+  CHECK(!r.sys.io.ai[3].loopFault);
   // 4..20 mA -> 0..100 degC
   r.load(ConfigSection::Io, R"({"analog":[{"n":3,"enabled":true,"mode":"current","shuntOhm":150,"scale":6.25,"offset":-25,"unit":"C"}]})");
   r.sys.io.onAnalog(2, 1.8f, r.clock.ms);

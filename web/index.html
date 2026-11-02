@@ -45,6 +45,7 @@ button:disabled{opacity:.5}
 .form{display:grid;grid-template-columns:minmax(120px,220px) 1fr;gap:8px 12px;align-items:center}
 .form label{color:var(--muted)}
 .hint{font-size:12px;color:var(--muted);margin-top:4px}
+#conn{display:none;position:fixed;left:50%;bottom:16px;transform:translateX(-50%);max-width:min(560px,calc(100% - 32px));background:var(--warn);color:#fff;padding:8px 12px;border-radius:8px;font-size:13px;z-index:20;box-shadow:0 2px 8px rgba(0,0,0,.2)}
 .chart{position:relative}.chart svg{display:block;width:100%;height:auto;overflow:visible}.chart text{font-size:11px;fill:var(--muted)}
 .chart .tip{position:absolute;pointer-events:none;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,.15);white-space:nowrap;display:none}
 .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:2px 0 6px}.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:5px}
@@ -79,7 +80,11 @@ canvas.oled{image-rendering:pixelated;background:#000;border-radius:6px;border:4
 const $=s=>document.querySelector(s);
 function h(tag,attrs,...kids){const e=document.createElement(tag);if(attrs)for(const[k,v]of Object.entries(attrs)){if(v==null||v===false)continue;if(k.startsWith('on'))e.addEventListener(k.slice(2),v);else if(k==='style')e.style.cssText=v;else if(k==='value')e.value=v;else if(k==='checked')e.checked=!!v;else e.setAttribute(k,v===true?'':v)}for(const c of kids.flat()){if(c==null||c===false)continue;e.append(c instanceof Node?c:document.createTextNode(String(c)))}return e}
 function toast(m,bad){const t=$('#toast');t.textContent=m;t.style.background=bad?'#c92a2a':'#222';t.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>t.style.display='none',3500)}
-async function api(method,path,body){const o={method,headers:{}};if(body!==undefined){o.body=typeof body==='string'?body:JSON.stringify(body);o.headers['Content-Type']='application/json'}const r=await fetch('/api/'+path,o);let j={};try{j=await r.json()}catch(e){}if(!r.ok){const m=j.error||('HTTP '+r.status);throw new Error(m)}return j}
+async function api(method,path,body){const o={method,headers:{}};if(body!==undefined){o.body=typeof body==='string'?body:JSON.stringify(body);o.headers['Content-Type']='application/json'}
+ // a hanging request (weak Wi-Fi) must not block the page forever
+ const ac=new AbortController(),tm=setTimeout(()=>ac.abort(),12000);o.signal=ac.signal;let r;
+ try{r=await fetch('/api/'+path,o)}catch(e){throw new Error(e.name==='AbortError'?'Zeitüberschreitung – Verbindung zur Steuerung zu langsam':'Steuerung nicht erreichbar')}finally{clearTimeout(tm)}
+ let j={};try{j=await r.json()}catch(e){}if(!r.ok){const m=j.error||('HTTP '+r.status);throw new Error(m)}return j}
 const GET=p=>api('GET',p),POST=(p,b)=>api('POST',p,b??{}),PUT=(p,b)=>api('PUT',p,b),DEL=p=>api('DELETE',p);
 async function act(fn,okMsg){try{const r=await fn();if(okMsg)toast(okMsg);return r}catch(e){toast(e.message,true);return undefined}}
 const fmt=(v,d=1)=>v==null||isNaN(v)?'–':Number(v).toFixed(d);
@@ -90,7 +95,10 @@ const stChip=s=>chip(s,s==='ok'?'ok':(s==='fehler'||s==='fehlt'||s==='fault'||s=
 function sel(opts,val,onch,attrs){return h('select',Object.assign({onchange:e=>onch&&onch(e.target.value)},attrs||{}),opts.map(o=>{const[v,l]=Array.isArray(o)?o:[o,o];return h('option',{value:v,selected:String(v)===String(val)},l)}))}
 function field(label,el,hint){return[h('label',null,label),h('div',null,el,hint?h('div',{class:'hint'},hint):null)]}
 function inp(obj,key,type,attrs){const a=Object.assign({value:obj[key]??''},attrs||{});if(type==='checkbox'){return h('input',Object.assign({type:'checkbox',checked:!!obj[key],onchange:e=>obj[key]=e.target.checked},attrs||{}))}return h('input',Object.assign(a,{type:type||'text',oninput:e=>{obj[key]=type==='number'?(e.target.value===''?'':Number(e.target.value)):e.target.value}}))}
-let timers=[];function every(ms,fn){fn();timers.push(setInterval(fn,ms))}
+let timers=[];
+// Periodic refresh: never overlaps (slow connection) and shows a notice when the controller does not answer.
+function every(ms,fn){let busy=false;const run=async()=>{if(busy)return;busy=true;try{await fn();connState(true)}catch(e){connState(false,e.message)}finally{busy=false}};run();timers.push(setInterval(run,ms))}
+function connState(ok,msg){let b=$('#conn');if(!b){b=h('div',{id:'conn'});document.body.append(b)}b.style.display=ok?'none':'block';if(!ok)b.textContent='Werte nicht aktuell: '+(msg||'keine Antwort')+'. Bei schwachem WLAN (Antenne?) oder ohne Verbindung werden die Anzeigen nicht aktualisiert.'}
 function clearTimers(){timers.forEach(clearInterval);timers=[]}
 const DAYS=['Mo','Di','Mi','Do','Fr','Sa','So'];
 
