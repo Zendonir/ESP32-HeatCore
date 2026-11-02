@@ -123,7 +123,8 @@ void IoManager::onAnalog(int idx, float pinVolts, Millis now) {
   if (c.mode == AnalogMode::Current) {
     a.volts = pinVolts;
     a.milliamps = c.shuntOhm > 0.f ? pinVolts / c.shuntOhm * 1000.f : 0.f;
-    a.loopFault = a.milliamps < kLoopMinMa || a.milliamps > kLoopMaxMa;
+    // supervised only when the channel is in use (an unused input reads 0 mA)
+    a.loopFault = c.enabled && (a.milliamps < kLoopMinMa || a.milliamps > kLoopMaxMa);
     a.value = a.milliamps * c.scale + c.offset;
   } else {
     a.volts = pinVolts * c.dividerGain;
