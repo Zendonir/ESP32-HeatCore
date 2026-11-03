@@ -32,6 +32,7 @@
 #include "hc/api/ApiRouter.h"
 #include "hc/system/Firmware.h"
 #include "hc/mcp/McpServer.h"
+#include "hc/mqtt/MqttBridge.h"
 #include "hc/core/Log.h"
 #include "hc/rf/RfCodec.h"
 #include "hc/system/HeatCoreSystem.h"
@@ -238,6 +239,11 @@ std::string simCommand(const std::string& path, const std::string& body) {
     if (d["active"] | false) g_inputs |= static_cast<uint16_t>(1u << (n - 1));
     else g_inputs &= static_cast<uint16_t>(~(1u << (n - 1)));
     return "{\"ok\":true}";
+  }
+  if (path == "/sim/mqtt") {  // inject an MQTT message as if it came from the broker
+    MqttBridge br(*g_sys);
+    bool known = br.handle(d["topic"] | "", d["payload"] | "");
+    return known ? "{\"ok\":true}" : "{\"ok\":false,\"error\":\"Thema nicht abonniert\"}";
   }
   if (path == "/sim/window") {
     g_plants[d["room"] | ""].window = d["open"] | false;

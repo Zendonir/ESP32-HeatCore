@@ -1065,6 +1065,23 @@ ApiResponse ApiRouter::handle(const ApiRequest& req) {
         } else {
           c.fail(404, "?");
         }
+      } else if (head == "external") {
+        // external sources: MQTT subscriptions / HTTP polls of other devices
+        if (p.size() == 1 && c.is("GET")) {
+          sys.external.toJson(out["sources"].to<JsonArray>());
+          sys.external.statusJson(out["status"].to<JsonArray>(), sys.clock().nowMs());
+          out["mqttEnabled"] = sys.mqttCfg.enabled;
+          out["mqttConnected"] = sys.platform.mqttConnected;
+        } else if (p.size() == 1 && c.is("PUT")) {
+          std::string err = sys.external.fromJson(c.body()["sources"].as<JsonArrayConst>());
+          if (err.empty()) {
+            sys.markDirty(ConfigSection::Sensors);
+            if (sys.platformCommand) sys.platformCommand("apply_mqtt", JsonObjectConst());  // resubscribe
+          }
+          c.okOrFail(err);
+        } else {
+          c.fail(404, "?");
+        }
       } else if (head == "setup") {
         // Wi-Fi setup: the only API reachable through the setup access point
         if (p.size() == 2 && p[1] == "status" && c.is("GET")) {

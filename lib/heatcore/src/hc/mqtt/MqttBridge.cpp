@@ -56,8 +56,10 @@ std::string MqttBridge::uid(const std::string& obj) const { return "hc_" + sys_.
 
 std::vector<std::string> MqttBridge::subscriptions() const {
   std::string b = base();
-  return {b + "/room/+/+/set", b + "/mode/set",        b + "/rf/tx/+/+/send", b + "/display/+/set",
-          b + "/output/+/set", b + "/rule/+/run",      b + "/in/#"};
+  std::vector<std::string> s = {b + "/room/+/+/set", b + "/mode/set",   b + "/rf/tx/+/+/send", b + "/display/+/set",
+                                b + "/output/+/set", b + "/rule/+/run", b + "/in/#"};
+  for (auto& t : sys_.external.mqttTopics()) s.push_back(t);  // other devices (Shelly, Button+, ...)
+  return s;
 }
 
 void MqttBridge::addConfig(std::vector<MqttMsg>& out, std::vector<std::string>& topics, const char* component,
@@ -368,6 +370,38 @@ void MqttBridge::roomState(const Room& r, std::vector<MqttMsg>& out) const {
   d["reason"] = r.reason;
   d["manual"] = r.manualActive;
   out.push_back({base() + "/room/" + r.id + "/state", toStr(d), true});
+  if (!sys_.mqttCfg.roomValueTopics) return;
+  // one plain value per topic for simple displays (Button+, ...)
+  std::string p = base() + "/room/" + r.id + "/";
+  auto num = [](float v) {
+    char b[16];
+    std::snprintf(b, sizeof(b), "%.1f", static_cast<double>(v));
+    return std::string(b);
+  };
+  auto de = [&](float v) {
+    std::string s = num(v);
+    std::replace(s.begin(), s.end(), '.', ',');
+    return s;
+  };
+  out.push_back({p + "temp", r.hasTemp ? num(r.temperature) : std::string(), true});
+  out.push_back({p + "setpoint", num(r.setpoint), true});
+  out.push_back({p + "heating", r.demand ? "1" : "0", true});
+  out.push_back({p + "window", r.windowOpen() ? "1" : "0", true});
+  // effective state (in auto mode the schedule decides between comfort and eco)
+  auto near = [&](float a) { return std::fabs(r.setpoint - a) < 0.05f; };
+  const char* modeText = r.mode == RoomMode::Off   ? "Aus"
+                         : r.windowOpen()         ? "Fenster offen"
+                         : r.manualActive         ? "Hand"
+                         : near(r.comfort)        ? "Komfort"
+                         : near(r.eco)            ? "Absenkung"
+                         : near(r.frost)          ? "Frostschutz"
+                                                  : "Auto";
+  out.push_back({p + "mode_text", modeText, true});
+  const Sensor* sen = r.tempSensor.empty() ? nullptr : sys_.sensors.find(r.tempSensor);
+  if (sen && sen->hasHumidity) out.push_back({p + "humidity", num(sen->humidity), true});
+  std::string text = (r.hasTemp ? de(r.temperature) : std::string("--")) + "° / " + de(r.setpoint) + "°" +
+                     (r.windowOpen() ? " Fenster" : r.demand ? " heizt" : "");
+  out.push_back({p + "text", text, true});
 }
 
 void MqttBridge::rfDeviceState(const rf::RxDevice& dev, std::vector<MqttMsg>& out) const {
@@ -542,8 +576,10 @@ void MqttBridge::onEvent(const Event& e, std::vector<MqttMsg>& out) const {
 // --------------------------------------------------------------- commands
 
 bool MqttBridge::handle(const std::string& topic, const std::string& payload, std::string* error) {
+  // values and buttons of other devices (external sources)
+  bool external = sys_.external.ingestMqtt(sys_, topic, payload, sys_.clock().nowMs());
   std::string b = base() + "/";
-  if (topic.compare(0, b.size(), b) != 0) return false;
+  if (topic.compare(0, b.size(), b) != 0) return external;
   std::vector<std::string> p = split(topic.substr(b.size()), '/');
   ActionOrigin origin{EventSource::Mqtt, 0, 0, false};
   std::string err;

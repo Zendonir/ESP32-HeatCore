@@ -41,6 +41,9 @@ struct MqttConfig {
   bool discovery = true;
   std::string discoveryPrefix = "homeassistant";
   uint16_t stateIntervalSec = 60;
+  // additionally publish plain values per room (<base>/room/<id>/temp, ...)
+  // for displays such as Button+ that show one value per topic
+  bool roomValueTopics = true;
 };
 
 void systemConfigToJson(const SystemConfig& c, JsonObject o, bool includeSecrets);

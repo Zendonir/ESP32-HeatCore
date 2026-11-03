@@ -36,6 +36,53 @@ deaktivieren, Heizkreis-Ausgänge schalten, Ausgänge unbegrenzt einschalten ode
 die lokale Regelung blockieren. Alle Befehle laufen durch denselben
 Aktionsausführer mit Quelle „mqtt“.
 
+### Raumwerte für Anzeigen (z. B. Button+)
+
+Zusätzlich zu `<basis>/room/<id>/state` (JSON) werden – abschaltbar unter
+System → MQTT („Raumwerte als einzelne Themen“) – einfache Werte veröffentlicht
+(retained):
+
+| Thema | Beispiel |
+|---|---|
+| `<basis>/room/<id>/temp` | `21.3` |
+| `<basis>/room/<id>/setpoint` | `21.5` |
+| `<basis>/room/<id>/heating` | `1` / `0` |
+| `<basis>/room/<id>/window` | `1` / `0` |
+| `<basis>/room/<id>/mode_text` | `Komfort`, `Absenkung`, `Frostschutz`, `Hand`, `Fenster offen`, `Aus` |
+| `<basis>/room/<id>/humidity` | `48.0` (wenn der Raumfühler Feuchte liefert) |
+| `<basis>/room/<id>/text` | `21,3° / 21,5° heizt` |
+
+## Externe Quellen (Übersicht → Externe Quellen)
+
+Messwerte und Tasten anderer Geräte – ohne Firmwareänderung konfigurierbar:
+
+* **MQTT-Abo** auf ein beliebiges Thema (ohne Platzhalter) oder **HTTP-Abfrage**
+  einer lokalen `http://`-Adresse (Intervall 10–3600 s, eigener Task, Timeout 3 s).
+* Inhalt: reine Zahl (`21.3`, `21,3 °C`) oder JSON mit Feldpfad
+  (`value`, `params.bthomesensor:200.value`, `a.0.b`).
+* Arten: **Temperatur** → Sensor `ext:<name>` (unter Sensoren → neu gefunden
+  einem Raum zuordnen; Timeout, Korrektur, Ersatzfühler wie bei jedem Sensor),
+  **Luftfeuchte** / **Batterie %** → ergänzen eine Temperaturquelle,
+  **Taste/Auslöser** → Regel-Auslöser „MQTT“ mit Thema `<name>`.
+* Unplausible Werte (Temperatur außerhalb −50…120 °C) werden verworfen und
+  angezeigt. Fällt eine Quelle aus, wird der Sensor nach seinem Timeout als
+  gestört behandelt; die Regelung nutzt den Ersatzfühler bzw. die
+  Fühlerausfall-Strategie.
+
+Beispiele:
+
+| Gerät | Quelle | Thema / URL | Pfad |
+|---|---|---|---|
+| Shelly BLU H&T über Shelly Gen2/Gen3 („Generic status update over MQTT“) | MQTT | `shellyplus1-xxxx/status/bthomesensor:200` | `value` |
+| dito, Gen3 gesammelte Meldungen | MQTT | `shelly1g3-xxxx/events/rpc` | `params.bthomesensor:200.value` |
+| Shelly ohne Broker | HTTP | `http://<ip>/rpc/BTHomeSensor.GetStatus?id=200` | `value` |
+| Zigbee2MQTT-Fühler | MQTT | `zigbee2mqtt/<name>` | `temperature` |
+| Button+ Taste | MQTT | Tastenthema aus der Button+-Konfiguration | leer |
+
+Die Nummern der `bthomesensor`-Komponenten und die Button+-Themen stehen in der
+jeweiligen Geräteoberfläche bzw. lassen sich mit MQTT Explorer ablesen.
+REST: `GET/PUT /api/external`.
+
 ## REST-API (Auszug)
 
 Alle Antworten JSON, Fehler als `{"error": "..."}` mit HTTP-Status.

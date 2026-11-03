@@ -12,6 +12,7 @@
 // Only the control and io tasks are needed for heating; a failure of any
 // other task, of the network or of the display does not stop control.
 #include <Arduino.h>
+#include <HTTPClient.h>
 #include <esp_heap_caps.h>
 #include <esp_system.h>
 #include <esp_task_wdt.h>
@@ -410,6 +411,41 @@ void netTask(void*) {
   }
 }
 
+// Polls the HTTP external sources (e.g. Shelly RPC API) one after another.
+// Runs in its own task: a slow or absent device never delays control.
+void extPollTask(void*) {
+  for (;;) {
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    if (!g_net.online()) continue;
+    std::vector<std::pair<size_t, std::string>> jobs;
+    {
+      Lock lk(g_sys->mutex());
+      for (size_t i : g_sys->external.dueHttp(millis())) jobs.emplace_back(i, g_sys->external.list[i].topic);
+    }
+    for (auto& j : jobs) {
+      std::string body;
+      int code = -1;
+      {
+        HTTPClient http;
+        http.setConnectTimeout(2000);
+        http.setTimeout(3000);
+        if (http.begin(j.second.c_str())) {
+          code = http.GET();
+          if (code == 200) {
+            if (http.getSize() > 16384) code = -2;
+            else body = http.getString().c_str();
+          }
+          http.end();
+        }
+      }
+      Lock lk(g_sys->mutex());
+      auto& list = g_sys->external.list;
+      if (j.first < list.size() && list[j.first].topic == j.second)  // configuration unchanged meanwhile
+        g_sys->external.ingestHttp(*g_sys, j.first, code, body, millis());
+    }
+  }
+}
+
 void saveHistory() {
   std::string blob;
   {
@@ -724,6 +760,7 @@ void setup() {
   xTaskCreatePinnedToCore(displayTask, "display", 8192, nullptr, 1, nullptr, 0);
   xTaskCreatePinnedToCore(netTask, "net", 12288, nullptr, 2, nullptr, 0);
   xTaskCreatePinnedToCore(storageTask, "storage", 10240, nullptr, 1, nullptr, 0);
+  xTaskCreatePinnedToCore(extPollTask, "extpoll", 6144, nullptr, 1, nullptr, 0);
 
   delay(5000);
   startSelfTest();
