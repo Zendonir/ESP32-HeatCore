@@ -160,7 +160,7 @@ Schreibvorgänge). Vor größeren Versionssprüngen trotzdem: System → Allgeme
 ```bash
 cmake -S . -B build/host
 cmake --build build/host -j
-./build/host/heatcore_tests            # 86 Tests
+./build/host/heatcore_tests            # 91 Tests
 ./build/host/heatcore_sim --demo       # http://127.0.0.1:8080/
 ```
 

@@ -98,6 +98,7 @@ void mqttConfigToJson(const MqttConfig& c, JsonObject o, bool includeSecrets) {
   o["discovery"] = c.discovery;
   o["discoveryPrefix"] = c.discoveryPrefix;
   o["stateIntervalSec"] = c.stateIntervalSec;
+  o["roomValueTopics"] = c.roomValueTopics;
 }
 
 std::string mqttConfigFromJson(MqttConfig& c, JsonObjectConst o) {
@@ -111,6 +112,7 @@ std::string mqttConfigFromJson(MqttConfig& c, JsonObjectConst o) {
   n.discovery = o["discovery"] | n.discovery;
   n.discoveryPrefix = o["discoveryPrefix"] | n.discoveryPrefix.c_str();
   n.stateIntervalSec = o["stateIntervalSec"] | n.stateIntervalSec;
+  n.roomValueTopics = o["roomValueTopics"] | n.roomValueTopics;
   if (n.enabled && n.host.empty()) return "MQTT-Broker fehlt";
   if (n.port == 0) return "MQTT-Port ungueltig";
   if (n.baseTopic.find_first_of("#+") != std::string::npos) return "Basisthema ohne Platzhalter";

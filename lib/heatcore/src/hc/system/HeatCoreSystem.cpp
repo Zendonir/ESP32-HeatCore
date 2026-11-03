@@ -1041,6 +1041,7 @@ void HeatCoreSystem::sectionToJson(ConfigSection s, JsonObject o, bool includeSe
     case ConfigSection::Sensors:
       o["autoAdoptOneWire"] = sensors.autoAdoptOneWire;
       sensors.toJson(o["sensors"].to<JsonArray>(), false);
+      external.toJson(o["external"].to<JsonArray>());
       break;
     case ConfigSection::Safety: safety.toJson(o, false); break;
     case ConfigSection::Rf: {
@@ -1111,6 +1112,7 @@ std::string HeatCoreSystem::sectionFromJson(ConfigSection s, JsonObjectConst o) 
     case ConfigSection::Sensors:
       sensors.autoAdoptOneWire = o["autoAdoptOneWire"] | false;
       err = sensors.fromJson(o["sensors"].as<JsonArrayConst>());
+      if (err.empty() && !o["external"].isNull()) err = external.fromJson(o["external"].as<JsonArrayConst>());
       break;
     case ConfigSection::Safety: err = safety.fromJson(o); break;
     case ConfigSection::Rf: {

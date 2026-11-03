@@ -23,6 +23,7 @@
 #include "hc/io/IoManager.h"
 #include "hc/model/ThermalModel.h"
 #include "hc/stats/History.h"
+#include "hc/sensors/ExternalSources.h"
 #include "hc/ai/AiChanges.h"
 #include "hc/rf/RfDevices.h"
 #include "hc/rf/RfReceiver.h"
@@ -129,6 +130,7 @@ class HeatCoreSystem : public IAutomationContext {
   ThermalModelManager model;
   History history;  // recorded operating data (statistics, AI analysis)
   AiState ai;       // MCP access level, token and change journal
+  ExternalSources external;  // MQTT subscriptions / HTTP polls of other devices
   DisplayManager display;
   AutomationEngine automation;
 
