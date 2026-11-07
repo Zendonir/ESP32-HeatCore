@@ -28,7 +28,7 @@ Definiert in `src/platform/Board.h`.
 | SSD1306 OLED | 0x3C (I²C-Steckleiste) | Blockschaltbild; Foto: Modul auf Abstandsbolzen über der Platine |
 | RF433 Empfänger | GPIO8 | Blockschaltbild; A16-Schaltplan: Sockel P2 5 V, Daten über U17 (74LVC1G125) auf 3,3 V; V3.1-Foto: U17 + C8 vorhanden, zusätzlich R160 |
 | RF433 Sender | GPIO18 | Blockschaltbild; A16-Schaltplan: Sockel P7 (GND, 3,3 V, Daten); V3.1-Foto: 4-poliges Modul mit EN-Pin im 3-poligen Sockel → Belegung **unbestätigt** |
-| 1-Wire 1/2/3 | GPIO47 / GPIO48 / GPIO38 | dokumentiert, Pull-ups auf der Platine |
+| 1-Wire 1/2/3 | GPIO47 / GPIO48 / GPIO38 | dokumentiert, Pull-ups auf der Platine; eigener Treiber (die Arduino-Bibliothek „OneWire“ bedient auf dem ESP32-S3 nur GPIO0–33 und fand an diesen Pins nie Sensoren – behoben in 0.7.0) |
 | Analog A1 / A2 (0–5 V) | GPIO4 / GPIO6 | Blockschaltbild; Teiler 5,1 kΩ/10 kΩ laut A16-Schaltplan (Faktor 1,51) |
 | Analog A3 / A4 (4–20 mA) | GPIO7 / GPIO5 | Blockschaltbild; Shunt 150 Ω direkt am ADC-Pin laut A16-Schaltplan (20 mA → 3,0 V) |
 | RS485 RX / TX | GPIO17 / GPIO16 | dokumentiert; A16-Schaltplan: MAX13487E mit automatischer Richtungsumschaltung |
@@ -160,6 +160,24 @@ GPIO43/44 (UART0) sind mit dem W5500 belegt. Serielle Ausgaben laufen deshalb
 * Stromlos offene Ventile (NO) sind konfigurierbar; bei ihnen bedeutet „sicher“
   = Ausgang EIN (Ventil zu). Bei Stromausfall öffnen NO-Ventile physikalisch –
   das kann keine Firmware verhindern.
+
+## Stabilität und Neustartdiagnose
+
+* Alle zyklischen Aufgaben (Regelung, Ein-/Ausgänge, Funk, Sensoren, Display,
+  Netzwerk, Speicher, externe Quellen) werden vom Hardware-Task-Watchdog
+  überwacht. Hängt eine Aufgabe länger als 30 s, startet der ESP32 neu; die
+  Ausgänge gehen dabei in den sicheren Zustand.
+* Der Grund des letzten Neustarts steht unter **Hardware → Selbsttest &
+  Status → Letzter Neustart**, z. B. „Task-Watchdog (Aufgabe hing) nach
+  3 h 12 min; zuletzt hängend: net (seit 31 s)“ oder „Unterspannung
+  (Brownout) – Netzteil prüfen“. Die Angabe überlebt Neustarts, nicht aber
+  einen Stromausfall.
+* Selbstheilung: War die Steuerung online und hat danach 30 min lang weder
+  LAN noch WLAN (und niemand ist am Einrichtungs-Zugangspunkt), startet sie
+  einmal neu. Ist der interne Arbeitsspeicher eine Minute lang erschöpft,
+  ebenfalls.
+* Das Display schaltet sich nach der eingestellten Zeit (Standard 5 min)
+  ab; ein Tastendruck weckt es. „Display aus“ allein ist kein Fehler.
 
 ## Bedienelemente
 

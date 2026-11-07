@@ -1,7 +1,9 @@
 #include "platform/Peripherals.h"
 
-#include <DallasTemperature.h>
-#include <OneWire.h>
+#include <driver/gpio.h>
+#include <esp_rom_sys.h>
+#include <hal/gpio_ll.h>
+#include <soc/gpio_struct.h>
 #include <esp32-hal-rmt.h>
 #include <esp_timer.h>
 #include <soc/gpio_reg.h>
@@ -298,50 +300,126 @@ bool RmtTxBackend::transmit(const std::vector<hc::rf::Pulse>& pulses, uint32_t t
 
 // ===================================================================== 1-Wire
 
-void OneWireBuses::begin(const int* pins, size_t n) {
-  for (size_t i = 0; i < n; ++i) {
-    auto* w = new OneWire(pins[i]);
-    auto* d = new DallasTemperature(w);
-    d->begin();
-    d->setWaitForConversion(false);
-    d->setResolution(12);
-    wires_.push_back(w);
-    dallas_.push_back(d);
-    addrs_.emplace_back();
+void GpioOneWire::begin(int pin) {
+  pin_ = pin;
+  gpio_num_t p = static_cast<gpio_num_t>(pin);
+  gpio_reset_pin(p);
+  gpio_config_t c = {};
+  c.pin_bit_mask = 1ULL << pin;
+  c.mode = GPIO_MODE_INPUT_OUTPUT_OD;  // drive low or release, always readable
+  c.pull_up_en = GPIO_PULLUP_ENABLE;   // weak, in addition to the board pull-up
+  c.pull_down_en = GPIO_PULLDOWN_DISABLE;
+  c.intr_type = GPIO_INTR_DISABLE;
+  gpio_config(&c);
+  gpio_ll_set_level(&GPIO, pin_, 1);
+}
+
+bool GpioOneWire::lineHigh() const { return pin_ >= 0 && gpio_ll_get_level(&GPIO, pin_); }
+
+bool GpioOneWire::reset() {
+  if (pin_ < 0) return false;
+  // the released line must return high (otherwise short to GND / no pull-up)
+  for (int i = 0; i < 125 && !gpio_ll_get_level(&GPIO, pin_); ++i) esp_rom_delay_us(2);
+  if (!gpio_ll_get_level(&GPIO, pin_)) return false;
+  gpio_ll_set_level(&GPIO, pin_, 0);
+  esp_rom_delay_us(480);
+  portENTER_CRITICAL(&mux_);
+  gpio_ll_set_level(&GPIO, pin_, 1);
+  esp_rom_delay_us(70);
+  bool presence = !gpio_ll_get_level(&GPIO, pin_);
+  portEXIT_CRITICAL(&mux_);
+  esp_rom_delay_us(410);
+  return presence;
+}
+
+void GpioOneWire::writeBit(bool bit) {
+  portENTER_CRITICAL(&mux_);
+  gpio_ll_set_level(&GPIO, pin_, 0);
+  if (bit) {
+    esp_rom_delay_us(6);
+    gpio_ll_set_level(&GPIO, pin_, 1);
+    portEXIT_CRITICAL(&mux_);
+    esp_rom_delay_us(64);
+  } else {
+    esp_rom_delay_us(60);
+    gpio_ll_set_level(&GPIO, pin_, 1);
+    portEXIT_CRITICAL(&mux_);
+    esp_rom_delay_us(10);
   }
+}
+
+bool GpioOneWire::readBit() {
+  portENTER_CRITICAL(&mux_);
+  gpio_ll_set_level(&GPIO, pin_, 0);
+  esp_rom_delay_us(3);
+  gpio_ll_set_level(&GPIO, pin_, 1);
+  esp_rom_delay_us(10);
+  bool v = gpio_ll_get_level(&GPIO, pin_);
+  portEXIT_CRITICAL(&mux_);
+  esp_rom_delay_us(53);
+  return v;
+}
+
+void OneWireBuses::begin(const int* pins, size_t n) {
+  n_ = n < kMaxBuses ? n : kMaxBuses;
+  for (size_t i = 0; i < n_; ++i) links_[i].begin(pins[i]);
   rescan();
 }
 
 void OneWireBuses::rescan() {
-  for (size_t b = 0; b < dallas_.size(); ++b) {
-    addrs_[b].clear();
-    dallas_[b]->begin();
-    uint8_t n = dallas_[b]->getDeviceCount();
-    for (uint8_t i = 0; i < n && i < 16; ++i) {
-      DeviceAddress a;
-      if (dallas_[b]->getAddress(a, i)) {
-        std::array<uint8_t, 8> x;
-        std::memcpy(x.data(), a, 8);
-        addrs_[b].push_back(x);
-        dallas_[b]->setResolution(a, 12);
+  for (size_t b = 0; b < n_; ++b) {
+    GpioOneWire& l = links_[b];
+    std::vector<hc::ow::Rom> found;
+    std::string info;
+    if (!l.lineHigh()) {
+      info = "Datenleitung liegt dauerhaft auf GND (Kurzschluss oder falsch angeschlossen)";
+    } else {
+      hc::ow::SearchResult r = hc::ow::search(l, 16);
+      if (!r.presence) {
+        info = "Kein Geraet antwortet (Anschluss pruefen: GND, Daten, VDD an 3,3 V)";
+      } else {
+        size_t other = 0;
+        for (auto& rom : r.roms) {
+          if (hc::ow::isTemperatureFamily(rom[0])) found.push_back(rom);
+          else ++other;
+        }
+        if (!r.error.empty()) info = r.error;
+        if (other) info += (info.empty() ? "" : "; ") + std::to_string(other) + " andere(s) 1-Wire-Geraet(e) ignoriert";
       }
     }
-    if (b < counts_.size()) counts_[b] = static_cast<uint8_t>(addrs_[b].size());
+    // keep "converted" flags of sensors that are still present
+    std::vector<bool> conv(found.size(), false);
+    for (size_t i = 0; i < found.size(); ++i)
+      for (size_t j = 0; j < addrs_[b].size() && j < converted_[b].size(); ++j)
+        if (addrs_[b][j] == found[i]) conv[i] = converted_[b][j];
+    addrs_[b] = std::move(found);
+    converted_[b] = std::move(conv);
+    counts_[b] = static_cast<uint8_t>(addrs_[b].size());
+    info_[b] = info;
   }
 }
 
 void OneWireBuses::request() {
-  for (auto* d : dallas_) d->requestTemperatures();
+  for (size_t b = 0; b < n_; ++b)
+    if (!addrs_[b].empty()) hc::ow::startConversion(links_[b]);
 }
 
 void OneWireBuses::collect(std::vector<Reading>& out) {
-  for (size_t b = 0; b < dallas_.size(); ++b) {
-    for (auto& a : addrs_[b]) {
-      char id[40];
-      std::snprintf(id, sizeof(id), "ow%u:%02X%02X%02X%02X%02X%02X%02X%02X", static_cast<unsigned>(b + 1), a[0], a[1],
-                    a[2], a[3], a[4], a[5], a[6], a[7]);
-      float t = dallas_[b]->getTempC(a.data());
-      out.push_back({id, t, t != DEVICE_DISCONNECTED_C});
+  for (size_t b = 0; b < n_; ++b) {
+    for (size_t i = 0; i < addrs_[b].size(); ++i) {
+      const hc::ow::Rom& a = addrs_[b][i];
+      std::string id = "ow" + std::to_string(b + 1) + ":" + hc::ow::romHex(a);
+      uint8_t sp[9];
+      float t = 0.f;
+      bool ok = hc::ow::readScratchpad(links_[b], a, sp);
+      if (!ok) {  // one retry: a single disturbed bit fails the CRC
+        ok = hc::ow::readScratchpad(links_[b], a, sp);
+      }
+      ok = ok && hc::ow::decodeTemperature(a[0], sp, t);
+      // 85 C right after power-up means "no conversion yet", not a reading
+      if (ok && !converted_[b][i] && hc::ow::isPowerOnValue(a[0], sp)) continue;
+      if (ok) converted_[b][i] = true;
+      out.push_back({id, t, ok});
     }
   }
 }

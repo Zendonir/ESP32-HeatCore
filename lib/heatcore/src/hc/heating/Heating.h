@@ -1,7 +1,13 @@
 #pragma once
-// Rooms, heating circuits, operating modes and the conventional hysteresis
-// controller. The learning model may only shift the switching thresholds by a
-// bounded amount; without a trusted model this controller runs unchanged.
+// Rooms, heating circuits, operating modes and the room controllers:
+//  * hysteresis (two-point): valve open below setpoint - h/2, closed above
+//    setpoint + h/2. The learning model may only shift the switching
+//    thresholds by a bounded amount; without a trusted model it runs unchanged.
+//  * PWM (time proportional, PI): thermal actuators only know open/closed, so
+//    a PI controller computes a duty cycle (0..100 %) that is applied as one
+//    on-pulse per cycle (e.g. 35 % of 20 min = 7 min open). Pulses shorter than
+//    the valve minimum on/off times (= actuator travel time) are rounded to
+//    0 % / minimum pulse / 100 %.
 #include <ArduinoJson.h>
 
 #include <array>
@@ -17,10 +23,13 @@ namespace hc {
 
 enum class RoomMode : uint8_t { Auto = 0, Comfort, Eco, Frost, Off };
 enum class GlobalMode : uint8_t { Normal = 0, Eco, Away, Vacation };
+enum class RoomControl : uint8_t { Hysteresis = 0, Pwm };
 const char* roomModeName(RoomMode m);
 bool roomModeFromName(const char* s, RoomMode& out);
 const char* globalModeName(GlobalMode m);
 bool globalModeFromName(const char* s, GlobalMode& out);
+const char* roomControlName(RoomControl c);
+bool roomControlFromName(const char* s, RoomControl& out);
 
 struct Period {
   uint16_t start = 0;  // minute of day
@@ -41,6 +50,10 @@ struct Room {
   bool modelAssist = true;
   uint32_t manualOverrideMin = 180;  // manual setpoint lifetime (also ends at schedule change)
   bool showOnDisplay = true;
+  RoomControl control = RoomControl::Hysteresis;
+  uint16_t pwmCycleMin = 20;  // PWM cycle length (5..60 min)
+  float pwmKp = 40.f;         // proportional gain in % duty per K below setpoint (5..200)
+  uint16_t pwmTnMin = 90;     // integral (reset) time in min, 0 = P only (0..600)
 
   // runtime
   std::vector<std::string> windowSources;  // refs of currently open contacts
@@ -65,6 +78,14 @@ struct Room {
   bool sensorFail = false;
   bool overTemp = false;
   float assistOnShift = 0.f, assistOffShift = 0.f;  // applied model advice (K)
+  // PWM controller state
+  float duty = 0.f;      // current PI output in %
+  float pwmI = 0.f;      // integral part in %
+  bool pwmRunning = false;
+  Millis pwmLastMs = 0;  // last PI update
+  Millis pwmCycleStartMs = 0;
+  uint32_t pwmOnMs = 0;  // on-time latched for the running cycle
+  float pwmCycleSetpoint = 0.f;
 };
 
 struct Circuit {
@@ -134,6 +155,9 @@ class HeatingManager {
   bool circuitSafeLevel(const Circuit& c) const { return c.valveNormallyOpen; }
 
   static int scheduleSlot(const Room& r, const LocalTime& lt, bool* comfort);
+  // Shortest useful valve pulse for a room: the longest minimum on/off time
+  // of its circuits (thermal actuators need minutes to travel).
+  uint32_t minPulseMs(const Room& r) const;
 
   void toJson(JsonObject o, bool runtime) const;
   std::string fromJson(JsonObjectConst o);
@@ -142,6 +166,7 @@ class HeatingManager {
   void touch() { ++revision_; }
 
  private:
+  bool pwmDemand(Room& r, Millis now);
   void emitRoom(EventType t, const Room& r, float value, Millis now, uint8_t depth, uint16_t ruleId,
                 EventSource src);
   EventBus& bus_;

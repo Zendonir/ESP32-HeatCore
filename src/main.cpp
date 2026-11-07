@@ -11,14 +11,22 @@
 //   storage  core 0 prio 1  debounced configuration writes, SD log
 // Only the control and io tasks are needed for heating; a failure of any
 // other task, of the network or of the display does not stop control.
+//
+// Robustness: every periodic task is supervised by the hardware task
+// watchdog (30 s, then reset); the reason of the last restart and the task
+// that stopped are kept in RTC memory and shown after the restart. The
+// device restarts itself after 30 min without network (once it had been
+// online) and when internal RAM runs out for a minute.
 #include <Arduino.h>
 #include <HTTPClient.h>
 #include <esp_heap_caps.h>
 #include <esp_system.h>
 #include <esp_task_wdt.h>
+#include <esp_timer.h>
 
 #include <algorithm>
 #include <atomic>
+#include <cstring>
 #include <mutex>
 #include <new>
 
@@ -71,6 +79,97 @@ bool g_rtcWritten = false;
 
 using Lock = std::lock_guard<std::recursive_mutex>;
 
+// ---- task supervision and restart diagnostics
+enum Beat : uint8_t { kBeatControl, kBeatIo, kBeatRfRx, kBeatRfTx, kBeatSensors, kBeatDisplay, kBeatNet, kBeatStorage,
+                      kBeatExt, kBeatCount };
+const char* const kBeatNames[kBeatCount] = {"control", "io",      "rf-rx",   "rf-tx",  "sensors",
+                                            "display", "net",     "storage", "extpoll"};
+std::atomic<uint32_t> g_beat[kBeatCount];
+constexpr uint32_t kTaskWdtMs = 30000;
+
+// survives software resets, watchdog resets and panics (not power loss)
+struct ResetTrace {
+  uint32_t magic;
+  uint32_t savedMs;  // millis() of the last snapshot
+  uint32_t minHeap;
+  uint32_t beats[kBeatCount];
+  char reason[64];  // own restarts: why
+};
+constexpr uint32_t kTraceMagic = 0x48435254;  // "HCRT"
+RTC_NOINIT_ATTR ResetTrace g_trace;
+
+void beat(Beat b) {
+  g_beat[b] = millis();
+  esp_task_wdt_reset();
+}
+
+void watchTask(Beat b) {
+  g_beat[b] = millis();
+  esp_task_wdt_add(nullptr);
+}
+
+void snapshotTrace() {
+  g_trace.magic = kTraceMagic;
+  g_trace.savedMs = millis();
+  g_trace.minHeap = ESP.getMinFreeHeap();
+  for (int i = 0; i < kBeatCount; ++i) g_trace.beats[i] = g_beat[i];
+}
+
+void setRestartReason(const char* why) {
+  std::snprintf(g_trace.reason, sizeof(g_trace.reason), "%s", why);
+  g_trace.magic = kTraceMagic;
+}
+
+std::string uptimeText(uint32_t ms) {
+  uint32_t m = ms / 60000u;
+  char b[32];
+  if (m >= 1440) std::snprintf(b, sizeof(b), "%u d %u h", static_cast<unsigned>(m / 1440), static_cast<unsigned>(m / 60 % 24));
+  else if (m >= 60) std::snprintf(b, sizeof(b), "%u h %u min", static_cast<unsigned>(m / 60), static_cast<unsigned>(m % 60));
+  else std::snprintf(b, sizeof(b), "%u min", static_cast<unsigned>(m));
+  return b;
+}
+
+// Text for the status page, e.g. "Task-Watchdog nach 3 h 12 min; haengende
+// Aufgabe: net (seit 31 s)".
+std::string describeLastReset() {
+  esp_reset_reason_t r = esp_reset_reason();
+  const char* t;
+  switch (r) {
+    case ESP_RST_POWERON: t = "Einschalten (Versorgung)"; break;
+    case ESP_RST_EXT: t = "externer Reset"; break;
+    case ESP_RST_SW: t = "Neustart durch die Firmware"; break;
+    case ESP_RST_PANIC: t = "Absturz (Exception)"; break;
+    case ESP_RST_INT_WDT: t = "Interrupt-Watchdog"; break;
+    case ESP_RST_TASK_WDT: t = "Task-Watchdog (Aufgabe hing)"; break;
+    case ESP_RST_WDT: t = "Watchdog"; break;
+    case ESP_RST_BROWNOUT: t = "Unterspannung (Brownout) - Netzteil pruefen"; break;
+    case ESP_RST_USB: t = "USB-Reset"; break;
+    case ESP_RST_PWR_GLITCH: t = "Spannungseinbruch - Netzteil pruefen"; break;
+    case ESP_RST_CPU_LOCKUP: t = "CPU-Lockup"; break;
+    default: t = "unbekannt"; break;
+  }
+  std::string s = t;
+  bool traced = g_trace.magic == kTraceMagic && r != ESP_RST_POWERON && r != ESP_RST_BROWNOUT;
+  if (traced) {
+    s += " nach " + uptimeText(g_trace.savedMs);
+    if (r == ESP_RST_SW && g_trace.reason[0]) s += ": " + std::string(g_trace.reason, strnlen(g_trace.reason, sizeof(g_trace.reason)));
+    if (r != ESP_RST_SW) {
+      std::string stuck;
+      for (int i = 0; i < kBeatCount; ++i) {
+        uint32_t age = g_trace.savedMs - g_trace.beats[i];
+        if (g_trace.beats[i] && age > 5000 && age < 0x80000000u)
+          stuck += (stuck.empty() ? "" : ", ") + std::string(kBeatNames[i]) + " (seit " + std::to_string(age / 1000) + " s)";
+      }
+      if (!stuck.empty()) s += "; zuletzt haengend: " + stuck;
+      s += "; min. freier RAM " + std::to_string(g_trace.minHeap / 1024) + " KB";
+    }
+  }
+  s += " [" + std::to_string(static_cast<int>(r)) + "]";
+  g_trace.magic = 0;  // start a fresh trace
+  g_trace.reason[0] = 0;
+  return s;
+}
+
 struct Busy {
   uint32_t t0 = micros();
   ~Busy() { g_busyUs += micros() - t0; }
@@ -106,8 +205,8 @@ void writeSafeOutputs() {
 // ------------------------------------------------------------------ tasks
 
 void controlTask(void*) {
-  esp_task_wdt_add(nullptr);  // hard watchdog: a stalled control loop resets the ESP
-  uint32_t maxUs = 0, lastStat = 0;
+  watchTask(kBeatControl);  // hard watchdog: a stalled control loop resets the ESP
+  uint32_t maxUs = 0, lastStat = 0, lowHeapSince = 0;
   for (;;) {
     uint32_t t0 = micros();
     {
@@ -132,20 +231,35 @@ void controlTask(void*) {
         uint32_t busy = g_busyUs.exchange(0);
         p.cpuPct = static_cast<int>(busy / 20000u);  // busy time of HeatCore tasks over 2 cores
         maxUs = 0;
+        snapshotTrace();
+        // internal RAM nearly exhausted or fragmented for a minute: restart
+        // cleanly (valves to safe state) instead of failing at random later
+        size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        bool low = p.freeHeap < 16384 || largest < 4096;
+        if (!low) lowHeapSince = 0;
+        else if (!lowHeapSince) lowHeapSince = now ? now : 1;
+        else if (now - lowHeapSince > 60000 && g_web && !g_web->rebootRequested()) {
+          HC_LOGE("main", "internal RAM exhausted (%u free, block %u) - restart", static_cast<unsigned>(p.freeHeap),
+                  static_cast<unsigned>(largest));
+          setRestartReason("zu wenig freier Arbeitsspeicher");
+          g_web->requestReboot();
+        }
       }
     }
     uint32_t d = micros() - t0;
     if (d > maxUs) maxUs = d;
     g_controlBeatMs = millis();
-    esp_task_wdt_reset();
+    beat(kBeatControl);
     vTaskDelay(pdMS_TO_TICKS(50));
   }
 }
 
 void ioTask(void*) {
+  watchTask(kBeatIo);
   uint32_t lastWrite = 0, lastVerify = 0;
   bool watchdogActive = false;
   for (;;) {
+    beat(kBeatIo);
     {
       Busy b;
       uint16_t in = 0;
@@ -183,7 +297,9 @@ void rfRxTask(void*) {
   static hc::rf::Pulse buf[512];
   bool pendingIdle = false;
   uint32_t lastEdges = rfhw::edges(), lastRate = millis();
+  watchTask(kBeatRfRx);
   for (;;) {
+    beat(kBeatRfRx);
     size_t n = rfhw::drain(buf, 512);
     if (n) {
       Busy b;
@@ -207,7 +323,9 @@ void rfRxTask(void*) {
 }
 
 void rfTxTask(void*) {
+  watchTask(kBeatRfTx);
   for (;;) {
+    beat(kBeatRfTx);
     hc::rf::TxJob job;
     std::vector<hc::rf::Pulse> pulses;
     bool got;
@@ -232,7 +350,9 @@ void sensorTask(void*) {
   bool owPending = false;
   uint32_t owRequested = 0;
   std::string line;
+  watchTask(kBeatSensors);
   for (;;) {
+    beat(kBeatSensors);
     uint32_t now = millis();
     {
       Busy b;
@@ -279,7 +399,10 @@ void sensorTask(void*) {
         if (r.ok) g_sys->sensors.update(r.id, r.value, now);
         else g_sys->sensors.reportError(r.id, "1-Wire Lesefehler", now);
       }
-      for (size_t bus = 0; bus < 3; ++bus) g_sys->platform.oneWireCount[bus] = g_ow.count(bus);
+      for (size_t bus = 0; bus < 3; ++bus) {
+        g_sys->platform.oneWireCount[bus] = g_ow.count(bus);
+        g_sys->platform.oneWireInfo[bus] = g_ow.info(bus);
+      }
       if (rtcTemp) g_sys->platform.rtcTempC = rtcT;
       while (g_rs485.poll(line)) {
         if (!line.empty() && line[0] == '{') g_sys->reportRtl433Line(line.c_str());
@@ -296,7 +419,9 @@ void displayTask(void*) {
   uint8_t contrast = 0;
   uint16_t rotation = 0;
   bool first = true;
+  watchTask(kBeatDisplay);
   for (;;) {
+    beat(kBeatDisplay);
     bool enabled, on;
     hc::DisplayConfig cfg;
     {
@@ -361,7 +486,11 @@ void displayTask(void*) {
 
 void netTask(void*) {
   uint32_t lastStat = 0;
+  bool everOnline = false;
+  uint32_t offlineSince = 0;
+  watchTask(kBeatNet);
   for (;;) {
+    beat(kBeatNet);
     {
       Busy b;
       if (g_applyNetwork.exchange(false)) {
@@ -378,8 +507,28 @@ void netTask(void*) {
       }
       if (g_wifiScan.exchange(false)) g_net.startScan();
       g_net.loop();
+      beat(kBeatNet);
       g_mqtt->loop(g_net.online());
+      beat(kBeatNet);
       g_web->loop();
+      // self-healing: after a connection existed, 30 min without any network
+      // (and nobody on the setup access point) restart once; after the
+      // restart this only re-arms when the device was online again
+      if (g_net.online()) {
+        everOnline = true;
+        offlineSince = 0;
+      } else if (everOnline && !g_net.apClientConnected()) {
+        uint32_t t = millis();
+        if (!offlineSince) offlineSince = t ? t : 1;
+        else if (t - offlineSince > 30u * 60u * 1000u && !g_web->rebootRequested()) {
+          HC_LOGE("net", "no network for 30 min - restart");
+          setRestartReason("30 min ohne Netzwerkverbindung");
+          g_web->requestReboot();
+          everOnline = false;
+        }
+      } else {
+        offlineSince = 0;
+      }
       if (g_net.timeSynced() && !g_rtcWritten) {
         g_rtcWritten = g_rtc.write(time(nullptr)) || !g_rtc.present();
       }
@@ -414,7 +563,9 @@ void netTask(void*) {
 // Polls the HTTP external sources (e.g. Shelly RPC API) one after another.
 // Runs in its own task: a slow or absent device never delays control.
 void extPollTask(void*) {
+  watchTask(kBeatExt);
   for (;;) {
+    beat(kBeatExt);
     vTaskDelay(pdMS_TO_TICKS(1000));
     if (!g_net.online()) continue;
     std::vector<std::pair<size_t, std::string>> jobs;
@@ -423,6 +574,7 @@ void extPollTask(void*) {
       for (size_t i : g_sys->external.dueHttp(millis())) jobs.emplace_back(i, g_sys->external.list[i].topic);
     }
     for (auto& j : jobs) {
+      beat(kBeatExt);  // up to 5 s per device
       std::string body;
       int code = -1;
       {
@@ -458,7 +610,9 @@ void saveHistory() {
 }
 
 void storageTask(void*) {
+  watchTask(kBeatStorage);
   for (;;) {
+    beat(kBeatStorage);
     std::vector<std::pair<hc::ConfigSection, std::string>> todo;
     {
       Lock lk(g_sys->mutex());
@@ -476,12 +630,14 @@ void storageTask(void*) {
     }
     for (auto& t : todo) {
       if (!g_storage.save(t.first, t.second)) HC_LOGE("storage", "saving %s failed", hc::configSectionName(t.first));
+      beat(kBeatStorage);
     }
     // statistics: hourly snapshot (4 new buckets per room and hour)
     static uint32_t lastHistorySave = 0;
     if (millis() - lastHistorySave > 3600000u) {
       lastHistorySave = millis();
       saveHistory();
+      beat(kBeatStorage);
     }
     std::string line;
     hc::LocalTime lt = g_clock.local();
@@ -572,8 +728,14 @@ void selfTestTask(void*) {
   for (size_t b = 0; b < 3; ++b) {
     char name[32];
     std::snprintf(name, sizeof(name), "1-Wire Bus %u (GPIO%d)", static_cast<unsigned>(b + 1), board::kOneWire[b]);
-    uint8_t n = g_ow.count(b);
-    addResult(res, name, n ? "ok" : "unbestaetigt", std::to_string(n) + " Sensor(en)");
+    uint8_t n;
+    std::string info;
+    {
+      Lock lk(g_sys->mutex());  // written by the sensor task
+      n = g_sys->platform.oneWireCount[b];
+      info = g_sys->platform.oneWireInfo[b];
+    }
+    addResult(res, name, n ? "ok" : "unbestaetigt", std::to_string(n) + " Sensor(en)" + (info.empty() ? "" : " - " + info));
   }
   addResult(res, "SD-Karte", g_storage.sdMounted() ? "ok" : "fehlt", g_storage.sdStatus());
   addResult(res, "Ethernet W5500", g_net.ethLink() ? "ok" : "unbestaetigt", g_net.ethLink() ? "Link" : "kein Link");
@@ -681,12 +843,22 @@ void setup() {
 
   Serial.begin(115200);
   hc::setLogSink(logSink);
-  HC_LOGI("main", "HeatCore %s booting, reset reason %d", hc::kFirmwareVersion, static_cast<int>(esp_reset_reason()));
+  std::string lastReset = describeLastReset();
+  HC_LOGW("main", "HeatCore %s booting - last restart: %s", hc::kFirmwareVersion, lastReset.c_str());
+  // task watchdog: 30 s for all supervised tasks, then reset (the Arduino
+  // default of 5 s is too short for MQTT connects and file writes)
+  {
+    esp_task_wdt_config_t wc = {};
+    wc.timeout_ms = kTaskWdtMs;
+    wc.idle_core_mask = 1u << 0;
+    wc.trigger_panic = true;
+    if (esp_task_wdt_reconfigure(&wc) != ESP_OK) esp_task_wdt_init(&wc);
+  }
 
   void* mem = heap_caps_malloc(sizeof(hc::HeatCoreSystem), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
   g_sys = mem ? new (mem) hc::HeatCoreSystem(g_clock) : new hc::HeatCoreSystem(g_clock);
   g_sys->platform.deviceId = deviceIdFromMac();
-  g_sys->platform.resetReason = std::to_string(static_cast<int>(esp_reset_reason()));
+  g_sys->platform.resetReason = lastReset;
 
   g_ota.begin();  // slot state; a new firmware starts on probation
   g_storage.begin();
@@ -778,6 +950,15 @@ void safeShutdown() {
 }
 }  // namespace
 
+// Called by ESP-IDF in the task watchdog interrupt right before the reset:
+// record which tasks were alive (the control task may be the stuck one, so
+// its own last snapshot would be too old).
+extern "C" void IRAM_ATTR esp_task_wdt_isr_user_handler(void) {
+  g_trace.savedMs = static_cast<uint32_t>(esp_timer_get_time() / 1000);
+  for (int i = 0; i < kBeatCount; ++i) g_trace.beats[i] = g_beat[i].load(std::memory_order_relaxed);
+  g_trace.magic = kTraceMagic;
+}
+
 // Arduino core hook: do not confirm a freshly installed firmware during
 // startup; HeatCore confirms it after its own probation (see platform::Ota).
 extern "C" bool verifyRollbackLater() { return true; }
@@ -791,10 +972,12 @@ void loop() {
     safeShutdown();
     HC_LOGE("main", "OTA probation failed - rollback");
     delay(200);
+    setRestartReason("neue Firmware nicht bestaetigt - Ruecksprung");
     g_ota.rejectAndRestart();
   }
   // Reboot (OTA, user request): close all valves first, then restart.
   if (g_web && g_web->rebootRequested()) {
+    if (!g_trace.reason[0]) setRestartReason("Neustart ueber Webinterface oder Update");
     g_shutdown = true;
     delay(800);  // let the HTTP response go out
     safeShutdown();

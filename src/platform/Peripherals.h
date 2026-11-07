@@ -9,10 +9,8 @@
 #include "hc/display/Framebuffer.h"
 #include "hc/rf/RfCodec.h"
 #include "hc/rf/RfTransmitter.h"
+#include "hc/sensors/OneWireProtocol.h"
 #include "platform/I2cBus.h"
-
-class OneWire;
-class DallasTemperature;
 
 namespace platform {
 
@@ -97,6 +95,22 @@ class RmtTxBackend : public hc::rf::ITxBackend {
 };
 
 // --------------------------------------------------------------- 1-Wire
+// Bit-banged 1-Wire time slots on an open-drain GPIO (external 4.7 kOhm
+// pull-up on the board). Own driver because the OneWire Arduino library only
+// drives GPIO0..33 (classic ESP32 limits); the A16v3 buses are GPIO47/48/38.
+class GpioOneWire : public hc::ow::Link {
+ public:
+  void begin(int pin);
+  bool reset() override;
+  void writeBit(bool bit) override;
+  bool readBit() override;
+  bool lineHigh() const;
+
+ private:
+  int pin_ = -1;
+  portMUX_TYPE mux_ = portMUX_INITIALIZER_UNLOCKED;
+};
+
 class OneWireBuses {
  public:
   struct Reading {
@@ -111,12 +125,16 @@ class OneWireBuses {
   void collect(std::vector<Reading>& out);
   void rescan();
   uint8_t count(size_t bus) const { return bus < counts_.size() ? counts_[bus] : 0; }
+  std::string info(size_t bus) const { return bus < info_.size() ? info_[bus] : std::string(); }
 
  private:
-  std::vector<OneWire*> wires_;
-  std::vector<DallasTemperature*> dallas_;
-  std::vector<std::vector<std::array<uint8_t, 8>>> addrs_;
-  std::array<uint8_t, 3> counts_{{0, 0, 0}};
+  static constexpr size_t kMaxBuses = 3;
+  std::array<GpioOneWire, kMaxBuses> links_;
+  size_t n_ = 0;
+  std::array<std::vector<hc::ow::Rom>, kMaxBuses> addrs_;
+  std::array<std::vector<bool>, kMaxBuses> converted_;  // first valid conversion seen
+  std::array<uint8_t, kMaxBuses> counts_{{0, 0, 0}};
+  std::array<std::string, kMaxBuses> info_;
 };
 
 // ------------------------------------------------------------- RS485 lines

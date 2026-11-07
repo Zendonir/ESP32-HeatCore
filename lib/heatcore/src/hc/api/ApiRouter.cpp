@@ -1,6 +1,7 @@
 #include "hc/api/ApiRouter.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 
@@ -91,6 +92,7 @@ void statusJson(HeatCoreSystem& sys, JsonObject o) {
     x["mode"] = roomModeName(r.mode);
     x["manual"] = r.manualActive;
     x["fault"] = r.sensorFail || r.overTemp;
+    if (r.control == RoomControl::Pwm && r.pwmRunning) x["duty"] = std::round(r.duty);
   }
   JsonObject rf = o["rf"].to<JsonObject>();
   rf["devices"] = static_cast<int>(sys.rfReg.rx.size());
@@ -163,6 +165,7 @@ void hardwareJson(HeatCoreSystem& sys, JsonObject o) {
   p["totalPsram"] = pl.totalPsram;
   p["cpuPct"] = pl.cpuPct;
   p["resetReason"] = pl.resetReason;
+  p["uptimeSec"] = pl.uptimeSec;
   p["rtcPresent"] = pl.rtcPresent;
   p["rtcValid"] = pl.rtcValid;
   p["rtcTempC"] = pl.rtcTempC;
@@ -184,6 +187,8 @@ void hardwareJson(HeatCoreSystem& sys, JsonObject o) {
   p["controlLoopMaxUs"] = pl.controlLoopMaxUs;
   JsonArray ow = p["oneWire"].to<JsonArray>();
   for (uint8_t c : pl.oneWireCount) ow.add(c);
+  JsonArray owi = p["oneWireInfo"].to<JsonArray>();
+  for (auto& t : pl.oneWireInfo) owi.add(t);
   p["rs485"] = pl.rs485;
   p["rs485Lines"] = pl.rs485Lines;
   p["rs485Errors"] = pl.rs485Errors;
