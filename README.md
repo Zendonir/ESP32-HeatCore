@@ -53,8 +53,9 @@ Webinterface.
 * **Auf der echten Platine noch nicht getestet.** Hardwareabhängige Punkte sind
   in `docs/tests-und-abnahme.md` als „unbestätigt (HW)“ markiert. Vor dem
   Anschluss echter Ventile den Testaufbau in `docs/hardware.md` durchführen.
-  Die Ausgänge sind laut Schaltplan Low-Side-MOSFET-Schalter (nur DC-Lasten;
-  230-V-/24-V-AC-Stellantriebe über Koppelrelais).
+  Die Ausgänge der V3.1 sind High-Side-Schalter (P-MOSFET, max. 4 A je Kanal,
+  nur Gleichspannung): +12/24 V an die rote Klemme jedes Ausgangsblocks, Last
+  zwischen Ausgang und GND; 230-V-/24-V-AC-Stellantriebe über Koppelrelais.
 
 ## Dokumentation
 
