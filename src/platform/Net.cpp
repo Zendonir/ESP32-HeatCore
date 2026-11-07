@@ -213,4 +213,6 @@ void NetManager::loop() {
   }
 }
 
+bool NetManager::apClientConnected() const { return apActive_ && WiFi.softAPgetStationNum() > 0; }
+
 }  // namespace platform

@@ -165,6 +165,7 @@ void hardwareJson(HeatCoreSystem& sys, JsonObject o) {
   p["totalPsram"] = pl.totalPsram;
   p["cpuPct"] = pl.cpuPct;
   p["resetReason"] = pl.resetReason;
+  p["uptimeSec"] = pl.uptimeSec;
   p["rtcPresent"] = pl.rtcPresent;
   p["rtcValid"] = pl.rtcValid;
   p["rtcTempC"] = pl.rtcTempC;

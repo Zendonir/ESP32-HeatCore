@@ -26,6 +26,7 @@ class NetManager {
 
   bool online() const;  // ETH or Wi-Fi station with IP
   bool apActive() const { return apActive_; }
+  bool apClientConnected() const;  // someone is on the setup access point
   bool ethLink() const;
   bool wifiConnected() const;
   int rssi() const;

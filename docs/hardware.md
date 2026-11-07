@@ -161,6 +161,24 @@ GPIO43/44 (UART0) sind mit dem W5500 belegt. Serielle Ausgaben laufen deshalb
   = Ausgang EIN (Ventil zu). Bei Stromausfall öffnen NO-Ventile physikalisch –
   das kann keine Firmware verhindern.
 
+## Stabilität und Neustartdiagnose
+
+* Alle zyklischen Aufgaben (Regelung, Ein-/Ausgänge, Funk, Sensoren, Display,
+  Netzwerk, Speicher, externe Quellen) werden vom Hardware-Task-Watchdog
+  überwacht. Hängt eine Aufgabe länger als 30 s, startet der ESP32 neu; die
+  Ausgänge gehen dabei in den sicheren Zustand.
+* Der Grund des letzten Neustarts steht unter **Hardware → Selbsttest &
+  Status → Letzter Neustart**, z. B. „Task-Watchdog (Aufgabe hing) nach
+  3 h 12 min; zuletzt hängend: net (seit 31 s)“ oder „Unterspannung
+  (Brownout) – Netzteil prüfen“. Die Angabe überlebt Neustarts, nicht aber
+  einen Stromausfall.
+* Selbstheilung: War die Steuerung online und hat danach 30 min lang weder
+  LAN noch WLAN (und niemand ist am Einrichtungs-Zugangspunkt), startet sie
+  einmal neu. Ist der interne Arbeitsspeicher eine Minute lang erschöpft,
+  ebenfalls.
+* Das Display schaltet sich nach der eingestellten Zeit (Standard 5 min)
+  ab; ein Tastendruck weckt es. „Display aus“ allein ist kein Fehler.
+
 ## Bedienelemente
 
 S1 (Reset) und S2 (Boot, GPIO0 = Strapping-Pin) werden **nicht** als
