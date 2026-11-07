@@ -27,9 +27,12 @@ constexpr uint32_t kI2cHz = 100000;  // conservative: long OLED cable on the sam
 //   U14 inputs 1..8   A1=1        -> 0x22     U31 inputs 9..16  A0=1    -> 0x21
 // (KinCony's A16v3 block diagram lists 0x21 for inputs 1..8 instead; the
 // bank order can be swapped in the web UI: hc::IoManager::swapInputBanks.)
-// Outputs: PCF pin LOW drives the TLP181 opto LED (anode at 3.3 V, 1 kOhm),
-// which switches a low-side N-MOSFET (60 V/10 A). 10 kOhm pull-ups to 3.3 V
-// keep released pins HIGH = off; the PCF8574 powers up HIGH -> all off.
+// Outputs: PCF pin LOW drives the opto LED (anode at 3.3 V, 1 kOhm, A16
+// schematic). On the KC868-A16-V3.1 the opto switches a high-side P-MOSFET
+// (NCE60P10K, KinCony: max. 4 A per channel): the output terminal sources the
+// "+12/24V DC Input" of its block, the load goes to GND. (The old A16 v1 used
+// low-side N-MOSFETs.) 10 kOhm pull-ups keep released pins HIGH = off; the
+// PCF8574 powers up HIGH -> all off.
 // Inputs: EL357 optocouplers pull the PCF pin LOW when the input is active.
 constexpr uint8_t kPcfOut1 = 0x24;  // outputs 1..8
 constexpr uint8_t kPcfOut2 = 0x25;  // outputs 9..16

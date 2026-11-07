@@ -54,7 +54,7 @@ table{border-collapse:collapse;width:100%;font-size:14px}td{padding:4px 6px;bord
 
 <div class="card warn">
   <h2>Sicherheit</h2>
-  <p>Während des Flashens und beim Neustart sind alle Ausgänge aus. Die Ausgänge sind Low-Side-MOSFET-Schalter (nur Gleichspannung). Vor dem ersten Betrieb mit echten Stellantrieben die Prüfungen in <a href="https://github.com/Zendonir/ESP32-HeatCore/blob/main/docs/hardware.md">docs/hardware.md</a> durchführen.</p>
+  <p>Während des Flashens und beim Neustart sind alle Ausgänge aus. Die Ausgänge schalten +12/24 V (High-Side, nur Gleichspannung, max. 4 A je Kanal): Versorgung an die rote Klemme jedes Ausgangsblocks, Stellantrieb zwischen Ausgang und GND. Vor dem ersten Betrieb mit echten Stellantrieben die Prüfungen in <a href="https://github.com/Zendonir/ESP32-HeatCore/blob/main/docs/hardware.md">docs/hardware.md</a> durchführen.</p>
 </div>
 
 <div class="card">

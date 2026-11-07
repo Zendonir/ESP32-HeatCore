@@ -108,16 +108,43 @@ GPIO43/44 (UART0) sind mit dem W5500 belegt. Serielle Ausgaben laufen deshalb
    (Alarm `hw.outputs`, Heizkreise als gestört markiert). Bei Verdacht das
    Display abstecken.
 
-## Ausgangs- und Eingangsbeschaltung (A16-Schaltplan)
+## Klemmen der KC868-A16-V3.1 (Beschriftung laut KinCony-Anschlussbild)
 
-* **Ausgänge** sind **Low-Side-Schalter** (N-MOSFET 60 V/10 A hinter
-  Optokoppler TLP181), also **nur für Gleichspannung**. Last zwischen
-  +12/24 V DC und Klemme Yn, Minus der Lastversorgung an die gemeinsame
-  Masse des Ausgangsteils. Stellantriebe für **230 V AC oder 24 V AC** dürfen
-  nicht direkt angeschlossen werden – dafür Koppelrelais oder Halbleiterrelais
-  verwenden (24-V-DC-Stellantriebe direkt möglich).
+| Klemmenblock | Belegung |
+|---|---|
+| Digital Inputs 1–8 / 9–16 | je 8 Eingänge + GND (potenzialfreie Kontakte gegen GND) |
+| RS485 | A, B |
+| Analog Inputs | GND, 1, 2, 3, 4 – im Anschlussbild als „DC 0–5V“ beschriftet; das Blockschaltbild nennt A3/A4 als 4–20 mA. Vor Gebrauch mit bekannter Spannung prüfen (Betriebsart je Kanal im Webinterface) |
+| GPIO's 1 2 3 + GND + 3.3V | **1-Wire-Busse 1–3** (GPIO47/48/38, Pull-ups auf der Platine): DS18B20 an GND, Daten an 1/2/3, VDD an 3.3V |
+| Digital Outputs 1–8 / 9–16 | je 8 Ausgänge + rot markierte Klemme „+12/24V DC Input“ für die Lastversorgung des Blocks |
+| POWER | 12/24 V DC (– / +) |
+
+## Ausgangs- und Eingangsbeschaltung
+
+* **Ausgänge (KC868-A16-V3.1): High-Side-Schalter.** Auf der Platine sitzen
+  P-Kanal-MOSFETs **NCE60P10K** (Platinenfoto); KinCony gibt **max. 4 A je
+  Kanal** an. Jeder Ausgangsblock (1–8 und 9–16) hat eine eigene, rot
+  markierte Klemme **„+12/24V DC Input“**: Dort die Versorgung der Lasten
+  anschließen (beide Blöcke!). Ein eingeschalteter Ausgang führt diese
+  Spannung; die Last liegt **zwischen Ausgangsklemme und GND** (Minus des
+  Netzteils, z. B. über eine Klemmleiste).
+
+  ```
+  +24 V ──► rote Klemme „+12/24V DC Input“ (Block 1–8 und Block 9–16)
+  Ausgang n ──► Stellantrieb ──► GND (Minus Netzteil)
+  ```
+
+  Nur **Gleichspannung**. Stellantriebe für **230 V AC oder 24 V AC** nicht
+  direkt anschließen – dafür Koppelrelais (Spule 24 V DC zwischen Ausgang und
+  GND) oder Halbleiterrelais. Am einfachsten versorgt ein 24-V-DC-Netzteil die
+  Platine (POWER) und beide Ausgangsblöcke; bei getrennten Netzteilen die
+  Minuspole verbinden.
+  *Hinweis:* Der Schaltplan der älteren KC868-A16 (v1, ESP32-WROOM) zeigt
+  Low-Side-N-MOSFETs (60 V/10 A) – das gilt **nicht** für die V3.1.
 * Ansteuerung: PCF-Pin LOW → Optokoppler-LED an → Ausgang an. 10-kΩ-Pull-ups
-  halten freigegebene Pins HIGH = aus. Das entspricht `kOutputsActiveLow`.
+  halten freigegebene Pins HIGH = aus. Das entspricht `kOutputsActiveLow`
+  (A16-Schaltplan; auf der V3.1 mit einer Testlampe und den Status-LEDs der
+  Ausgänge bestätigen).
 * **Eingänge**: Optokoppler EL357 mit 2-kΩ-Vorwiderstand; aktiv, wenn der
   Eingang gegen die Masse der Eingangsseite geschaltet wird (potenzialfreie
   Kontakte, Reed-Kontakte).
