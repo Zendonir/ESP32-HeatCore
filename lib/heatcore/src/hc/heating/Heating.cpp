@@ -10,6 +10,7 @@ namespace hc {
 namespace {
 const char* const kRoomModes[] = {"auto", "comfort", "eco", "frost", "off"};
 const char* const kGlobalModes[] = {"normal", "eco", "away", "vacation"};
+const char* const kRoomControls[] = {"hysteresis", "pwm"};
 
 float clampf(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
 }  // namespace
@@ -28,6 +29,16 @@ bool globalModeFromName(const char* s, GlobalMode& out) {
   for (int i = 0; i < 4; ++i)
     if (s && !std::strcmp(s, kGlobalModes[i])) {
       out = static_cast<GlobalMode>(i);
+      return true;
+    }
+  return false;
+}
+
+const char* roomControlName(RoomControl c) { return kRoomControls[static_cast<int>(c)]; }
+bool roomControlFromName(const char* s, RoomControl& out) {
+  for (int i = 0; i < 2; ++i)
+    if (s && !std::strcmp(s, kRoomControls[i])) {
+      out = static_cast<RoomControl>(i);
       return true;
     }
   return false;
@@ -253,10 +264,60 @@ float HeatingManager::computeSetpoint(Room& r, const LocalTime& lt, float minSp,
   return r.setpoint;
 }
 
+uint32_t HeatingManager::minPulseMs(const Room& r) const {
+  uint32_t m = 0;
+  for (auto& c : circuits)
+    if (c.enabled && c.room == r.id) m = std::max<uint32_t>(m, std::max(c.minOnSec, c.minOffSec));
+  return m * 1000u;
+}
+
+bool HeatingManager::pwmDemand(Room& r, Millis now) {
+  const float e = r.setpoint - r.temperature;  // > 0: too cold
+  const float kp = clampf(r.pwmKp, 1.f, 500.f);
+  float dtMin = r.pwmRunning ? elapsed(now, r.pwmLastMs) / 60000.f : 0.f;
+  if (dtMin > 5.f) dtMin = 5.f;  // long gaps (sensor loss, reboot) do not wind up
+  r.pwmLastMs = now;
+  const float p = kp * e;
+  if (r.pwmTnMin == 0) {
+    r.pwmI = 0.f;
+  } else if (!r.windowOpen() && r.mode != RoomMode::Off) {
+    // conditional integration (anti-windup): stop integrating into saturation
+    float ni = r.pwmI + kp * e * dtMin / static_cast<float>(r.pwmTnMin);
+    float u = p + ni;
+    if (!((u > 100.f && e > 0.f) || (u < 0.f && e < 0.f))) r.pwmI = clampf(ni, 0.f, 100.f);
+  }
+  r.duty = clampf(p + r.pwmI, 0.f, 100.f);
+
+  const uint32_t cycle = static_cast<uint32_t>(r.pwmCycleMin < 5 ? 5 : r.pwmCycleMin) * 60000u;
+  // a new cycle starts after the previous one or when the setpoint moves
+  // (schedule change, manual adjustment, window) so the reaction is immediate
+  bool newCycle = !r.pwmRunning || elapsed(now, r.pwmCycleStartMs) >= cycle ||
+                  std::fabs(r.setpoint - r.pwmCycleSetpoint) >= 0.25f;
+  r.pwmRunning = true;
+  if (newCycle) {
+    r.pwmCycleStartMs = now;
+    r.pwmCycleSetpoint = r.setpoint;
+    uint32_t on = static_cast<uint32_t>(static_cast<float>(cycle) * r.duty / 100.f);
+    uint32_t minP = std::min(minPulseMs(r), cycle / 2u);
+    // pulses shorter than the actuator travel time have no effect
+    if (on < minP) on = on * 2u >= minP ? minP : 0u;
+    if (on > 0u && cycle - on < minP) on = (cycle - on) * 2u >= minP ? cycle - minP : cycle;
+    r.pwmOnMs = on;
+  }
+  bool d = elapsed(now, r.pwmCycleStartMs) < r.pwmOnMs;
+  // overshoot guard: clearly above the setpoint the valve closes at once
+  if (r.temperature >= r.setpoint + clampf(r.hysteresis, 0.1f, 3.f)) d = false;
+  return d;
+}
+
 void HeatingManager::updateDemand(Room& r, const ModelAdvice& adv, SensorFailMode failMode, uint8_t dutyPct,
                                   uint16_t cycleMin, Millis now) {
   bool d = r.demand;
   r.assistOnShift = r.assistOffShift = 0.f;
+  if (r.control != RoomControl::Pwm || !r.hasTemp) {
+    r.pwmRunning = false;  // restart cleanly when PWM (re)starts
+    if (r.control != RoomControl::Pwm) r.duty = 0.f;
+  }
   if (r.overTemp) {
     d = false;
   } else if (!r.hasTemp) {
@@ -268,6 +329,10 @@ void HeatingManager::updateDemand(Room& r, const ModelAdvice& adv, SensorFailMod
     } else {
       d = false;
     }
+  } else if (r.control == RoomControl::Pwm) {
+    r.sensorFail = false;
+    d = pwmDemand(r, now);
+    if (r.externalDemand && !r.windowOpen() && r.temperature < r.setpoint + 1.0f) d = true;
   } else {
     r.sensorFail = false;
     float h = clampf(r.hysteresis, 0.1f, 3.f);
@@ -346,6 +411,10 @@ void HeatingManager::toJson(JsonObject o, bool runtime) const {
     x["modelAssist"] = r.modelAssist;
     x["manualOverrideMin"] = r.manualOverrideMin;
     x["showOnDisplay"] = r.showOnDisplay;
+    x["control"] = roomControlName(r.control);
+    x["pwmCycleMin"] = r.pwmCycleMin;
+    x["pwmKp"] = r.pwmKp;
+    x["pwmTnMin"] = r.pwmTnMin;
     if (!runtime) continue;
     x["windowOpen"] = r.windowOpen();
     JsonArray ws = x["windowSources"].to<JsonArray>();
@@ -369,6 +438,12 @@ void HeatingManager::toJson(JsonObject o, bool runtime) const {
     x["overTemp"] = r.overTemp;
     x["assistOnShift"] = r.assistOnShift;
     x["assistOffShift"] = r.assistOffShift;
+    if (r.control == RoomControl::Pwm && r.pwmRunning) {
+      x["duty"] = std::round(r.duty);
+      x["pwmOnMin"] = std::round(r.pwmOnMs / 6000.f) / 10.f;
+      uint32_t cyc = static_cast<uint32_t>(r.pwmCycleMin) * 60000u, el = elapsed(now, r.pwmCycleStartMs);
+      x["pwmCycleRemainingSec"] = el >= cyc ? 0u : (cyc - el) / 1000u;
+    }
   }
   JsonArray ca = o["circuits"].to<JsonArray>();
   for (auto& c : circuits) {
@@ -436,6 +511,13 @@ std::string HeatingManager::fromJson(JsonObjectConst o) {
     r.modelAssist = x["modelAssist"] | true;
     r.manualOverrideMin = x["manualOverrideMin"] | 180u;
     r.showOnDisplay = x["showOnDisplay"] | true;
+    if (!roomControlFromName(x["control"] | "hysteresis", r.control)) return "Regelung hysteresis|pwm";
+    r.pwmCycleMin = x["pwmCycleMin"] | 20u;
+    r.pwmKp = x["pwmKp"] | 40.f;
+    r.pwmTnMin = x["pwmTnMin"] | 90u;
+    if (r.pwmCycleMin < 5 || r.pwmCycleMin > 60) return "PWM-Zyklus 5..60 min";
+    if (!(r.pwmKp >= 5.f && r.pwmKp <= 200.f)) return "PWM-Verstaerkung 5..200 %/K";
+    if (r.pwmTnMin > 600) return "PWM-Nachstellzeit 0..600 min";
     if (Room* old = room(r.id)) {
       // keep runtime state across configuration updates
       r.windowSources = old->windowSources;
@@ -452,6 +534,15 @@ std::string HeatingManager::fromJson(JsonObjectConst o) {
       r.hasTemp = old->hasTemp;
       r.temperature = old->temperature;
       r.setpoint = old->setpoint;
+      if (old->control == r.control) {
+        r.duty = old->duty;
+        r.pwmI = old->pwmI;
+        r.pwmRunning = old->pwmRunning;
+        r.pwmLastMs = old->pwmLastMs;
+        r.pwmCycleStartMs = old->pwmCycleStartMs;
+        r.pwmOnMs = old->pwmOnMs;
+        r.pwmCycleSetpoint = old->pwmCycleSetpoint;
+      }
     }
     list.push_back(std::move(r));
   }

@@ -1,6 +1,7 @@
 #include "hc/api/ApiRouter.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 
@@ -91,6 +92,7 @@ void statusJson(HeatCoreSystem& sys, JsonObject o) {
     x["mode"] = roomModeName(r.mode);
     x["manual"] = r.manualActive;
     x["fault"] = r.sensorFail || r.overTemp;
+    if (r.control == RoomControl::Pwm && r.pwmRunning) x["duty"] = std::round(r.duty);
   }
   JsonObject rf = o["rf"].to<JsonObject>();
   rf["devices"] = static_cast<int>(sys.rfReg.rx.size());

@@ -369,6 +369,7 @@ void MqttBridge::roomState(const Room& r, std::vector<MqttMsg>& out) const {
   d["demand"] = r.demand;
   d["reason"] = r.reason;
   d["manual"] = r.manualActive;
+  if (r.control == RoomControl::Pwm && r.pwmRunning) d["duty"] = std::round(r.duty);
   out.push_back({base() + "/room/" + r.id + "/state", toStr(d), true});
   if (!sys_.mqttCfg.roomValueTopics) return;
   // one plain value per topic for simple displays (Button+, ...)

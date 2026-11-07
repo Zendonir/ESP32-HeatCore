@@ -67,6 +67,41 @@ Die Sicherheitsstufe sitzt direkt vor den Ausgängen
 * Automationen, Funk und Home Assistant können Heizkreis-Ausgänge,
   Sicherheitsgrenzen und Systemalarme nicht ändern.
 
+## Raumregelung: Zweipunkt oder PWM
+
+Thermische Stellantriebe kennen nur **auf** oder **zu** – eine
+Zwischenstellung gibt es nicht. Je Raum wählbar (Räume & Heizkreise →
+„Regelung“):
+
+* **Zweipunkt (Hysterese, Standard):** Ventil auf unter Soll − H/2, zu über
+  Soll + H/2. Das Lernmodell kann die Schaltschwellen begrenzt verschieben
+  (siehe unten). Gut für träge Fußbodenheizungen.
+* **PWM-Takt (PI-Regler):** Ein PI-Regler berechnet einen Öffnungsanteil
+  0–100 % (`duty`), der als ein Puls je Zyklus ausgegeben wird – z. B. 35 %
+  von 20 min = 7 min auf, 13 min zu. Damit wird das Ventil „virtuell
+  prozentual“ geöffnet und die Raumtemperatur schwankt weniger. Gut für
+  Heizkörper und schnell reagierende Räume.
+  * `pwmCycleMin` Zyklus 5–60 min (Fußbodenheizung 20–30, Heizkörper 10–15)
+  * `pwmKp` Verstärkung 5–200 %/K: Öffnungsanteil je Kelvin unter Soll
+  * `pwmTnMin` Nachstellzeit 0–600 min (0 = nur P-Anteil): wie schnell der
+    I-Anteil die bleibende Abweichung ausgleicht (Fußbodenheizung 90–180,
+    Heizkörper 30–60)
+  * **Kürzester Puls = Mindestlaufzeit der Heizkreise.** Thermische
+    Stellantriebe brauchen 3–5 min zum Öffnen; Pulse darunter bewirken nichts.
+    Kürzere Pulse werden auf 0 bzw. die Mindestlaufzeit gerundet, eine sehr
+    kurze Pause auf 100 %. Mindestlauf-/Pausenzeit deshalb mindestens auf die
+    Laufzeit des Stellantriebs setzen (typ. 180–300 s).
+  * Ein neuer Zyklus beginnt sofort, wenn sich der Sollwert um ≥ 0,25 K ändert
+    (Zeitplan, Handänderung, Fenster).
+  * Erreicht die Temperatur Soll + Hysterese, schließt das Ventil sofort
+    (Überschwingschutz). Bei offenem Fenster ruht der I-Anteil.
+  * Das Lernmodell lernt weiter, verschiebt aber keine Schwellen.
+  * Der aktuelle Öffnungsanteil steht in der Übersicht („PWM 35 %“), in
+    `/api/status`, `/api/heating` und im MQTT-Raumzustand (`duty`).
+
+Sicherheit, Mindestlaufzeiten, Fühlerausfall-Strategie und Übertemperatur
+gelten für beide Regelarten unverändert.
+
 ## Lernmodell
 
 `dT/dt = a·u(t − Totzeit) + b·(T_außen − T)` (mit Außenfühler) bzw.

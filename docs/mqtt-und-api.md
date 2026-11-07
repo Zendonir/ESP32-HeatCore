@@ -8,7 +8,7 @@ Alles funktioniert ohne MQTT und Home Assistant. MQTT ist optional
 | Thema | Richtung | Inhalt |
 |---|---|---|
 | `<basis>/status` | aus | `online`/`offline` (LWT) |
-| `<basis>/room/<id>/state` | aus | JSON: temp, setpoint, ha_mode, preset, action, window, demand, reason |
+| `<basis>/room/<id>/state` | aus | JSON: temp, setpoint, ha_mode, preset, action, window, demand, reason, manual, duty (nur PWM-Regelung, %) |
 | `<basis>/room/<id>/setpoint/set` | ein | Sollwert (auf Sicherheitsgrenzen begrenzt) |
 | `<basis>/room/<id>/mode/set` / `preset/set` | ein | `auto`/`heat`/`off` bzw. `comfort`/`eco`/`frost`/`none` |
 | `<basis>/mode/state`, `/mode/set` | aus/ein | `normal`/`eco`/`away`/`vacation` |

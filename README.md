@@ -12,7 +12,8 @@ Webinterface.
 
 * **Heizung:** Räume mit Zeitplänen, Komfort/Absenkung/Frostschutz,
   Raumgruppen, globale Betriebsarten (Absenkbetrieb, Abwesend, Urlaub mit
-  Ablauf), 16 Heizkreise mit Mindestlaufzeiten, NC/NO-Ventile.
+  Ablauf), 16 Heizkreise mit Mindestlaufzeiten, NC/NO-Ventile; je Raum
+  Zweipunkt- oder PWM-Taktregelung (PI) für thermische Stellantriebe.
 * **Sicherheit:** Vorlauf- und Raum-Übertemperatur, Sollwertgrenzen, begrenzter
   Handbetrieb, Schaltratenbegrenzung, Fühlerausfall-Strategie, Task- und
   Ausgangs-Watchdog, sicherer Zustand bei Reset/OTA. Nicht durch Automationen,

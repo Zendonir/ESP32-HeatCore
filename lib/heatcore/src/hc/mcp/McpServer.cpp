@@ -21,8 +21,8 @@ constexpr int kInvalidParams = -32602;
 constexpr int kServerDisabled = -32001;
 
 const char* const kInstructions =
-    "HeatCore ist eine lokale Heizungssteuerung (Einzelraumregelung mit Ventilen, Hysterese-Regler und lernendem "
-    "Raummodell). Ueber diese Schnittstelle koennen Messwerte, Statistik (15-Minuten-Werte der letzten 14 Tage), "
+    "HeatCore ist eine lokale Heizungssteuerung (Einzelraumregelung mit Ventilen, je Raum Hysterese-Regler oder "
+    "PWM-Taktregelung (PI, control=pwm) und lernendem Raummodell). PWM-Parameter sind nur lesbar. Ueber diese Schnittstelle koennen Messwerte, Statistik (15-Minuten-Werte der letzten 14 Tage), "
     "Einstellungen und das Lernmodell gelesen werden. Ziel einer Optimierung: Komfort in den Komfortzeiten bei "
     "moeglichst wenig Heizzeit und Ventilschaltungen. Aenderungen (change_settings) sind - je nach Freigabe - "
     "Vorschlaege, die ein Mensch im Webinterface bestaetigt, oder werden direkt angewendet. Sicherheitsgrenzen sind "
@@ -317,7 +317,8 @@ std::string McpServer::tool(const std::string& name, JsonObjectConst args, JsonO
     JsonArray rooms = o["rooms"].to<JsonArray>();
     for (JsonObject r : h["rooms"].as<JsonArray>()) {
       JsonObject x = rooms.add<JsonObject>();
-      for (const char* k : {"id", "name", "comfort", "eco", "frost", "mode", "hysteresis", "modelAssist", "manualOverrideMin"})
+      for (const char* k : {"id", "name", "comfort", "eco", "frost", "mode", "hysteresis", "modelAssist", "manualOverrideMin",
+                            "control", "pwmCycleMin", "pwmKp", "pwmTnMin"})
         x[k] = r[k];
       x["schedule"] = r["schedule"];
     }
