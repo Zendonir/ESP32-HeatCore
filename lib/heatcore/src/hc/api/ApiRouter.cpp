@@ -162,6 +162,7 @@ void hardwareJson(HeatCoreSystem& sys, JsonObject o) {
   p["netDetail"] = pl.netDetail;
   p["freeHeap"] = pl.freeHeap;
   p["minFreeHeap"] = pl.minFreeHeap;
+  p["largestFreeBlock"] = pl.largestFreeBlock;
   p["freePsram"] = pl.freePsram;
   p["totalPsram"] = pl.totalPsram;
   p["cpuPct"] = pl.cpuPct;

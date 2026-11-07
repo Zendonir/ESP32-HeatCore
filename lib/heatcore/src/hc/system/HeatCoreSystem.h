@@ -75,6 +75,7 @@ struct PlatformStatus {
   std::string sd = "-";
   uint64_t sdTotalBytes = 0, sdUsedBytes = 0;
   uint32_t freeHeap = 0, minFreeHeap = 0, freePsram = 0, totalPsram = 0;
+  uint32_t largestFreeBlock = 0;  // internal RAM
   int cpuPct = -1;
   uint32_t uptimeSec = 0;
   std::string resetReason;

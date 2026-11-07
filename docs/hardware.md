@@ -176,6 +176,12 @@ GPIO43/44 (UART0) sind mit dem W5500 belegt. Serielle Ausgaben laufen deshalb
   LAN noch WLAN (und niemand ist am Einrichtungs-Zugangspunkt), startet sie
   einmal neu. Ist der interne Arbeitsspeicher eine Minute lang erschöpft,
   ebenfalls.
+* Arbeitsspeicher: Speicherblöcke ab 512 Byte liegen im 8-MB-PSRAM, der
+  knappe interne RAM bleibt WLAN, Netzwerk und Treibern vorbehalten. Unter
+  „Freier RAM“ sollte das Minimum deutlich über 20 KB liegen. Ein sehr
+  schwaches WLAN (unter −80 dBm, ohne externe Antenne am IPEX-Anschluss)
+  lässt Sendepuffer anwachsen und ist die häufigste Ursache für „Gerät nicht
+  mehr erreichbar“ – Antenne anschließen oder LAN verwenden.
 * Das Display schaltet sich nach der eingestellten Zeit (Standard 5 min)
   ab; ein Tastendruck weckt es. „Display aus“ allein ist kein Fehler.
 
