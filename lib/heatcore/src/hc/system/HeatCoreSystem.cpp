@@ -1,5 +1,6 @@
 #include "hc/system/HeatCoreSystem.h"
 
+#include <memory>
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -1078,7 +1079,9 @@ std::string HeatCoreSystem::sectionFromJson(ConfigSection s, JsonObjectConst o) 
     case ConfigSection::Network: err = networkConfigFromJson(netCfg, o); break;
     case ConfigSection::Mqtt: err = mqttConfigFromJson(mqttCfg, o); break;
     case ConfigSection::Io: {
-      IoManager probe(bus, clock_);
+      // several KB: on the heap, not on the (small) stack of the caller
+      auto probePtr = std::make_unique<IoManager>(bus, clock_);
+      IoManager& probe = *probePtr;
       probe.outCfg = io.outCfg;
       probe.inCfg = io.inCfg;
       probe.aiCfg = io.aiCfg;

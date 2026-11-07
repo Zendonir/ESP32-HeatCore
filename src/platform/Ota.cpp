@@ -19,8 +19,10 @@ constexpr uint32_t kRejectAfterMs = 600000;
 
 std::string nvsGet(const char* key) {
   Preferences p;
-  if (!p.begin(kNvs, true)) return std::string();
-  String v = p.getString(key, "");
+  // read-write: creates the namespace on first use instead of logging
+  // "nvs_open failed: NOT_FOUND" after a fresh installation
+  if (!p.begin(kNvs, false)) return std::string();
+  String v = p.isKey(key) ? p.getString(key, "") : String();
   p.end();
   return v.c_str();
 }

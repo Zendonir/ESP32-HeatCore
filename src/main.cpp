@@ -45,6 +45,10 @@
 
 using namespace platform;
 
+// setup() runs in the Arduino loop task (default 8 KB stack): configuration
+// loading parses all sections there. 16 KB leaves ample headroom.
+SET_LOOP_TASK_STACK_SIZE(16 * 1024);
+
 namespace {
 
 EspClock g_clock;
