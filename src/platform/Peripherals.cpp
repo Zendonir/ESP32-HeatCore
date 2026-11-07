@@ -197,7 +197,12 @@ bool Ssd1306::flush(const hc::Framebuffer& fb, bool force) {
       buf[0] = 0x40;
       std::memcpy(buf + 1, src + off, 16);
       I2cLock lk(bus_, 100);
-      if (!lk.ok()) return false;  // bus busy (e.g. self-test scan): retry next frame
+      if (!lk.ok()) {
+        // bus busy (e.g. self-test scan): this page may be half written, so
+        // the shadow no longer matches the panel - redraw it next frame
+        haveShadow_ = false;
+        return false;
+      }
       if (!bus_.write(addr_, buf, sizeof(buf))) {
         init_ = false;
         return false;
