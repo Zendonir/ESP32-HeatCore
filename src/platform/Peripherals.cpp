@@ -34,8 +34,13 @@ bool IoExpanders::begin(uint16_t safeMask) {
   return out1_ && out2_;
 }
 
+// Bus waits: a probe of an absent address during the self-test scan can hold
+// the bus for ~30 ms. Inputs/outputs are polled every 20 ms, waiting up to
+// 100 ms only delays one cycle instead of counting a read/write error.
+constexpr uint32_t kIoLockMs = 100;
+
 bool IoExpanders::writeOutputs(uint16_t mask, bool verify) {
-  I2cLock lk(bus_, 30);
+  I2cLock lk(bus_, kIoLockMs);
   if (!lk.ok()) return false;
   bool ok = writePort(board::kPcfOut1, static_cast<uint8_t>(mask & 0xFF)) &&
             writePort(board::kPcfOut2, static_cast<uint8_t>(mask >> 8));
@@ -51,7 +56,7 @@ bool IoExpanders::writeOutputs(uint16_t mask, bool verify) {
 }
 
 bool IoExpanders::readInputs(uint16_t& active) {
-  I2cLock lk(bus_, 30);
+  I2cLock lk(bus_, kIoLockMs);
   if (!lk.ok()) return false;
   uint8_t a = 0xFF, b = 0xFF;
   bool ok = bus_.read(board::kPcfIn1, &a, 1) && bus_.read(board::kPcfIn2, &b, 1);
@@ -137,7 +142,7 @@ bool Ssd1306::cmd(std::initializer_list<uint8_t> c) {
   size_t n = 1;
   for (uint8_t b : c)
     if (n < sizeof(buf)) buf[n++] = b;
-  I2cLock lk(bus_, 30);
+  I2cLock lk(bus_, 100);
   return lk.ok() && bus_.write(addr_, buf, n);
 }
 
@@ -177,17 +182,28 @@ bool Ssd1306::flush(const hc::Framebuffer& fb, bool force) {
   for (int page = 0; page < 8; ++page) {
     const uint8_t* src = d + page * 128;
     if (!force && haveShadow_ && std::memcmp(src, shadow_ + page * 128, 128) == 0) continue;
-    if (!cmd({0x21, 0, 127, 0x22, static_cast<uint8_t>(page), static_cast<uint8_t>(page)})) {
-      init_ = false;
-      return false;
+    {
+      const uint8_t c[7] = {0x00, 0x21, 0, 127, 0x22, static_cast<uint8_t>(page), static_cast<uint8_t>(page)};
+      I2cLock lk(bus_, 100);
+      if (!lk.ok()) return false;  // bus busy: retry with the next frame
+      if (!bus_.write(addr_, c, sizeof(c))) {
+        init_ = false;  // display does not answer: re-initialise later
+        return false;
+      }
     }
     // 16 data bytes per transaction keeps every bus lock short
     for (int off = 0; off < 128; off += 16) {
       uint8_t buf[17];
       buf[0] = 0x40;
       std::memcpy(buf + 1, src + off, 16);
-      I2cLock lk(bus_, 30);
-      if (!lk.ok() || !bus_.write(addr_, buf, sizeof(buf))) {
+      I2cLock lk(bus_, 100);
+      if (!lk.ok()) {
+        // bus busy (e.g. self-test scan): this page may be half written, so
+        // the shadow no longer matches the panel - redraw it next frame
+        haveShadow_ = false;
+        return false;
+      }
+      if (!bus_.write(addr_, buf, sizeof(buf))) {
         init_ = false;
         return false;
       }

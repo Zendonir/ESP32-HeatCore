@@ -239,6 +239,7 @@ void controlTask(void*) {
         // internal RAM nearly exhausted or fragmented for a minute: restart
         // cleanly (valves to safe state) instead of failing at random later
         size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        p.largestFreeBlock = static_cast<uint32_t>(largest);
         bool low = p.freeHeap < 16384 || largest < 4096;
         if (!low) lowHeapSince = 0;
         else if (!lowHeapSince) lowHeapSince = now ? now : 1;
@@ -840,6 +841,12 @@ void loadConfiguration() {
 }  // namespace
 
 void setup() {
+  // Allocations from 512 bytes go to the 8 MB PSRAM first (default: only
+  // from 4 KB). Strings, JSON documents, HTTP responses and WebSocket
+  // messages otherwise exhaust the ~320 KB internal RAM, especially on a weak
+  // Wi-Fi link where send buffers pile up; Wi-Fi, lwIP, DMA buffers and task
+  // stacks request internal memory explicitly and are not affected.
+  heap_caps_malloc_extmem_enable(512);
   // 1) outputs to a defined state before anything else (PCF8574 keeps its
   //    latch across an ESP reset: an OTA restart must not leave valves open)
   g_i2c.begin(board::kI2cSda, board::kI2cScl, board::kI2cHz);
