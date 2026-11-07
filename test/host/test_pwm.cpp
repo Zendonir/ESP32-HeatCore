@@ -57,6 +57,13 @@ TEST(pwm_config_roundtrip_and_validation) {
   CHECK(!bad(R"({"rooms":[{"id":"a","control":"pwm","pwmKp":0}]})").empty());
   CHECK(!bad(R"({"rooms":[{"id":"a","control":"pwm","pwmTnMin":601}]})").empty());
   CHECK(bad(R"({"rooms":[{"id":"a","control":"pwm","pwmTnMin":0}]})").empty());
+  // cycle must hold a minimum pulse plus a minimum pause (2 x 180 s > 5 min)
+  std::string e = bad(R"({"rooms":[{"id":"a","control":"pwm","pwmCycleMin":5}],
+                         "circuits":[{"n":3,"room":"a","minOnSec":180,"minOffSec":120}]})");
+  CHECK(e.find("PWM-Zyklus zu kurz") != std::string::npos);
+  CHECK_EQ(r.sys.heating.circuits[2].minOnSec, 120);  // rejected config left nothing behind
+  CHECK(bad(R"({"rooms":[{"id":"a","control":"pwm","pwmCycleMin":6}],
+               "circuits":[{"n":3,"room":"a","minOnSec":180,"minOffSec":120}]})").empty());
 }
 
 TEST(pwm_proportional_duty_one_pulse_per_cycle) {
@@ -126,6 +133,8 @@ TEST(pwm_window_and_overshoot_close_immediately) {
   // overshoot guard: reaching setpoint + hysteresis closes within the cycle
   holdTemp(r, 21.5f, 100);
   CHECK(!r.output(1));
+  // falling just below the guard does not re-open within the same cycle
+  CHECK_EQ(holdTemp(r, 21.3f, 300), 0u);
   holdTemp(r, 19.f, 25 * 60);
   float iBefore = r.sys.heating.room("wohnen")->pwmI;
   CHECK(r.output(1));

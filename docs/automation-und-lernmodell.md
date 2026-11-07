@@ -81,7 +81,8 @@ Zwischenstellung gibt es nicht. Je Raum wählbar (Räume & Heizkreise →
   von 20 min = 7 min auf, 13 min zu. Damit wird das Ventil „virtuell
   prozentual“ geöffnet und die Raumtemperatur schwankt weniger. Gut für
   Heizkörper und schnell reagierende Räume.
-  * `pwmCycleMin` Zyklus 5–60 min (Fußbodenheizung 20–30, Heizkörper 10–15)
+  * `pwmCycleMin` Zyklus 5–60 min (Fußbodenheizung 20–30, Heizkörper 10–15),
+    mindestens 2 × Mindestlauf-/Pausenzeit der zugeordneten Heizkreise
   * `pwmKp` Verstärkung 5–200 %/K: Öffnungsanteil je Kelvin unter Soll
   * `pwmTnMin` Nachstellzeit 0–600 min (0 = nur P-Anteil): wie schnell der
     I-Anteil die bleibende Abweichung ausgleicht (Fußbodenheizung 90–180,
@@ -94,7 +95,8 @@ Zwischenstellung gibt es nicht. Je Raum wählbar (Räume & Heizkreise →
   * Ein neuer Zyklus beginnt sofort, wenn sich der Sollwert um ≥ 0,25 K ändert
     (Zeitplan, Handänderung, Fenster).
   * Erreicht die Temperatur Soll + Hysterese, schließt das Ventil sofort
-    (Überschwingschutz). Bei offenem Fenster ruht der I-Anteil.
+    und der laufende Puls endet (Überschwingschutz). Bei offenem Fenster ruht
+    der I-Anteil.
   * Das Lernmodell lernt weiter, verschiebt aber keine Schwellen.
   * Der aktuelle Öffnungsanteil steht in der Übersicht („PWM 35 %“), in
     `/api/status`, `/api/heating` und im MQTT-Raumzustand (`duty`).

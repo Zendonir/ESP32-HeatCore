@@ -304,10 +304,11 @@ bool HeatingManager::pwmDemand(Room& r, Millis now) {
     if (on > 0u && cycle - on < minP) on = (cycle - on) * 2u >= minP ? cycle - minP : cycle;
     r.pwmOnMs = on;
   }
-  bool d = elapsed(now, r.pwmCycleStartMs) < r.pwmOnMs;
-  // overshoot guard: clearly above the setpoint the valve closes at once
-  if (r.temperature >= r.setpoint + clampf(r.hysteresis, 0.1f, 3.f)) d = false;
-  return d;
+  uint32_t inCycle = elapsed(now, r.pwmCycleStartMs);
+  // overshoot guard: clearly above the setpoint the valve closes at once and
+  // the running pulse ends (no re-opening within this cycle)
+  if (r.temperature >= r.setpoint + clampf(r.hysteresis, 0.1f, 3.f) && r.pwmOnMs > inCycle) r.pwmOnMs = inCycle;
+  return inCycle < r.pwmOnMs;
 }
 
 void HeatingManager::updateDemand(Room& r, const ModelAdvice& adv, SensorFailMode failMode, uint8_t dutyPct,
@@ -547,10 +548,11 @@ std::string HeatingManager::fromJson(JsonObjectConst o) {
     list.push_back(std::move(r));
   }
   if (list.size() > 16) return "Maximal 16 Raeume";
+  std::array<Circuit, kNumOutputs> nc = circuits;  // applied only when valid
   for (JsonObjectConst x : o["circuits"].as<JsonArrayConst>()) {
     int n = x["n"] | 0;
     if (n < 1 || n > kNumOutputs) continue;
-    Circuit& c = circuits[n - 1];
+    Circuit& c = nc[n - 1];
     c.name = x["name"] | c.name.c_str();
     c.room = x["room"] | "";
     c.enabled = x["enabled"] | true;
@@ -559,6 +561,18 @@ std::string HeatingManager::fromJson(JsonObjectConst o) {
     c.minOffSec = x["minOffSec"] | 120;
     if (c.minOnSec > 3600 || c.minOffSec > 3600) return "Mindestlaufzeiten max. 3600 s";
   }
+  // a PWM cycle must hold one minimum pulse and one minimum pause
+  for (auto& r : list) {
+    if (r.control != RoomControl::Pwm) continue;
+    for (auto& c : nc) {
+      if (!c.enabled || c.room != r.id) continue;
+      uint32_t need = 2u * std::max(c.minOnSec, c.minOffSec);
+      if (static_cast<uint32_t>(r.pwmCycleMin) * 60u < need)
+        return "Raum " + r.id + ": PWM-Zyklus zu kurz fuer die Mindestlaufzeiten von Heizkreis " +
+               std::to_string(c.index) + " (mind. " + std::to_string((need + 59) / 60) + " min)";
+    }
+  }
+  circuits = nc;
   rooms = std::move(list);
   GlobalMode gm = GlobalMode::Normal;
   globalModeFromName(o["globalMode"] | "normal", gm);
