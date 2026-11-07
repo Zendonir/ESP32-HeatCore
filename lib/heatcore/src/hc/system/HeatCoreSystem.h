@@ -89,6 +89,7 @@ struct PlatformStatus {
   bool ioExpandersOk = false;
   uint32_t controlLoopMaxUs = 0;
   std::array<uint8_t, 3> oneWireCount{{0, 0, 0}};
+  std::array<std::string, 3> oneWireInfo;  // bus diagnosis (empty line, short, CRC ...)
   std::string rs485 = "-";
   uint32_t rs485Lines = 0, rs485Errors = 0;
   bool rfRxHw = false, rfTxHw = false;

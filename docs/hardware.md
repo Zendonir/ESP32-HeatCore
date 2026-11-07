@@ -28,7 +28,7 @@ Definiert in `src/platform/Board.h`.
 | SSD1306 OLED | 0x3C (I²C-Steckleiste) | Blockschaltbild; Foto: Modul auf Abstandsbolzen über der Platine |
 | RF433 Empfänger | GPIO8 | Blockschaltbild; A16-Schaltplan: Sockel P2 5 V, Daten über U17 (74LVC1G125) auf 3,3 V; V3.1-Foto: U17 + C8 vorhanden, zusätzlich R160 |
 | RF433 Sender | GPIO18 | Blockschaltbild; A16-Schaltplan: Sockel P7 (GND, 3,3 V, Daten); V3.1-Foto: 4-poliges Modul mit EN-Pin im 3-poligen Sockel → Belegung **unbestätigt** |
-| 1-Wire 1/2/3 | GPIO47 / GPIO48 / GPIO38 | dokumentiert, Pull-ups auf der Platine |
+| 1-Wire 1/2/3 | GPIO47 / GPIO48 / GPIO38 | dokumentiert, Pull-ups auf der Platine; eigener Treiber (die Arduino-Bibliothek „OneWire“ bedient auf dem ESP32-S3 nur GPIO0–33 und fand an diesen Pins nie Sensoren – behoben in 0.7.0) |
 | Analog A1 / A2 (0–5 V) | GPIO4 / GPIO6 | Blockschaltbild; Teiler 5,1 kΩ/10 kΩ laut A16-Schaltplan (Faktor 1,51) |
 | Analog A3 / A4 (4–20 mA) | GPIO7 / GPIO5 | Blockschaltbild; Shunt 150 Ω direkt am ADC-Pin laut A16-Schaltplan (20 mA → 3,0 V) |
 | RS485 RX / TX | GPIO17 / GPIO16 | dokumentiert; A16-Schaltplan: MAX13487E mit automatischer Richtungsumschaltung |

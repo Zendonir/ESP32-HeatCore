@@ -279,7 +279,10 @@ void sensorTask(void*) {
         if (r.ok) g_sys->sensors.update(r.id, r.value, now);
         else g_sys->sensors.reportError(r.id, "1-Wire Lesefehler", now);
       }
-      for (size_t bus = 0; bus < 3; ++bus) g_sys->platform.oneWireCount[bus] = g_ow.count(bus);
+      for (size_t bus = 0; bus < 3; ++bus) {
+        g_sys->platform.oneWireCount[bus] = g_ow.count(bus);
+        g_sys->platform.oneWireInfo[bus] = g_ow.info(bus);
+      }
       if (rtcTemp) g_sys->platform.rtcTempC = rtcT;
       while (g_rs485.poll(line)) {
         if (!line.empty() && line[0] == '{') g_sys->reportRtl433Line(line.c_str());
@@ -572,8 +575,14 @@ void selfTestTask(void*) {
   for (size_t b = 0; b < 3; ++b) {
     char name[32];
     std::snprintf(name, sizeof(name), "1-Wire Bus %u (GPIO%d)", static_cast<unsigned>(b + 1), board::kOneWire[b]);
-    uint8_t n = g_ow.count(b);
-    addResult(res, name, n ? "ok" : "unbestaetigt", std::to_string(n) + " Sensor(en)");
+    uint8_t n;
+    std::string info;
+    {
+      Lock lk(g_sys->mutex());  // written by the sensor task
+      n = g_sys->platform.oneWireCount[b];
+      info = g_sys->platform.oneWireInfo[b];
+    }
+    addResult(res, name, n ? "ok" : "unbestaetigt", std::to_string(n) + " Sensor(en)" + (info.empty() ? "" : " - " + info));
   }
   addResult(res, "SD-Karte", g_storage.sdMounted() ? "ok" : "fehlt", g_storage.sdStatus());
   addResult(res, "Ethernet W5500", g_net.ethLink() ? "ok" : "unbestaetigt", g_net.ethLink() ? "Link" : "kein Link");

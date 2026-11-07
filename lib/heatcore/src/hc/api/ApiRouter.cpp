@@ -186,6 +186,8 @@ void hardwareJson(HeatCoreSystem& sys, JsonObject o) {
   p["controlLoopMaxUs"] = pl.controlLoopMaxUs;
   JsonArray ow = p["oneWire"].to<JsonArray>();
   for (uint8_t c : pl.oneWireCount) ow.add(c);
+  JsonArray owi = p["oneWireInfo"].to<JsonArray>();
+  for (auto& t : pl.oneWireInfo) owi.add(t);
   p["rs485"] = pl.rs485;
   p["rs485Lines"] = pl.rs485Lines;
   p["rs485Errors"] = pl.rs485Errors;
