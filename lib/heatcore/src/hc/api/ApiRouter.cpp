@@ -1,5 +1,6 @@
 #include "hc/api/ApiRouter.h"
 
+#include <memory>
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -1265,7 +1266,8 @@ ApiResponse ApiRouter::handle(const ApiRequest& req) {
           int page = static_cast<int>(c.qu("page", 0));
           DisplaySnapshot snap;
           sys.buildDisplaySnapshot(snap);
-          Framebuffer fb;
+          auto fbPtr = std::make_unique<Framebuffer>();  // 1 KB: heap, runs on the web task
+          Framebuffer& fb = *fbPtr;
           if (page >= 1 && page <= kNumPages) sys.display.renderPage(static_cast<DisplayPage>(page - 1), fb, snap);
           else sys.display.render(fb, snap);
           if (sys.display.cfg.rotation == 180) fb.rotate180();

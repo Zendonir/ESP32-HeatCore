@@ -1,5 +1,6 @@
 #include "hc/heating/Heating.h"
 
+#include <memory>
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -548,7 +549,9 @@ std::string HeatingManager::fromJson(JsonObjectConst o) {
     list.push_back(std::move(r));
   }
   if (list.size() > 16) return "Maximal 16 Raeume";
-  std::array<Circuit, kNumOutputs> nc = circuits;  // applied only when valid
+  // applied only when valid; on the heap (about 2 KB, callers have small stacks)
+  auto ncPtr = std::make_unique<std::array<Circuit, kNumOutputs>>(circuits);
+  std::array<Circuit, kNumOutputs>& nc = *ncPtr;
   for (JsonObjectConst x : o["circuits"].as<JsonArrayConst>()) {
     int n = x["n"] | 0;
     if (n < 1 || n > kNumOutputs) continue;

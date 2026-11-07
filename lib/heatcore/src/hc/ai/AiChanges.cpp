@@ -1,5 +1,6 @@
 #include "hc/ai/AiChanges.h"
 
+#include <memory>
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -398,8 +399,8 @@ std::string aiValidate(HeatCoreSystem& sys, JsonArrayConst changes, JsonArray no
   // complete check with the regular configuration validation (probe)
   std::string err = applyToHeatingJson(cur.as<JsonObject>(), normalized);
   if (!err.empty()) return err;
-  HeatingManager probe(sys.bus, sys.clock());
-  err = probe.fromJson(cur.as<JsonObjectConst>());
+  auto probe = std::make_unique<HeatingManager>(sys.bus, sys.clock());  // large: heap
+  err = probe->fromJson(cur.as<JsonObjectConst>());
   if (!err.empty()) return "Ungueltig: " + err;
   return std::string();
 }
@@ -570,8 +571,8 @@ std::string aiRevert(HeatCoreSystem& sys, uint16_t id, const std::string& reason
   JsonDocument cur;
   sys.sectionToJson(ConfigSection::Heating, cur.to<JsonObject>(), false);
   err = applyToHeatingJson(cur.as<JsonObject>(), before.as<JsonArrayConst>());
-  HeatingManager probe(sys.bus, sys.clock());
-  if (err.empty()) err = probe.fromJson(cur.as<JsonObjectConst>());
+  auto probe = std::make_unique<HeatingManager>(sys.bus, sys.clock());  // large: heap
+  if (err.empty()) err = probe->fromJson(cur.as<JsonObjectConst>());
   if (err.empty()) err = aiApply(sys, before.as<JsonArrayConst>());
   if (!err.empty()) return "Ruecknahme fehlgeschlagen: " + err;
   c->status = "reverted";
