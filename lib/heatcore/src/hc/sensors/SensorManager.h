@@ -99,6 +99,20 @@ class SensorManager {
   bool remove(const std::string& id);
   std::string adopt(const std::string& id, const std::string& name, const std::string& room, SensorRole role);
 
+  // Calibration: sensors placed side by side (or with a reference
+  // thermometer) get offsets so that all show the same value.
+  // reference: "mean" | "median" (of the raw values), "value" (refValue,
+  // e.g. a calibrated thermometer), "reset" (all offsets 0) or the id of one
+  // of the sensors (its corrected value is the target, its offset stays).
+  // All or nothing: every sensor needs a current value and the resulting
+  // offset must stay within +-10 K.
+  struct CalibrationResult {
+    std::string id;
+    float raw = 0.f, oldOffset = 0.f, newOffset = 0.f;
+  };
+  std::string calibrate(const std::vector<std::string>& ids, const std::string& reference, float refValue,
+                        std::vector<CalibrationResult>& out, float* target = nullptr);
+
   RoomTemperature roomTemperature(const std::string& room) const;
   bool firstOfRole(SensorRole role, float& value, std::string* id = nullptr) const;
   size_t countAvailable() const;
