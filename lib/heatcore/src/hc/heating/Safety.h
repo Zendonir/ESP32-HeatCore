@@ -32,6 +32,21 @@ struct SafetyConfig {
   SensorFailMode sensorFailMode = SensorFailMode::Off;
   uint8_t sensorFailDutyPct = 20;
   uint16_t sensorFailCycleMin = 20;
+  // Power supply of the valve outputs. Thermal actuators draw several times
+  // their rated power while cold (PTC heater): Danfoss TWA-A 24 V: 2 W running,
+  // inrush < 350 mA. With a rated current set, valves are switched on only
+  // while the supply has headroom; the rest wait (staggered start).
+  float psuVoltage = 24.f;        // 12 or 24 V DC
+  float psuCurrentA = 0.f;        // rated output current, 0 = not limited
+  uint8_t psuUsablePct = 80;      // usable share of the rating (headroom)
+  float psuBaseLoadA = 0.25f;     // board and other loads on the same supply
+  float valveInrushA = 0.35f;     // per actuator while starting
+  float valveHoldW = 2.0f;        // per actuator when warm (running power)
+  uint16_t valveInrushSec = 60;   // duration of the starting phase
+  float psuBudgetA() const { return psuCurrentA * static_cast<float>(psuUsablePct) / 100.f; }
+  float valveHoldA() const { return psuVoltage > 0.f ? valveHoldW / psuVoltage : 0.f; }
+  // current reserved when a valve is admitted: the larger of start and hold
+  float valveStartA() const { return valveInrushA > valveHoldA() ? valveInrushA : valveHoldA(); }
 };
 
 class SafetySupervisor {
@@ -53,6 +68,16 @@ class SafetySupervisor {
   float flowTemp() const { return flowTemp_; }
   uint32_t trips() const { return trips_; }
 
+  // Power budget (only valve outputs count; 0 A rating = no limit)
+  bool powerLimited() const { return cfg.psuCurrentA > 0.f; }
+  float valveLoadA(const OutputState& st, Millis now) const;
+  void setPowerStatus(float loadA, uint8_t waiting) {
+    powerLoadA_ = loadA;
+    powerWaiting_ = waiting;
+  }
+  float powerLoadA() const { return powerLoadA_; }
+  uint8_t powerWaiting() const { return powerWaiting_; }
+
   void toJson(JsonObject o, bool runtime) const;
   std::string fromJson(JsonObjectConst o);
 
@@ -64,6 +89,8 @@ class SafetySupervisor {
   bool flowValid_ = false;
   float flowTemp_ = 0.f;
   uint32_t trips_ = 0;
+  float powerLoadA_ = 0.f;
+  uint8_t powerWaiting_ = 0;
 };
 
 }  // namespace hc

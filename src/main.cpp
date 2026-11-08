@@ -287,7 +287,13 @@ void ioTask(void*) {
       if (mask != g_io.lastWritten() || now - lastWrite > 1000) {
         bool verify = now - lastVerify > 5000;
         if (verify) lastVerify = now;
-        bool ok = g_io.writeOutputs(mask, verify);
+        // Switch-offs first: when one valve replaces another (power budget),
+        // the old one must be off on the hardware before the new one starts.
+        uint16_t prev = g_io.lastWritten();
+        uint16_t offOnly = static_cast<uint16_t>(prev & mask);
+        bool ok = true;
+        if (offOnly != prev && offOnly != mask) ok = g_io.writeOutputs(offOnly, false);
+        if (ok) ok = g_io.writeOutputs(mask, verify);
         lastWrite = now;
         Lock lk(g_sys->mutex());
         g_sys->reportOutputWrite(ok);

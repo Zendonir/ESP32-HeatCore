@@ -139,6 +139,14 @@ GPIO43/44 (UART0) sind mit dem W5500 belegt. Serielle Ausgaben laufen deshalb
   GND) oder Halbleiterrelais. Am einfachsten versorgt ein 24-V-DC-Netzteil die
   Platine (POWER) und beide Ausgangsblöcke; bei getrennten Netzteilen die
   Minuspole verbinden.
+* **Netzteilgröße:** Thermische Stellantriebe brauchen warm nur wenig
+  (Danfoss TWA-A 24 V: 2 W ≈ 0,08 A), ziehen kalt aber deutlich mehr
+  (TWA-A: Einschaltstrom < 350 mA). Faustformel ohne Lastbegrenzung:
+  Anzahl × Einschaltstrom + 0,25 A Platine + 20 % Reserve – für 6 Ventile
+  24 V / 2,5 A, für 16 Ventile 24 V / 5 A. Mit der **Netzteil-Lastgrenze**
+  (System → Sicherheit → „Netzteil der Ventile“) staffelt HeatCore das
+  Einschalten so, dass das eingetragene Netzteil nie überlastet wird; dann
+  genügt auch ein kleineres.
   *Hinweis:* Der Schaltplan der älteren KC868-A16 (v1, ESP32-WROOM) zeigt
   Low-Side-N-MOSFETs (60 V/10 A) – das gilt **nicht** für die V3.1.
 * Ansteuerung: PCF-Pin LOW → Optokoppler-LED an → Ausgang an. 10-kΩ-Pull-ups

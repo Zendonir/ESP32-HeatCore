@@ -309,6 +309,7 @@ uint16_t HeatCoreSystem::safeOutputMask() const {
 }
 
 void HeatCoreSystem::computeOutputs(Millis now) {
+  std::array<bool, kNumOutputs> want{}, valve{}, safeLv{};
   for (int i = 0; i < kNumOutputs; ++i) {
     size_t k = static_cast<size_t>(i);
     const OutputConfig& cfg = io.outCfg[k];
@@ -339,10 +340,53 @@ void HeatCoreSystem::computeOutputs(Millis now) {
     }
     if (st.manualActive) requested = st.manualState;
     std::string reason;
-    bool level = safety.filterOutput(i, requested, isCircuit, safeLevel, roomOT, st, now, reason);
+    want[k] = safety.filterOutput(i, requested, isCircuit, safeLevel, roomOT, st, now, reason);
+    valve[k] = isCircuit;
+    safeLv[k] = safeLevel;
     st.blocked = reason;
-    io.applyLevel(i, level, now);
   }
+  if (!safety.powerLimited()) {
+    for (int i = 0; i < kNumOutputs; ++i) io.applyLevel(i, want[static_cast<size_t>(i)], now);
+    safety.setPowerStatus(0.f, 0);
+    return;
+  }
+  // Power budget of the valve supply: switch-offs first (they free current),
+  // then switch-ons in output order as long as the starting current fits.
+  // Reaching the safe level is never delayed (normally-open valves close
+  // when energised), it is only counted.
+  float load = safety.cfg.psuBaseLoadA;
+  for (int i = 0; i < kNumOutputs; ++i) {
+    size_t k = static_cast<size_t>(i);
+    if (io.out[k].level && !want[k]) io.applyLevel(i, false, now);
+    if (valve[k]) load += safety.valveLoadA(io.out[k], now);
+  }
+  const float budget = safety.cfg.psuBudgetA();
+  uint8_t waiting = 0;
+  for (int i = 0; i < kNumOutputs; ++i) {
+    size_t k = static_cast<size_t>(i);
+    OutputState& st = io.out[k];
+    if (!want[k] || st.level) {
+      io.applyLevel(i, want[k], now);
+      continue;
+    }
+    if (!valve[k]) {
+      io.applyLevel(i, true, now);
+      continue;
+    }
+    bool safeOn = safeLv[k];  // energising closes a normally-open valve
+    const float startA = safety.cfg.valveStartA();
+    if (safeOn || load + startA <= budget + 1e-4f) {
+      io.applyLevel(i, true, now);
+      load += startA;
+    } else {
+      ++waiting;
+      char b[96];
+      std::snprintf(b, sizeof(b), "wartet auf Netzteil (%.2f + %.2f A > %.2f A nutzbar)", static_cast<double>(load),
+                    static_cast<double>(safety.cfg.valveStartA()), static_cast<double>(budget));
+      st.blocked = b;
+    }
+  }
+  safety.setPowerStatus(load, waiting);
 }
 
 std::string HeatCoreSystem::historyJson(const std::string& series, uint32_t hours, uint16_t res, JsonObject o) const {
