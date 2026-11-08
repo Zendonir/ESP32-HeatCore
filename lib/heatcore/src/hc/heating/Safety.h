@@ -45,6 +45,8 @@ struct SafetyConfig {
   uint16_t valveInrushSec = 60;   // duration of the starting phase
   float psuBudgetA() const { return psuCurrentA * static_cast<float>(psuUsablePct) / 100.f; }
   float valveHoldA() const { return psuVoltage > 0.f ? valveHoldW / psuVoltage : 0.f; }
+  // current reserved when a valve is admitted: the larger of start and hold
+  float valveStartA() const { return valveInrushA > valveHoldA() ? valveInrushA : valveHoldA(); }
 };
 
 class SafetySupervisor {

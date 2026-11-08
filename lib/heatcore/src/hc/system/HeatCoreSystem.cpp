@@ -374,14 +374,15 @@ void HeatCoreSystem::computeOutputs(Millis now) {
       continue;
     }
     bool safeOn = safeLv[k];  // energising closes a normally-open valve
-    if (safeOn || load + safety.cfg.valveInrushA <= budget + 1e-4f) {
+    const float startA = safety.cfg.valveStartA();
+    if (safeOn || load + startA <= budget + 1e-4f) {
       io.applyLevel(i, true, now);
-      load += safety.cfg.valveInrushA;
+      load += startA;
     } else {
       ++waiting;
       char b[96];
       std::snprintf(b, sizeof(b), "wartet auf Netzteil (%.2f + %.2f A > %.2f A nutzbar)", static_cast<double>(load),
-                    static_cast<double>(safety.cfg.valveInrushA), static_cast<double>(budget));
+                    static_cast<double>(safety.cfg.valveStartA()), static_cast<double>(budget));
       st.blocked = b;
     }
   }

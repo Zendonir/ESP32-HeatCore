@@ -114,3 +114,21 @@ TEST(power_config_validation) {
   r.sys.sectionToJson(ConfigSection::Safety, d.to<JsonObject>(), false);
   CHECK_NEAR(d["valveHoldW"].as<float>(), 2.f, 0.001f);
 }
+
+TEST(power_hold_current_above_inrush_is_reserved) {
+  Rig r;
+  sixRooms(r);
+  // 12 V, 6 W running = 0.5 A > 0.35 A inrush: admission must reserve 0.5 A
+  {
+    JsonDocument x;
+    deserializeJson(x, R"({"psuVoltage":12,"psuCurrentA":0.7,"psuUsablePct":100,"psuBaseLoadA":0.25,
+                          "valveInrushA":0.35,"valveHoldW":6})");
+    CHECK(!r.sys.sectionFromJson(ConfigSection::Safety, x.as<JsonObjectConst>()).empty());
+  }
+  r.load(ConfigSection::Safety, R"({"psuVoltage":12,"psuCurrentA":1.3,"psuUsablePct":100,"psuBaseLoadA":0.25,
+                                   "valveInrushA":0.35,"valveHoldW":6,"valveInrushSec":20})");
+  float maxLoad = 0.f;
+  feed(r, 18.f, 120, &maxLoad);
+  CHECK_EQ(valvesOn(r), 2);  // 0.25 + 2 * 0.5 = 1.25 A
+  CHECK(maxLoad <= 1.3f + 1e-3f);
+}

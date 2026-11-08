@@ -425,7 +425,7 @@ routes['/sys/safety']=async m=>{const s=await GET('safety');const c={...s};
   ...field('Bei Fühlerausfall',sel([['off','Heizkreis schließen'],['duty','Notbetrieb Taktung']],c.sensorFailMode,v=>c.sensorFailMode=v)),...field('Notbetrieb %',inp(c,'sensorFailDutyPct','number',{class:'n'})),...field('Taktzyklus min',inp(c,'sensorFailCycleMin','number',{class:'n'}))),
   h('button',{class:'p',style:'margin-top:10px',onclick:saveAll},'Speichern'),h('p',null,s.flowTrip?chip('Vorlaufschutz ausgelöst','bad'):chip('Vorlaufschutz bereit','ok'),' ',s.flowValid?'Vorlauf '+fmt(s.flowTemp)+' °C':'kein Vorlauffühler',' · Auslösungen: '+s.trips)));
  // power supply of the valves: switch-on is staggered so the supply is never overloaded
- const calc=()=>{const bud=(+c.psuCurrentA)*(+c.psuUsablePct)/100,free=bud-(+c.psuBaseLoadA),inr=+c.valveInrushA,hold=(+c.valveHoldW)/(+c.psuVoltage||24);
+ const calc=()=>{const bud=(+c.psuCurrentA)*(+c.psuUsablePct)/100,free=bud-(+c.psuBaseLoadA),hold=(+c.valveHoldW)/(+c.psuVoltage||24),inr=Math.max(+c.valveInrushA,hold);
   if(!(+c.psuCurrentA))return'Keine Begrenzung eingetragen – alle Ventile dürfen gleichzeitig einschalten.';
   if(free<inr)return'Netzteil zu klein: Grundlast + Einschaltstrom eines Ventils passen nicht in '+bud.toFixed(2)+' A.';
   const start=Math.floor(free/inr+1e-6),steady=Math.floor((free-inr)/hold+1e-6)+1;

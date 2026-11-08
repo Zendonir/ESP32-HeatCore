@@ -114,7 +114,7 @@ uint32_t SafetySupervisor::clampOverrideSec(uint32_t sec, EventSource src) const
 float SafetySupervisor::valveLoadA(const OutputState& st, Millis now) const {
   if (!st.level) return 0.f;
   bool starting = !st.everChanged || elapsed(now, st.lastChangeMs) < cfg.valveInrushSec * 1000u;
-  return starting ? cfg.valveInrushA : cfg.valveHoldA();
+  return starting ? cfg.valveStartA() : cfg.valveHoldA();
 }
 
 void SafetySupervisor::toJson(JsonObject o, bool runtime) const {
@@ -198,7 +198,7 @@ std::string SafetySupervisor::fromJson(JsonObjectConst o) {
   if (!(c.valveInrushA >= 0.01f && c.valveInrushA <= 3.f)) return "Einschaltstrom Ventil 0,01..3 A";
   if (!(c.valveHoldW >= 0.1f && c.valveHoldW <= 20.f)) return "Dauerleistung Ventil 0,1..20 W";
   if (c.valveInrushSec < 1 || c.valveInrushSec > 600) return "Einschaltphase 1..600 s";
-  if (c.psuCurrentA > 0.f && c.psuBaseLoadA + c.valveInrushA > c.psuBudgetA())
+  if (c.psuCurrentA > 0.f && c.psuBaseLoadA + c.valveStartA() > c.psuBudgetA())
     return "Netzteil zu klein: Grundlast + Einschaltstrom eines Ventils uebersteigen den nutzbaren Strom";
   cfg = c;
   return std::string();
