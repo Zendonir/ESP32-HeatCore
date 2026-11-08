@@ -111,6 +111,12 @@ uint32_t SafetySupervisor::clampOverrideSec(uint32_t sec, EventSource src) const
   return sec;
 }
 
+float SafetySupervisor::valveLoadA(const OutputState& st, Millis now) const {
+  if (!st.level) return 0.f;
+  bool starting = !st.everChanged || elapsed(now, st.lastChangeMs) < cfg.valveInrushSec * 1000u;
+  return starting ? cfg.valveInrushA : cfg.valveHoldA();
+}
+
 void SafetySupervisor::toJson(JsonObject o, bool runtime) const {
   o["minSetpoint"] = cfg.minSetpoint;
   o["maxSetpoint"] = cfg.maxSetpoint;
@@ -127,7 +133,19 @@ void SafetySupervisor::toJson(JsonObject o, bool runtime) const {
   o["sensorFailMode"] = cfg.sensorFailMode == SensorFailMode::Duty ? "duty" : "off";
   o["sensorFailDutyPct"] = cfg.sensorFailDutyPct;
   o["sensorFailCycleMin"] = cfg.sensorFailCycleMin;
+  o["psuVoltage"] = cfg.psuVoltage;
+  o["psuCurrentA"] = cfg.psuCurrentA;
+  o["psuUsablePct"] = cfg.psuUsablePct;
+  o["psuBaseLoadA"] = cfg.psuBaseLoadA;
+  o["valveInrushA"] = cfg.valveInrushA;
+  o["valveHoldW"] = cfg.valveHoldW;
+  o["valveInrushSec"] = cfg.valveInrushSec;
   if (runtime) {
+    if (cfg.psuCurrentA > 0.f) {
+      o["powerBudgetA"] = cfg.psuBudgetA();
+      o["powerLoadA"] = std::round(powerLoadA_ * 100.f) / 100.f;
+      o["powerWaiting"] = powerWaiting_;
+    }
     o["flowTrip"] = flowTrip_;
     o["flowValid"] = flowValid_;
     if (flowValid_) o["flowTemp"] = flowTemp_;
@@ -153,6 +171,13 @@ std::string SafetySupervisor::fromJson(JsonObjectConst o) {
   c.sensorFailMode = std::strcmp(fm, "duty") == 0 ? SensorFailMode::Duty : SensorFailMode::Off;
   c.sensorFailDutyPct = o["sensorFailDutyPct"] | c.sensorFailDutyPct;
   c.sensorFailCycleMin = o["sensorFailCycleMin"] | c.sensorFailCycleMin;
+  c.psuVoltage = o["psuVoltage"] | c.psuVoltage;
+  c.psuCurrentA = o["psuCurrentA"] | c.psuCurrentA;
+  c.psuUsablePct = o["psuUsablePct"] | c.psuUsablePct;
+  c.psuBaseLoadA = o["psuBaseLoadA"] | c.psuBaseLoadA;
+  c.valveInrushA = o["valveInrushA"] | c.valveInrushA;
+  c.valveHoldW = o["valveHoldW"] | c.valveHoldW;
+  c.valveInrushSec = o["valveInrushSec"] | c.valveInrushSec;
   // hard limits that even the local configuration cannot exceed
   if (c.minSetpoint < 5.f || c.maxSetpoint > 30.f || c.minSetpoint >= c.maxSetpoint)
     return "Sollwertgrenzen: 5 <= min < max <= 30 C";
@@ -166,6 +191,15 @@ std::string SafetySupervisor::fromJson(JsonObjectConst o) {
   if (c.watchdogSec < 5 || c.watchdogSec > 300) return "Watchdog 5..300 s";
   if (c.sensorFailDutyPct > 50) return "Notbetrieb-Taktung max. 50 %";
   if (c.sensorFailCycleMin < 5 || c.sensorFailCycleMin > 120) return "Taktzyklus 5..120 min";
+  if (!(c.psuVoltage >= 10.f && c.psuVoltage <= 30.f)) return "Netzteilspannung 10..30 V";
+  if (!(c.psuCurrentA >= 0.f && c.psuCurrentA <= 40.f)) return "Netzteilstrom 0..40 A (0 = keine Begrenzung)";
+  if (c.psuUsablePct < 50 || c.psuUsablePct > 100) return "Nutzbarer Anteil 50..100 %";
+  if (!(c.psuBaseLoadA >= 0.f && c.psuBaseLoadA <= 10.f)) return "Grundlast 0..10 A";
+  if (!(c.valveInrushA >= 0.01f && c.valveInrushA <= 3.f)) return "Einschaltstrom Ventil 0,01..3 A";
+  if (!(c.valveHoldW >= 0.1f && c.valveHoldW <= 20.f)) return "Dauerleistung Ventil 0,1..20 W";
+  if (c.valveInrushSec < 1 || c.valveInrushSec > 600) return "Einschaltphase 1..600 s";
+  if (c.psuCurrentA > 0.f && c.psuBaseLoadA + c.valveInrushA > c.psuBudgetA())
+    return "Netzteil zu klein: Grundlast + Einschaltstrom eines Ventils uebersteigen den nutzbaren Strom";
   cfg = c;
   return std::string();
 }

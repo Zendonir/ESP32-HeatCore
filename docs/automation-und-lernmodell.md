@@ -62,6 +62,12 @@ Die Sicherheitsstufe sitzt direkt vor den Ausgängen
 * Mindestschaltabstand und Schaltungen/Stunde für allgemeine Ausgänge;
   Mindestlauf-/Stillstandszeiten für Ventile.
 * Fühlerausfall → Heizkreis zu (oder optional Notbetrieb mit Taktung).
+* Netzteil-Lastgrenze (System → Sicherheit → „Netzteil der Ventile“): Mit
+  eingetragenem Nennstrom schaltet HeatCore Ventile nur ein, solange
+  Grundlast + Einschaltströme der startenden Ventile + Dauerströme der
+  warmen Ventile in den nutzbaren Anteil (Standard 80 %) passen; weitere
+  Ventile öffnen gestaffelt nach der Einschaltphase. Abschalten und das
+  Schließen in den sicheren Zustand (NO-Ventile) werden nie verzögert.
 * Watchdogs: Task-Watchdog (Reset bei hängender Regelung) und
   Ausgangs-Watchdog (sicherer Zustand, wenn die Regelschleife > n s steht).
 * Automationen, Funk und Home Assistant können Heizkreis-Ausgänge,
