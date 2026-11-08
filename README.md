@@ -10,6 +10,11 @@ Webinterface.
 
 ## Funktionen
 
+* **Bedienung:** Webinterface nach Aufgaben gegliedert (Heizung, Einrichtung,
+  Diagnose, System) mit einem Satz Erklärung je Seite, Checkliste „Erste
+  Schritte“ für die Einrichtung und Raumkarten mit Zustand im Klartext.
+  Fach- und Diagnoseseiten blendet die „Expertenansicht“ ein – keine
+  Funktion fehlt, sie ist nur nicht im Weg.
 * **Heizung:** Räume mit Zeitplänen, Komfort/Absenkung/Frostschutz,
   Raumgruppen, globale Betriebsarten (Absenkbetrieb, Abwesend, Urlaub mit
   Ablauf), 16 Heizkreise mit Mindestlaufzeiten, NC/NO-Ventile; je Raum
