@@ -52,6 +52,22 @@ System → MQTT („Raumwerte als einzelne Themen“) – einfache Werte veröff
 | `<basis>/room/<id>/humidity` | `48.0` (wenn der Raumfühler Feuchte liefert) |
 | `<basis>/room/<id>/text` | `21,3° / 21,5° heizt` |
 
+## Sensor-Abgleich (Sensoren → „Abgleich“)
+
+Jeder Sensor hat eine Korrektur (Offset, ±10 K), die auf jeden Messwert
+addiert wird. Der Abgleich setzt sie für mehrere Sensoren auf einmal:
+Sensoren mindestens 30 min dicht nebeneinander an einen zugluftfreien Ort
+legen, auswählen, Bezugswert wählen – **Median** (empfohlen, unempfindlich
+gegen einen Ausreißer), **Mittelwert**, ein **Bezugssensor** (behält seine
+Korrektur) oder ein **Referenzthermometer** (Wert eingeben, dann genügt auch
+ein einzelner Sensor). Alle Sensoren brauchen einen aktuellen Messwert; würde
+eine Korrektur ±10 K überschreiten, wird nichts geändert („liegt der Sensor
+wirklich am gleichen Ort?“). „Korrekturen zurücksetzen“ setzt sie auf 0.
+
+`POST /api/sensors/calibrate` mit
+`{"ids":["ow1:…","ow1:…"],"reference":"median"|"mean"|"value"|"reset"|"<sensor-id>","value":21.3}`
+liefert `target` und je Sensor `raw`, `oldOffset`, `newOffset`.
+
 ## Externe Quellen (Übersicht → Externe Quellen)
 
 Messwerte und Tasten anderer Geräte – ohne Firmwareänderung konfigurierbar:

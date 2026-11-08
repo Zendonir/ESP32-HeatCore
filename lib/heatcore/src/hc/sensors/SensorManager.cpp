@@ -328,6 +328,70 @@ size_t SensorManager::countAvailable() const {
   return n;
 }
 
+std::string SensorManager::calibrate(const std::vector<std::string>& ids, const std::string& reference,
+                                     float refValue, std::vector<CalibrationResult>& out, float* targetOut) {
+  out.clear();
+  if (ids.empty()) return "Keine Sensoren ausgewaehlt";
+  if (ids.size() > kMaxSensors) return "Zu viele Sensoren";
+  std::vector<Sensor*> list;
+  for (auto& id : ids) {
+    Sensor* s = find(id);
+    if (!s) return "Sensor unbekannt: " + id;
+    if (std::find(list.begin(), list.end(), s) != list.end()) return "Sensor doppelt: " + id;
+    list.push_back(s);
+  }
+  bool reset = reference == "reset";
+  if (!reset)
+    for (Sensor* s : list)
+      if (s->status != SensorStatus::Ok) return s->name + " (" + s->id + "): kein aktueller Messwert";
+  float target = 0.f;
+  if (reset) {
+    target = 0.f;
+  } else if (reference == "mean" || reference == "median") {
+    if (list.size() < 2) return "Mittelwert/Median braucht mindestens 2 Sensoren";
+    std::vector<float> raw;
+    for (Sensor* s : list) raw.push_back(s->raw);
+    if (reference == "mean") {
+      float sum = 0.f;
+      for (float v : raw) sum += v;
+      target = sum / static_cast<float>(raw.size());
+    } else {
+      std::sort(raw.begin(), raw.end());
+      size_t n = raw.size();
+      target = n % 2 ? raw[n / 2] : (raw[n / 2 - 1] + raw[n / 2]) / 2.f;
+    }
+  } else if (reference == "value") {
+    if (!std::isfinite(refValue) || refValue < -40.f || refValue > 120.f) return "Referenzwert -40..120";
+    target = refValue;
+  } else {
+    auto it = std::find_if(list.begin(), list.end(), [&](const Sensor* s) { return s->id == reference; });
+    if (it == list.end()) return "Bezugssensor muss ausgewaehlt sein";
+    target = (*it)->raw + (*it)->offset;
+  }
+  // validate everything first, then apply
+  for (Sensor* s : list) {
+    CalibrationResult r;
+    r.id = s->id;
+    r.raw = s->raw;
+    r.oldOffset = s->offset;
+    if (reset) r.newOffset = 0.f;
+    else if (s->id == reference) r.newOffset = s->offset;
+    else r.newOffset = std::round((target - s->raw) * 100.f) / 100.f;
+    if (std::fabs(r.newOffset) > 10.f)
+      return s->name + " (" + s->id + "): Korrektur " + std::to_string(r.newOffset).substr(0, 6) +
+             " K ueber +-10 K - liegt der Sensor wirklich am gleichen Ort?";
+    out.push_back(r);
+  }
+  for (size_t i = 0; i < list.size(); ++i) {
+    Sensor* s = list[i];
+    s->offset = out[i].newOffset;
+    if (s->status == SensorStatus::Ok) s->value = s->raw + s->offset;
+  }
+  if (targetOut) *targetOut = target;
+  ++revision_;
+  return std::string();
+}
+
 void SensorManager::toJson(JsonArray arr, bool runtime) const {
   for (auto& s : sensors_) {
     JsonObject o = arr.add<JsonObject>();

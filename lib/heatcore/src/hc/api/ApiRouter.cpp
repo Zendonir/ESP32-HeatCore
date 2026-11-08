@@ -1207,6 +1207,33 @@ ApiResponse ApiRouter::handle(const ApiRequest& req) {
             o["seen"] = x.seen;
           }
           out["autoAdoptOneWire"] = sys.sensors.autoAdoptOneWire;
+        } else if (p.size() == 2 && p[1] == "calibrate" && c.is("POST")) {
+          std::vector<std::string> ids;
+          for (const char* id : c.body()["ids"].as<JsonArrayConst>())
+            if (id) ids.push_back(id);
+          std::vector<SensorManager::CalibrationResult> res;
+          float target = 0.f;
+          std::string ref = c.body()["reference"] | "median";
+          JsonVariantConst val = c.body()["value"];
+          // the reference thermometer value must be given explicitly (0 C is valid, missing is not)
+          bool numeric = val.is<float>() || val.is<int>();
+          std::string err = ref == "value" && !numeric
+                                ? std::string("Referenzwert fehlt")
+                                : sys.sensors.calibrate(ids, ref, numeric ? val.as<float>() : 0.f, res, &target);
+          if (!err.empty()) {
+            c.fail(400, err);
+          } else {
+            sys.markDirty(ConfigSection::Sensors);
+            out["target"] = std::round(target * 100.f) / 100.f;
+            JsonArray a = out["results"].to<JsonArray>();
+            for (auto& r : res) {
+              JsonObject o = a.add<JsonObject>();
+              o["id"] = r.id;
+              o["raw"] = r.raw;
+              o["oldOffset"] = r.oldOffset;
+              o["newOffset"] = r.newOffset;
+            }
+          }
         } else if (p.size() == 2 && p[1] == "adopt" && c.is("POST")) {
           std::string err = sys.sensors.adopt(c.body()["id"] | "", c.body()["name"] | "", c.body()["room"] | "",
                                               sensorRoleFromName(c.body()["role"] | "room"));
