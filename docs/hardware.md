@@ -140,8 +140,12 @@ GPIO43/44 (UART0) sind mit dem W5500 belegt. Serielle Ausgaben laufen deshalb
   Platine (POWER) und beide Ausgangsblöcke; bei getrennten Netzteilen die
   Minuspole verbinden.
 * **Netzteilgröße:** Thermische Stellantriebe brauchen warm nur wenig
-  (Danfoss TWA-A 24 V: 2 W ≈ 0,08 A), ziehen kalt aber deutlich mehr
-  (TWA-A: Einschaltstrom < 350 mA). Faustformel ohne Lastbegrenzung:
+  (Danfoss Thermot 088H3216 / TWA-A 24 V: 2 W ≈ 0,08 A), ziehen kalt aber
+  deutlich mehr (Anlaufstrom bis 350 mA). Wie lange der Anlaufstrom fließt,
+  nennt Danfoss nicht; HeatCore rechnet vorsichtig mit dem ganzen Hub von
+  etwa 3 min (Einschaltphase 180 s). Mindestlaufzeit und -pause der
+  Heizkreise für diese Antriebe auf 180 s stellen – kürzere Pulse öffnen das
+  Ventil kaum. Faustformel ohne Lastbegrenzung:
   Anzahl × Einschaltstrom + 0,25 A Platine + 20 % Reserve – für 6 Ventile
   24 V / 2,5 A, für 16 Ventile 24 V / 5 A. Mit der **Netzteil-Lastgrenze**
   (System → Sicherheit → „Netzteil der Ventile“) staffelt HeatCore das
