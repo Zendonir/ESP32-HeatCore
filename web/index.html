@@ -187,7 +187,8 @@ routes['/sensors']=async m=>{
    h('div',{class:'row',style:'margin-top:8px'},h('span',null,'Bezugswert: '),refSel(),ref.mode==='value'?inp(ref,'value','number',{step:0.05,class:'n',placeholder:'°C'}):null,
     h('button',{class:'p',onclick:()=>run(ref.mode)},'Abgleichen'),h('button',{onclick:()=>confirm('Korrekturen der ausgewählten Sensoren auf 0 setzen?')&&run('reset')},'Korrekturen zurücksetzen')),spread,res);upd()};
   const run=async mode=>{const ids=live.filter(x=>pick[x.id]).map(x=>x.id);if(!ids.length)return toast('Keine Sensoren ausgewählt',true);
-   try{const r=await POST('sensors/calibrate',{ids,reference:mode,value:+ref.value});const byId=Object.fromEntries(live.map(x=>[x.id,x]));
+   const body={ids,reference:mode};if(mode==='value'){const t=String(ref.value).trim().replace(',','.');if(t===''||!isFinite(+t))return toast('Bitte den Wert des Referenzthermometers eingeben',true);body.value=+t}
+   try{const r=await POST('sensors/calibrate',body);const byId=Object.fromEntries(live.map(x=>[x.id,x]));
     res.innerHTML='';res.append(h('p',null,mode==='reset'?'Korrekturen zurückgesetzt.':'Zielwert '+fmt(r.target,2)+' °C – neue Korrekturen:'),h('table',null,r.results.map(x=>h('tr',null,h('td',null,byId[x.id]?byId[x.id].name||x.id:x.id),h('td',null,(x.oldOffset>0?'+':'')+fmt(x.oldOffset,2)+' → '+(x.newOffset>0?'+':'')+fmt(x.newOffset,2)+' K')))));
     toast('Gespeichert');setTimeout(route,2500)}catch(e){toast(e.message,true)}};
   draw()}

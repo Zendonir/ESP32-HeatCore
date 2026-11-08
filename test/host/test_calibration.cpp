@@ -97,4 +97,12 @@ TEST(calibration_api_persists_offsets) {
   CHECK_NEAR(cfg["sensors"][3]["offset"].as<float>(), -0.38f, 0.006f);
   auto bad = call(api, "POST", "/api/sensors/calibrate", R"({"ids":["ow1:A"],"reference":"mean"})");
   CHECK_EQ(bad.status, 400);
+  // reference thermometer: value required, 0 C allowed
+  float before = r.sys.sensors.find("ow1:A")->offset;
+  CHECK_EQ(call(api, "POST", "/api/sensors/calibrate", R"({"ids":["ow1:A"],"reference":"value"})").status, 400);
+  CHECK_EQ(call(api, "POST", "/api/sensors/calibrate", R"({"ids":["ow1:A"],"reference":"value","value":""})").status, 400);
+  CHECK_NEAR(r.sys.sensors.find("ow1:A")->offset, before, 0.0001f);
+  r.sys.sensors.update("ow1:A", 0.5f, r.clock.ms);  // ice water
+  CHECK_EQ(call(api, "POST", "/api/sensors/calibrate", R"({"ids":["ow1:A"],"reference":"value","value":0})").status, 200);
+  CHECK_NEAR(r.sys.sensors.find("ow1:A")->offset, -0.5f, 0.001f);
 }

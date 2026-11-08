@@ -1213,8 +1213,13 @@ ApiResponse ApiRouter::handle(const ApiRequest& req) {
             if (id) ids.push_back(id);
           std::vector<SensorManager::CalibrationResult> res;
           float target = 0.f;
-          std::string err = sys.sensors.calibrate(ids, c.body()["reference"] | "median", c.body()["value"] | 0.f, res,
-                                                  &target);
+          std::string ref = c.body()["reference"] | "median";
+          JsonVariantConst val = c.body()["value"];
+          // the reference thermometer value must be given explicitly (0 C is valid, missing is not)
+          bool numeric = val.is<float>() || val.is<int>();
+          std::string err = ref == "value" && !numeric
+                                ? std::string("Referenzwert fehlt")
+                                : sys.sensors.calibrate(ids, ref, numeric ? val.as<float>() : 0.f, res, &target);
           if (!err.empty()) {
             c.fail(400, err);
           } else {
