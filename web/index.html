@@ -182,7 +182,8 @@ let CAT=null;async function catalog(force){if(!CAT||force)CAT=await GET('automat
 async function setupChecks(){
  const [st,heat,sen,io,saf]=await Promise.all([GET('status'),GET('heating'),GET('sensors'),GET('io'),GET('safety')]);
  const rooms=heat.rooms,outs=io.outputs||[];const name=r=>r.name||r.id;
- const noSensor=rooms.filter(r=>!sen.sensors.some(x=>x.room===r.id&&x.enabled!==false));
+ // only sensors used as room temperature control the room
+ const noSensor=rooms.filter(r=>!sen.sensors.some(x=>x.room===r.id&&x.enabled!==false&&x.role==='room'));
  const valveOf=r=>heat.circuits.filter(c=>c.room===r.id&&c.enabled&&outs[c.n-1]&&outs[c.n-1].function==='circuit');
  const noValve=rooms.filter(r=>!valveOf(r).length);
  const wrongFn=heat.circuits.filter(c=>c.room&&outs[c.n-1]&&outs[c.n-1].function!=='circuit');
@@ -204,7 +205,9 @@ routes['/setup']=async m=>{m.append(h('h2',null,'Erste Schritte'));const c=h('di
 
 // ------------------------------------------------------------ dashboard
 function roomState(r){
- if(r.fault)return['Fühler gestört – Ventil zu','bad'];
+ if(r.overTemp)return['zu warm – Ventil zur Sicherheit zu','bad'];
+ if(r.sensorFail)return[r.demand?'Fühler gestört – Notbetrieb heizt im Takt':'Fühler gestört – Ventil zu','bad'];
+ if(r.fault)return['Störung','bad'];
  if(r.window)return['Fenster offen – Heizung pausiert','info'];
  if(r.temperature==null)return['noch kein Messwert','info'];
  if(r.demand)return[r.duty!=null?'heizt ('+r.duty+' %)':'heizt','heat'];
@@ -248,7 +251,10 @@ routes['/rooms']=async m=>{
   rooms.forEach((r,i)=>{
    const idIn=inp(r,'id');
    const title=h('b',null,r.name||'Neuer Raum');
-   const nameIn=inp(r,'name',null,{placeholder:'z. B. Wohnzimmer'});nameIn.addEventListener('input',()=>{title.textContent=r.name||'Neuer Raum';if(r._new){r.id=slugId(r.name,rooms.filter(x=>x!==r).map(x=>x.id));idIn.value=r.id}});
+   // a changed room id moves its heating circuits along (no valve left behind)
+   const setId=nid=>{const old=r.id;r.id=nid;if(old!==nid){circuits.forEach(c=>{if(c.room===old)c.room=nid});renderCircuits()}};
+   idIn.addEventListener('input',()=>{const nid=r.id;r.id=r._lastId;setId(nid);r._lastId=nid});r._lastId=r.id;
+   const nameIn=inp(r,'name',null,{placeholder:'z. B. Wohnzimmer'});nameIn.addEventListener('input',()=>{title.textContent=r.name||'Neuer Raum';if(r._new){setId(slugId(r.name,rooms.filter(x=>x!==r).map(x=>x.id)));r._lastId=r.id;idIn.value=r.id}else renderCircuits()});
    const sc=h('div',{class:'form'});const days=[];for(let dd=0;dd<7;dd++){const e=h('input',{value:r.schedule[dd]||'',placeholder:dd<5?'06:00-08:00, 16:00-22:00':'07:00-22:00',oninput:ev=>r.schedule[dd]=ev.target.value});days.push(e);sc.append(...field(['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'][dd],e))}
    const copy=(from,to)=>{for(const t of to){r.schedule[t]=r.schedule[from];days[t].value=r.schedule[from]||''}};
    const tnum=(k,l)=>h('label',null,l,inp(r,k,'number',{step:0.5,class:'n'}));

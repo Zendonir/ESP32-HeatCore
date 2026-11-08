@@ -93,6 +93,8 @@ void statusJson(HeatCoreSystem& sys, JsonObject o) {
     x["mode"] = roomModeName(r.mode);
     x["manual"] = r.manualActive;
     x["fault"] = r.sensorFail || r.overTemp;
+    x["sensorFail"] = r.sensorFail;
+    x["overTemp"] = r.overTemp;
     if (r.control == RoomControl::Pwm && r.pwmRunning) x["duty"] = std::round(r.duty);
   }
   JsonObject rf = o["rf"].to<JsonObject>();
