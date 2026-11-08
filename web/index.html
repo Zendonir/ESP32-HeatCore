@@ -64,6 +64,26 @@ canvas.oled{image-rendering:pixelated;background:#000;border-radius:6px;border:4
 .out div{text-align:center;padding:6px 0;border-radius:4px;background:var(--chip);font-size:12px}
 .out div.on{background:var(--accent);color:#fff}
 .wave{width:100%;height:70px;background:var(--chip);border-radius:6px}
+p.intro{margin:-6px 0 14px;color:var(--muted);max-width:820px}
+nav .xp{display:flex;gap:6px;align-items:center;padding:14px 16px 2px;color:var(--muted);font-size:13px;cursor:pointer}
+nav .xph{padding:0 16px 10px;font-size:11px;color:var(--muted)}
+details.adv{margin-top:12px;border-top:1px solid var(--line);padding-top:8px}
+details.adv>summary,details.roomcfg>summary{cursor:pointer;list-style:none}
+details.adv>summary{color:var(--accent2);font-weight:600;padding:4px 0}
+details.adv>summary::before,details.roomcfg>summary::before{content:'▸ ';color:var(--muted)}
+details.adv[open]>summary::before,details.roomcfg[open]>summary::before{content:'▾ '}
+details.roomcfg>summary{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+details.roomcfg>summary b{font-size:16px}
+.temps{display:flex;gap:14px;flex-wrap:wrap}.temps label{display:flex;flex-direction:column;font-size:12px;color:var(--muted);gap:2px}
+.state{display:inline-block;margin:4px 0 2px;padding:2px 10px;border-radius:12px;font-size:13px;font-weight:600;background:var(--chip)}
+.state.heat{background:#ffe8cc;color:#b35000}.state.ok{background:#d3f9d8;color:#2b8a3e}.state.bad{background:#ffe3e3;color:#c92a2a}.state.info{background:#e7f5ff;color:#1864ab}
+@media (prefers-color-scheme:dark){.state.heat{background:#4a2d10;color:#ffb36b}.state.ok{background:#173b22;color:#69db7c}.state.bad{background:#451b1b;color:#ff8787}.state.info{background:#13304a;color:#74c0fc}}
+.sp{display:flex;align-items:center;gap:8px;margin-top:8px}.sp button{width:40px;height:36px;font-size:18px;padding:0}.sp b{font-size:18px;min-width:70px;text-align:center}
+.steps{list-style:none;padding:0;margin:0}.steps li{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)}.steps li:last-child{border-bottom:0}
+.steps .ic{flex:none;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;background:var(--chip)}
+.steps .ic.ok{background:#d3f9d8;color:#2b8a3e}.steps .ic.todo{background:#fff3bf;color:#a65e00}
+@media (prefers-color-scheme:dark){.steps .ic.ok{background:#173b22;color:#69db7c}.steps .ic.todo{background:#3d3010;color:#ffd43b}}
+.banner{border-left:4px solid var(--warn)}
 @media (max-width:820px){#menuBtn{display:block}nav{position:fixed;top:50px;bottom:0;left:-250px;z-index:10;transition:left .2s}nav.open{left:0}.form{grid-template-columns:1fr}}
 </style>
 </head>
@@ -103,17 +123,49 @@ function clearTimers(){timers.forEach(clearInterval);timers=[]}
 const DAYS=['Mo','Di','Mi','Do','Fr','Sa','So'];
 
 // ------------------------------------------------------------ navigation
+// Navigation by task. Pages marked 1 are specialist/diagnostic pages: they
+// are shown in the expert view (or while open) - nothing is removed.
 const NAV=[
- ['Übersicht',[['#/','Dashboard'],['#/rooms','Räume & Heizkreise'],['#/sensors','Sensoren'],['#/model','Lernmodell'],['#/stats','Statistik'],['#/external','Externe Quellen']]],
- ['Funkgeräte',[['#/rf','Übersicht'],['#/rf/learn','Gerät anlernen'],['#/rf/monitor','Empfangsmonitor'],['#/rf/tx','Sender'],['#/rf/sensors','Temperaturfunksensoren'],['#/rf/diag','Funkdiagnose']]],
- ['Display',[['#/display','Live-Vorschau'],['#/display/pages','Anzeigeseiten'],['#/display/settings','Einstellungen'],['#/display/status','Status & Diagnose']]],
- ['Automationen',[['#/rules','Regeln'],['#/rules/catalog','Trigger, Bedingungen, Aktionen'],['#/rules/test','Testmodus'],['#/rules/log','Ereignisprotokoll']]],
- ['Hardware',[['#/hw/outputs','16 Ausgänge'],['#/hw/inputs','16 Digitaleingänge'],['#/hw/analog','Analogeingänge'],['#/hw/onewire','1-Wire-Busse'],['#/hw/selftest','Selbsttest & Status']]],
- ['System',[['#/sys/safety','Sicherheit'],['#/sys/network','Netzwerk'],['#/sys/mqtt','MQTT / Home Assistant'],['#/sys/general','Allgemein & Backup'],['#/sys/firmware','Firmware-Update'],['#/sys/ai','KI / MCP']]]];
-function buildNav(){const n=$('#nav');n.innerHTML='';for(const[g,items]of NAV){n.append(h('div',{class:'grp'},g));for(const[href,l]of items)n.append(h('a',{href},l))}}
-function markNav(){const cur=location.hash||'#/';document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('active',a.getAttribute('href')===cur));$('nav').classList.remove('open')}
+ ['Heizung',[['#/','Übersicht'],['#/rooms','Räume & Zeitpläne'],['#/stats','Statistik'],['#/model','Lernmodell',1]]],
+ ['Einrichtung',[['#/setup','Erste Schritte'],['#/sensors','Temperatursensoren'],['#/hw/outputs','Ventile & Ausgänge'],['#/hw/inputs','Taster & Fensterkontakte'],['#/rf','Funkgeräte'],['#/rf/learn','Funkgerät anlernen'],['#/rules','Automationen'],['#/display','Display'],
+  ['#/external','Externe Quellen (MQTT/HTTP)',1],['#/hw/analog','Analogeingänge',1],['#/hw/onewire','1-Wire-Busse',1],['#/rf/sensors','Funk-Temperatursensoren',1]]],
+ ['Diagnose',[['#/hw/selftest','Selbsttest & Status'],['#/rules/log','Ereignisprotokoll',1],['#/rf/monitor','Funk-Empfangsmonitor',1],['#/rf/diag','Funkdiagnose',1],['#/rf/tx','Funk-Sender',1],['#/rules/test','Automationen testen',1],['#/rules/catalog','Automations-Bausteine',1],
+  ['#/display/pages','Display: Seiten',1],['#/display/settings','Display: Einstellungen',1],['#/display/status','Display: Diagnose',1]]],
+ ['System',[['#/sys/network','Netzwerk & WLAN'],['#/sys/safety','Sicherheit & Netzteil'],['#/sys/mqtt','MQTT / Home Assistant'],['#/sys/general','Allgemein & Backup'],['#/sys/firmware','Firmware-Update'],['#/sys/ai','KI / MCP',1]]]];
+function expert(){try{return localStorage.getItem('hcExpert')==='1'}catch(e){return false}}
+function setExpert(on){try{localStorage.setItem('hcExpert',on?'1':'0')}catch(e){}}
+function buildNav(){const n=$('#nav');n.innerHTML='';const cur=location.hash||'#/',xp=expert();let hidden=0;
+ for(const[g,items]of NAV){const vis=items.filter(([href,,x])=>!x||xp||href===cur);hidden+=items.length-vis.length;if(!vis.length)continue;n.append(h('div',{class:'grp'},g));for(const[href,l]of vis)n.append(h('a',{href},l))}
+ n.append(h('label',{class:'xp'},h('input',{type:'checkbox',checked:xp,onchange:e=>{setExpert(e.target.checked);buildNav();markNav()}}),'Expertenansicht'),
+  h('div',{class:'xph'},xp?'Alle Fach- und Diagnoseseiten werden angezeigt.':hidden+' weitere Fach- und Diagnoseseiten einblenden.'))}
+function markNav(){const cur=location.hash||'#/';buildNav();document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('active',a.getAttribute('href')===cur));$('nav').classList.remove('open')}
 const routes={};
-async function route(){clearTimers();markNav();const key=(location.hash||'#/').slice(1);const fn=routes[key]||routes['/'];const m=$('#main');m.innerHTML='';try{await fn(m)}catch(e){m.append(h('div',{class:'card bad'},'Fehler: '+e.message))}}
+// one plain sentence under each page title: what is this page for?
+const HELP={
+ '/':'Alle Räume auf einen Blick. Mit − / + änderst du die Wunschtemperatur vorübergehend; sie gilt bis zum nächsten Zeitplanwechsel.',
+ '/setup':'Was für den Heizbetrieb eingerichtet sein muss – Schritt für Schritt. Erledigte Punkte werden automatisch abgehakt.',
+ '/rooms':'Für jeden Raum Wunschtemperaturen und Zeitplan festlegen und unten die Ventile (Heizkreise) zuordnen. Raum anklicken zum Bearbeiten.',
+ '/sensors':'Temperaturfühler einem Raum zuordnen, Korrekturen einstellen und mehrere Fühler gegeneinander abgleichen.',
+ '/stats':'Verlauf von Temperatur, Sollwert und Heizzeit der letzten 14 Tage sowie Kennzahlen je Raum.',
+ '/model':'Das Lernmodell lernt, wie schnell jeder Raum aufheizt und abkühlt, und hilft so, Überschwingen zu vermeiden.',
+ '/hw/outputs':'Die 16 Ausgänge der Platine: als Heizkreis (Ventil) oder allgemeiner Schaltausgang nutzen und zum Testen von Hand schalten.',
+ '/hw/inputs':'Die 16 Eingänge der Platine: Taster, Fensterkontakte oder Schalter anschließen und ihnen eine Aufgabe geben.',
+ '/hw/analog':'Die 4 Analogeingänge (0–5 V oder 4–20 mA) für zusätzliche Messwerte.',
+ '/hw/onewire':'Die drei 1-Wire-Anschlüsse für DS18B20-Temperaturfühler mit Diagnose.',
+ '/hw/selftest':'Prüft alle Bauteile der Platine und zeigt Systemwerte wie Speicher, Netzwerk und den Grund des letzten Neustarts.',
+ '/rf':'Angelernte 433-MHz-Funkgeräte wie Handsender, Fensterkontakte und Funkthermometer.',
+ '/rf/learn':'Ein neues Funkgerät anlernen: Lernmodus starten und am Gerät eine Taste drücken.',
+ '/rules':'Automationen: Wenn etwas passiert (Taste, Temperatur, Uhrzeit …), dann führt HeatCore Aktionen aus.',
+ '/display':'Live-Ansicht des OLED-Displays an der Steuerung.',
+ '/external':'Messwerte und Tasten anderer Geräte über MQTT oder HTTP einbinden, z. B. Shelly-Sensoren.',
+ '/sys/network':'LAN hat immer Vorrang; ohne LAN verbindet sich die Steuerung mit dem eingerichteten WLAN.',
+ '/sys/safety':'Grenzen, die keine Automation und kein Smart-Home-System übersteuern kann, und das Netzteil der Ventile.',
+ '/sys/mqtt':'Anbindung an Home Assistant oder einen anderen MQTT-Broker (optional).',
+ '/sys/general':'Gerätename, Zeitzone, Datensicherung und Werkseinstellungen.',
+ '/sys/firmware':'Neue Firmware online oder als Datei einspielen. Startet sie nicht sauber, kehrt die Steuerung automatisch zur vorherigen Version zurück.',
+ '/sys/ai':'Optional: einer KI (über MCP) erlauben, Einstellungen anhand der Statistik vorzuschlagen oder zu optimieren.'};
+async function route(){clearTimers();markNav();const key=(location.hash||'#/').slice(1);const fn=routes[key]||routes['/'];const m=$('#main');m.innerHTML='';try{await fn(m)}catch(e){m.append(h('div',{class:'card bad'},'Fehler: '+e.message))}
+ const t=m.querySelector('h2');if(t&&HELP[key]&&!m.querySelector('p.intro'))t.after(h('p',{class:'intro'},HELP[key]))}
 window.addEventListener('hashchange',route);
 
 // header status
@@ -126,58 +178,149 @@ let ws,wsHandlers=[];function connectWs(){try{ws=new WebSocket((location.protoco
 let CAT=null;async function catalog(force){if(!CAT||force)CAT=await GET('automation/catalog');return CAT}
 
 // ------------------------------------------------------------ dashboard
+// ---- setup checklist: what is still missing for heating operation
+async function setupChecks(){
+ const [st,heat,sen,io,saf]=await Promise.all([GET('status'),GET('heating'),GET('sensors'),GET('io'),GET('safety')]);
+ const rooms=heat.rooms,outs=io.outputs||[];const name=r=>r.name||r.id;
+ // only sensors used as room temperature control the room
+ const noSensor=rooms.filter(r=>!sen.sensors.some(x=>x.room===r.id&&x.enabled!==false&&x.role==='room'));
+ const valveOf=r=>heat.circuits.filter(c=>c.room===r.id&&c.enabled&&outs[c.n-1]&&outs[c.n-1].function==='circuit');
+ const noValve=rooms.filter(r=>!valveOf(r).length);
+ const wrongFn=heat.circuits.filter(c=>c.room&&outs[c.n-1]&&outs[c.n-1].function!=='circuit');
+ const L=(href,t)=>h('a',{href},t);
+ return [
+  {ok:!!st.network,title:'Netzwerk verbunden',text:st.network?'Verbunden über '+st.network+'.':'Keine Verbindung. LAN-Kabel einstecken oder WLAN einrichten.',link:L('#/sys/network','Netzwerk & WLAN')},
+  {ok:!!st.timeValid,title:'Uhrzeit gestellt',text:st.timeValid?'Uhrzeit '+st.localTime+'.':'Ohne Uhrzeit laufen keine Zeitpläne. Die Uhrzeit kommt aus dem Internet (NTP) oder der eingebauten Uhr.',link:L('#/sys/general','Zeitzone prüfen')},
+  {ok:rooms.length>0,title:'Räume angelegt',text:rooms.length?rooms.length+' Raum/Räume: '+rooms.map(name).join(', ')+'.':'Lege für jeden beheizten Raum einen Raum mit Wunschtemperaturen und Zeitplan an.',link:L('#/rooms','Räume einrichten')},
+  {ok:rooms.length>0&&!noSensor.length,title:'Temperaturfühler je Raum',text:!rooms.length?'Erst Räume anlegen.':noSensor.length?'Ohne Fühler: '+noSensor.map(name).join(', ')+'.'+(sen.discovered.length?' '+sen.discovered.length+' neu erkannte(r) Fühler warten auf Zuordnung.':''):'Jeder Raum hat einen Fühler.',link:L('#/sensors','Fühler zuordnen')},
+  {ok:rooms.length>0&&!noValve.length&&!wrongFn.length,title:'Ventile zugeordnet',text:!rooms.length?'Erst Räume anlegen.':wrongFn.length?'Ausgang '+wrongFn.map(c=>c.n).join(', ')+' ist einem Raum zugeordnet, aber nicht als „Heizkreis“ eingestellt.':noValve.length?'Ohne Ventil: '+noValve.map(name).join(', ')+'. Ausgang auf „Heizkreis“ stellen und dem Raum zuordnen.':'Jeder Raum hat mindestens ein Ventil.',link:h('span',null,L('#/hw/outputs','Ausgänge'),' · ',L('#/rooms','Heizkreise'))},
+  {ok:(saf.psuCurrentA||0)>0,optional:true,title:'Netzteil eingetragen (empfohlen)',text:(saf.psuCurrentA||0)>0?'Netzteil '+saf.psuCurrentA+' A – Ventile starten gestaffelt, das Netzteil wird nicht überlastet.':'Mit dem Nennstrom des Ventil-Netzteils verhindert HeatCore eine Überlastung beim gleichzeitigen Öffnen vieler Ventile.',link:L('#/sys/safety','Netzteil eintragen')},
+  {ok:sen.sensors.some(x=>x.offset)||sen.sensors.filter(x=>x.room).length<2,optional:true,title:'Fühler abgeglichen (empfohlen)',text:'Mehrere Fühler nebeneinanderlegen und abgleichen, damit alle gleich messen.',link:L('#/sensors','Zum Abgleich')}];
+}
+routes['/setup']=async m=>{m.append(h('h2',null,'Erste Schritte'));const c=h('div',{class:'card'});m.append(c);
+ const draw=async()=>{const list=await setupChecks();const need=list.filter(x=>!x.optional),done=need.filter(x=>x.ok).length;c.innerHTML='';
+  c.append(h('p',null,done===need.length?h('b',{class:'ok'},'Alles Notwendige ist eingerichtet – die Heizung regelt selbstständig.'):h('b',null,done+' von '+need.length+' notwendigen Schritten erledigt.')),
+   h('ul',{class:'steps'},list.map((x,i)=>h('li',null,h('span',{class:'ic '+(x.ok?'ok':'todo')},x.ok?'✓':String(i+1)),h('div',null,h('b',null,x.title),h('div',{class:'muted'},x.text),x.ok?null:h('div',{style:'margin-top:4px'},x.link))))))};
+ every(10000,draw)};
+
+// ------------------------------------------------------------ dashboard
+function roomState(r){
+ if(r.overTemp)return['zu warm – Ventil zur Sicherheit zu','bad'];
+ if(r.sensorFail)return[r.demand?'Fühler gestört – Notbetrieb heizt im Takt':'Fühler gestört – Ventil zu','bad'];
+ if(r.fault)return['Störung','bad'];
+ if(r.window)return['Fenster offen – Heizung pausiert','info'];
+ if(r.temperature==null)return['noch kein Messwert','info'];
+ if(r.demand)return[r.duty!=null?'heizt ('+r.duty+' %)':'heizt','heat'];
+ if(r.temperature>=r.setpoint-0.3)return['Wunschtemperatur erreicht','ok'];
+ return['wartet','info']}
 routes['/']=async m=>{
- m.append(h('h2',null,'Dashboard'));
- const top=h('div',{class:'card'});const grid=h('div',{class:'grid'});const al=h('div');m.append(top,grid,al);
+ m.append(h('h2',null,'Übersicht'));
+ const ban=h('div');const top=h('div',{class:'card'});const grid=h('div',{class:'grid'});const al=h('div');m.append(ban,grid,top,al);
+ setupChecks().then(list=>{const need=list.filter(x=>!x.optional),open=need.filter(x=>!x.ok);if(open.length)ban.append(h('div',{class:'card banner'},h('b',null,'Einrichtung noch nicht abgeschlossen: '),open.map(x=>x.title).join(', ')+'. ',h('a',{href:'#/setup'},'Zu den ersten Schritten →')))}).catch(()=>{});
+ const MODES=[['auto','Automatisch (Zeitplan)'],['comfort','Immer Komfort'],['eco','Immer Absenkung'],['frost','Frostschutz'],['off','Aus']];
  const render=async()=>{const s=await GET('status');
-  top.innerHTML='';top.append(h('div',{class:'row'},h('b',null,s.device),chip('FW '+s.firmware),chip('Laufzeit '+ago(s.uptimeSec)),h('span',{class:'muted'},'Sensoren '+s.sensorsOk+'/'+s.sensorsTotal),
-   h('span',{style:'margin-left:auto'},'Betriebsart '),sel([['normal','Normal'],['eco','Absenkbetrieb'],['away','Abwesend'],['vacation','Urlaub']],s.globalMode,v=>act(()=>POST('mode',{mode:v}),'Betriebsart gesetzt'))));
-  const o=h('div',{class:'out',style:'margin-top:10px'});for(let i=0;i<16;i++)o.append(h('div',{class:(s.outputs>>i)&1?'on':''},i+1));top.append(o);
-  if(s.safety.flowTrip)top.append(h('p',{class:'bad'},'Vorlauf-Übertemperatur: alle Heizkreise geschlossen'));
   grid.innerHTML='';if(!s.rooms.length)grid.append(h('div',{class:'card'},'Noch keine Räume angelegt – ',h('a',{href:'#/rooms'},'Räume einrichten')));
-  for(const r of s.rooms){grid.append(h('div',{class:'card room'},h('div',{class:'flags'},r.demand?chip('heizt','warn'):null,r.window?chip('Fenster','bad'):null,r.manual?chip('manuell'):null,r.duty!=null?chip('PWM '+r.duty+' %'):null,r.fault?chip('Fehler','bad'):null),
-   h('div',{class:'muted'},r.name),h('div',{class:'t'},fmt(r.temperature)+' °C'),h('div',null,'Soll ',h('b',null,fmt(r.setpoint)+' °C'),' ',h('span',{class:'muted'},r.reason)),
-   h('div',{class:'row',style:'margin-top:8px'},h('button',{onclick:()=>act(()=>POST('rooms/'+r.id+'/adjust',{delta:-0.5})).then(render)},'−0,5'),h('button',{onclick:()=>act(()=>POST('rooms/'+r.id+'/adjust',{delta:0.5})).then(render)},'+0,5'),
-    sel([['auto','Auto'],['comfort','Komfort'],['eco','Absenkung'],['frost','Frostschutz'],['off','Aus']],r.mode,v=>act(()=>POST('rooms/'+r.id+'/mode',{mode:v})).then(render)),
-    r.manual?h('button',{onclick:()=>act(()=>DEL('rooms/'+r.id+'/manual')).then(render)},'Auto'):null)))}
-  al.innerHTML='';if(s.alarms.length){al.append(h('div',{class:'card'},h('h3',null,'Aktive Alarme'),h('table',null,s.alarms.map(a=>h('tr',null,h('td',null,chip(['Info','Warnung','Kritisch'][a.level],a.level==2?'bad':'warn')),h('td',null,a.message),h('td',{class:'muted'},a.code),h('td',{class:'muted'},ago(a.ageSec)))))))}
+  for(const r of s.rooms){const [txt,cls]=roomState(r);const adj=d=>act(()=>POST('rooms/'+r.id+'/adjust',{delta:d})).then(render);
+   grid.append(h('div',{class:'card room'},h('div',{class:'muted'},r.name),h('div',{class:'t'},fmt(r.temperature)+' °C'),h('span',{class:'state '+cls},txt),
+    h('div',{class:'sp'},h('button',{title:'0,5 °C wärmer/kälter, gilt bis zum nächsten Zeitplanwechsel',onclick:()=>adj(-0.5)},'−'),h('b',{title:'Wunschtemperatur'},fmt(r.setpoint)+' °C'),h('button',{title:'0,5 °C wärmer, gilt bis zum nächsten Zeitplanwechsel',onclick:()=>adj(0.5)},'+'),
+     r.manual?h('button',{style:'width:auto;font-size:13px;padding:0 10px',title:'Handänderung beenden, wieder nach Zeitplan',onclick:()=>act(()=>DEL('rooms/'+r.id+'/manual')).then(render)},'Zeitplan'):null),
+    h('div',{class:'muted',style:'font-size:12px;margin-top:4px'},r.manual?'von Hand geändert':r.reason),
+    h('div',{class:'row',style:'margin-top:8px'},sel(MODES,r.mode,v=>act(()=>POST('rooms/'+r.id+'/mode',{mode:v})).then(render),{title:'Betriebsart des Raums'}))))}
+  top.innerHTML='';top.append(h('div',{class:'row'},h('b',null,'Ganzes Haus:'),sel([['normal','Normal (Zeitpläne der Räume)'],['eco','Absenken (alle Räume)'],['away','Abwesend'],['vacation','Urlaub (Frostschutz)']],s.globalMode,v=>act(()=>POST('mode',{mode:v}),'Betriebsart gesetzt')),
+   h('span',{class:'muted',style:'margin-left:auto'},s.device+' · Firmware '+s.firmware+' · läuft seit '+ago(s.uptimeSec)+' · Fühler '+s.sensorsOk+'/'+s.sensorsTotal+' in Ordnung')));
+  const o=h('div',{class:'out',style:'margin-top:10px'});for(let i=0;i<16;i++)o.append(h('div',{class:(s.outputs>>i)&1?'on':'',title:'Ausgang '+(i+1)+((s.outputs>>i)&1?': an':': aus')},i+1));top.append(h('div',{class:'hint',style:'margin-top:8px'},'Ausgänge (farbig = eingeschaltet)'),o);
+  if(s.safety.flowTrip)top.append(h('p',{class:'bad'},'Vorlauf zu heiß: alle Heizkreise sind zur Sicherheit geschlossen.'));
+  al.innerHTML='';if(s.alarms.length){al.append(h('div',{class:'card'},h('h3',null,'Aktive Meldungen'),h('table',null,s.alarms.map(a=>h('tr',null,h('td',null,chip(['Info','Warnung','Kritisch'][a.level],a.level==2?'bad':'warn')),h('td',null,a.message),h('td',{class:'muted'},ago(a.ageSec)+' her'))))))}
  };every(5000,render);
 };
 
 // ------------------------------------------------------------ rooms & circuits
+// room id from the name: "Wohnzimmer OG" -> "wohnzimmer_og" (unique, max 15)
+function slugId(name,taken){let b=String(name||'').toLowerCase().replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue').replace(/ß/g,'ss').replace(/[^a-z0-9_-]+/g,'_').replace(/^_+|_+$/g,'').slice(0,15)||'raum';
+ let id=b,k=2;while(taken.includes(id)){const suf='_'+k++;id=b.slice(0,15-suf.length)+suf}return id}
+const ROOM_MODES=[['auto','Automatisch (Zeitplan)'],['comfort','Immer Komfort'],['eco','Immer Absenkung'],['frost','Frostschutz'],['off','Aus']];
 routes['/rooms']=async m=>{
- const d=await GET('heating');m.append(h('h2',null,'Räume & Heizkreise'));
+ const [d,io]=await Promise.all([GET('heating'),GET('io').catch(()=>({outputs:[]}))]);m.append(h('h2',null,'Räume & Zeitpläne'));
+ const outs=io.outputs||[];
  const rooms=d.rooms.map(r=>({id:r.id,name:r.name,comfort:r.comfort,eco:r.eco,frost:r.frost,mode:r.mode,hysteresis:r.hysteresis,groups:r.groups.join(', '),schedule:r.schedule.map(x=>x.join(', ')),modelAssist:r.modelAssist,manualOverrideMin:r.manualOverrideMin,showOnDisplay:r.showOnDisplay,control:r.control||'hysteresis',pwmCycleMin:r.pwmCycleMin??20,pwmKp:r.pwmKp??40,pwmTnMin:r.pwmTnMin??90,duty:r.duty}));
  const circuits=d.circuits.map(c=>({n:c.n,name:c.name,room:c.room,enabled:c.enabled,valveNormallyOpen:c.valveNormallyOpen,minOnSec:c.minOnSec,minOffSec:c.minOffSec,open:c.open,fault:c.fault,faultText:c.faultText}));
- const rc=h('div');const cc=h('div',{class:'card tbl'});m.append(rc,cc,h('div',{class:'row'},h('button',{class:'p',onclick:save},'Speichern')));
- function renderRooms(){rc.innerHTML='';rooms.forEach((r,i)=>{const sc=h('div',{class:'form'});for(let dd=0;dd<7;dd++)sc.append(...field(DAYS[dd],h('input',{value:r.schedule[dd]||'',placeholder:'06:00-08:00, 17:00-22:00',oninput:e=>r.schedule[dd]=e.target.value})));
-  rc.append(h('div',{class:'card'},h('div',{class:'row'},h('h3',{style:'margin:0'},r.name||'(neu)'),h('button',{class:'d',style:'margin-left:auto',onclick:()=>{if(confirm('Raum löschen?')){rooms.splice(i,1);renderRooms()}}},'Löschen')),
-   h('div',{class:'form'},...field('Raum-ID',inp(r,'id'),'a-z, 0-9, _ und - (max. 15)'),...field('Name',inp(r,'name')),...field('Komfort °C',inp(r,'comfort','number',{step:0.5,class:'n'})),...field('Absenkung °C',inp(r,'eco','number',{step:0.5,class:'n'})),...field('Frostschutz °C',inp(r,'frost','number',{step:0.5,class:'n'})),
-   ...field('Betriebsart',sel([['auto','Auto (Zeitplan)'],['comfort','Komfort'],['eco','Absenkung'],['frost','Frostschutz'],['off','Aus']],r.mode,v=>r.mode=v)),
-   ...field('Regelung',sel([['hysteresis','Zweipunkt (Hysterese)'],['pwm','PWM-Takt (PI-Regler)']],r.control,v=>{r.control=v;renderRooms()}),r.control==='pwm'?'Ventil wird je Zyklus anteilig geöffnet'+(r.duty!=null?' – aktuell '+r.duty+' %':''):'Auf unter Soll − H/2, zu über Soll + H/2'),
-   ...field('Hysterese K',inp(r,'hysteresis','number',{step:0.1,class:'n'}),r.control==='pwm'?'Bei PWM: Ventil schließt sofort, wenn die Temperatur Soll + H erreicht':''),
-   ...(r.control==='pwm'?[...field('PWM-Zyklus min',inp(r,'pwmCycleMin','number',{class:'n'}),'5–60, mind. 2 × Mindestlaufzeit der Heizkreise; Fußbodenheizung 20–30, Heizkörper 10–15'),...field('Verstärkung %/K',inp(r,'pwmKp','number',{class:'n'}),'5–200; Öffnungsanteil je K unter Soll'),...field('Nachstellzeit min',inp(r,'pwmTnMin','number',{class:'n'}),'0–600; 0 = nur P-Anteil. Fußbodenheizung 90–180, Heizkörper 30–60')]:[]),
-   ...field('Gruppen',inp(r,'groups'),'Kommagetrennt, z. B. eg, schlafen'),...field('Manuelle Änderung gilt',inp(r,'manualOverrideMin','number',{class:'n'}),'Minuten (endet auch beim nächsten Zeitplanwechsel)'),
-   ...field('Lernmodell-Unterstützung',inp(r,'modelAssist','checkbox'),r.control==='pwm'?'Wirkt nur bei Zweipunkt-Regelung':''),...field('Auf Display',inp(r,'showOnDisplay','checkbox'))),h('h3',null,'Komfortzeiten (außerhalb: Absenkung)'),sc))});
-  rc.append(h('button',{onclick:()=>{rooms.push({id:'',name:'',comfort:21,eco:18,frost:7,mode:'auto',hysteresis:0.4,groups:'',schedule:['06:00-08:00, 16:00-22:00','06:00-08:00, 16:00-22:00','06:00-08:00, 16:00-22:00','06:00-08:00, 16:00-22:00','06:00-08:00, 16:00-22:00','07:00-22:00','07:00-22:00'],modelAssist:true,manualOverrideMin:180,showOnDisplay:true,control:'hysteresis',pwmCycleMin:20,pwmKp:40,pwmTnMin:90});renderRooms()}},'+ Raum'))}
- function renderCircuits(){cc.innerHTML='';cc.append(h('h3',{style:'margin-top:0'},'Heizkreise (Ausgang n = Heizkreis n)'),h('p',{class:'hint'},'Nur Ausgänge mit Funktion „Heizkreis“ (Hardware → Ausgänge) werden von der Regelung verwendet. Stromlos geschlossene Stellantriebe (NC) sind Standard. Mindestlaufzeiten mindestens so lang wie die Laufzeit des Stellantriebs wählen (thermisch typ. 180–300 s); bei PWM-Regelung ist das zugleich der kürzeste Puls.'),
-  h('table',null,h('tr',null,['#','Name','Raum','aktiv','NO-Ventil','min. Ein s','min. Aus s','Zustand'].map(t=>h('th',null,t))),circuits.map(c=>h('tr',null,h('td',null,c.n),h('td',null,inp(c,'name')),h('td',null,sel([['','–']].concat(rooms.map(r=>[r.id,r.name||r.id])),c.room,v=>c.room=v)),h('td',null,inp(c,'enabled','checkbox')),h('td',null,inp(c,'valveNormallyOpen','checkbox')),h('td',null,inp(c,'minOnSec','number',{class:'n'})),h('td',null,inp(c,'minOffSec','number',{class:'n'})),h('td',null,c.fault?chip(c.faultText||'Fehler','bad'):c.open?chip('offen','warn'):chip('zu'))))))}
- async function save(){const body={rooms:rooms.map(r=>({id:r.id.trim(),name:r.name,comfort:+r.comfort,eco:+r.eco,frost:+r.frost,mode:r.mode,hysteresis:+r.hysteresis,groups:String(r.groups).split(',').map(s=>s.trim()).filter(Boolean),schedule:r.schedule.map(s=>String(s||'').split(',').map(x=>x.trim()).filter(Boolean)),modelAssist:r.modelAssist,manualOverrideMin:+r.manualOverrideMin,showOnDisplay:r.showOnDisplay,control:r.control,pwmCycleMin:+r.pwmCycleMin,pwmKp:+r.pwmKp,pwmTnMin:+r.pwmTnMin})),circuits:circuits.map(c=>({n:c.n,name:c.name,room:c.room,enabled:c.enabled,valveNormallyOpen:c.valveNormallyOpen,minOnSec:+c.minOnSec,minOffSec:+c.minOffSec})),globalMode:d.globalMode,globalModeUntilEpoch:d.globalModeUntilEpoch};
-  await act(()=>PUT('heating',body),'Gespeichert');CAT=null}
+ const rc=h('div');const cc=h('div',{class:'card tbl'});m.append(rc,cc,h('div',{class:'row'},h('button',{class:'p',onclick:save},'Speichern'),h('span',{class:'muted'},'Änderungen an Räumen und Heizkreisen werden erst mit „Speichern“ übernommen.')));
+ const schedText=r=>{const s=r.schedule.map(x=>String(x||'').trim());const wd=s.slice(0,5).every(x=>x===s[0]),we=s[5]===s[6];
+  const f=x=>x?x.replace(/:00/g,'').replace(/-/g,'–'):'aus';return wd&&we?(s[0]===s[5]?'täglich '+f(s[0]):'Mo–Fr '+f(s[0])+' · Sa–So '+f(s[5])):'je Tag verschieden'};
+ function renderRooms(){rc.innerHTML='';
+  rooms.forEach((r,i)=>{
+   const idIn=inp(r,'id');
+   const title=h('b',null,r.name||'Neuer Raum');
+   // a changed room id moves its heating circuits along (no valve left behind)
+   const setId=nid=>{const old=r.id;r.id=nid;if(old!==nid){circuits.forEach(c=>{if(c.room===old)c.room=nid});renderCircuits()}};
+   idIn.addEventListener('input',()=>{const nid=r.id;r.id=r._lastId;setId(nid);r._lastId=nid});r._lastId=r.id;
+   const nameIn=inp(r,'name',null,{placeholder:'z. B. Wohnzimmer'});nameIn.addEventListener('input',()=>{title.textContent=r.name||'Neuer Raum';if(r._new){setId(slugId(r.name,rooms.filter(x=>x!==r).map(x=>x.id)));r._lastId=r.id;idIn.value=r.id}else renderCircuits()});
+   const sc=h('div',{class:'form'});const days=[];for(let dd=0;dd<7;dd++){const e=h('input',{value:r.schedule[dd]||'',placeholder:dd<5?'06:00-08:00, 16:00-22:00':'07:00-22:00',oninput:ev=>r.schedule[dd]=ev.target.value});days.push(e);sc.append(...field(['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'][dd],e))}
+   const copy=(from,to)=>{for(const t of to){r.schedule[t]=r.schedule[from];days[t].value=r.schedule[from]||''}};
+   const tnum=(k,l)=>h('label',null,l,inp(r,k,'number',{step:0.5,class:'n'}));
+   const det=h('details',{class:'card roomcfg',open:!!(r._open||r._new)});det.addEventListener('toggle',()=>r._open=det.open);
+   det.append(h('summary',null,title,h('span',{class:'muted'},'Komfort '+fmt(r.comfort)+' °C · Absenkung '+fmt(r.eco)+' °C · '+(r.mode==='auto'?schedText(r):(ROOM_MODES.find(x=>x[0]===r.mode)||[0,r.mode])[1]))),
+    h('div',{class:'form',style:'margin-top:10px'},...field('Name',nameIn),
+     ...field('Temperaturen',h('div',{class:'temps'},tnum('comfort','Komfort °C'),tnum('eco','Absenkung °C'),tnum('frost','Frostschutz °C')),'Komfort gilt in den Zeiten des Zeitplans, sonst Absenkung. Frostschutz bei „Aus“, Urlaub und offenem Fenster.'),
+     ...field('Betriebsart',sel(ROOM_MODES,r.mode,v=>r.mode=v))),
+    h('h3',null,'Zeitplan – Komfortzeiten'),h('p',{class:'hint',style:'margin-top:-4px'},'Zeiträume mit Komforttemperatur, mehrere durch Komma getrennt, z. B. „06:00-08:00, 16:00-22:00“. Leer = ganzer Tag Absenkung.'),sc,
+    h('div',{class:'row',style:'margin-top:8px'},h('button',{onclick:()=>copy(0,[1,2,3,4])},'Montag → Di–Fr kopieren'),h('button',{onclick:()=>copy(0,[1,2,3,4,5,6])},'Montag → alle Tage'),h('button',{onclick:()=>copy(5,[6])},'Samstag → Sonntag')),
+    h('details',{class:'adv'},h('summary',null,'Erweiterte Einstellungen'),h('div',{class:'form',style:'margin-top:8px'},
+     ...field('Raum-ID',idIn,'Interner Name für Automationen und MQTT: a-z, 0-9, _ und - (max. 15). Wird bei neuen Räumen aus dem Namen erzeugt.'),
+     ...field('Regelung',sel([['hysteresis','Zweipunkt – Ventil auf/zu (Standard)'],['pwm','PWM-Takt – Ventil anteilig je Zyklus']],r.control,v=>{r.control=v;r._open=true;renderRooms()}),r.control==='pwm'?'PI-Regler öffnet das Ventil je Zyklus anteilig'+(r.duty!=null?' – aktuell '+r.duty+' %':'')+'. Gut für Heizkörper und schnelle Räume.':'Ventil auf unter Soll − H/2, zu über Soll + H/2. Gut für Fußbodenheizung.'),
+     ...field('Schaltabstand (Hysterese) K',inp(r,'hysteresis','number',{step:0.1,class:'n'}),r.control==='pwm'?'Bei PWM schließt das Ventil sofort, wenn die Temperatur Soll + H erreicht.':'Kleiner = gleichmäßigere Temperatur, aber häufigeres Schalten (Standard 0,4).'),
+     ...(r.control==='pwm'?[...field('PWM-Zyklus min',inp(r,'pwmCycleMin','number',{class:'n'}),'5–60, mind. 2 × Mindestlaufzeit der Heizkreise; Fußbodenheizung 20–30, Heizkörper 10–15'),...field('Verstärkung %/K',inp(r,'pwmKp','number',{class:'n'}),'5–200; Öffnungsanteil je K unter Soll'),...field('Nachstellzeit min',inp(r,'pwmTnMin','number',{class:'n'}),'0–600; 0 = nur P-Anteil. Fußbodenheizung 90–180, Heizkörper 30–60')]:[]),
+     ...field('Handänderung gilt (min)',inp(r,'manualOverrideMin','number',{class:'n'}),'Wie lange eine Änderung mit − / + gilt; endet spätestens beim nächsten Zeitplanwechsel.'),
+     ...field('Gruppen',inp(r,'groups'),'Optional, kommagetrennt (z. B. eg, schlafen) – für Automationen, die mehrere Räume gemeinsam schalten.'),
+     ...field('Lernmodell nutzen',inp(r,'modelAssist','checkbox'),r.control==='pwm'?'Wirkt nur bei Zweipunkt-Regelung.':'Schaltet früher ein/aus, um Überschwingen zu vermeiden.'),
+     ...field('Auf dem Display zeigen',inp(r,'showOnDisplay','checkbox')))),
+    h('div',{class:'row',style:'margin-top:12px'},h('button',{class:'d',onclick:()=>{if(confirm('Raum „'+(r.name||r.id||'neu')+'“ löschen?')){rooms.splice(i,1);renderRooms();renderCircuits()}}},'Raum löschen')));
+   rc.append(det)});
+  rc.append(h('button',{style:'margin-bottom:14px',onclick:()=>{rooms.push({id:slugId('raum',rooms.map(x=>x.id)),name:'',comfort:21,eco:18,frost:7,mode:'auto',hysteresis:0.4,groups:'',schedule:['06:00-08:00, 16:00-22:00','06:00-08:00, 16:00-22:00','06:00-08:00, 16:00-22:00','06:00-08:00, 16:00-22:00','06:00-08:00, 16:00-22:00','07:00-22:00','07:00-22:00'],modelAssist:true,manualOverrideMin:180,showOnDisplay:true,control:'hysteresis',pwmCycleMin:20,pwmKp:40,pwmTnMin:90,_new:true});renderRooms();renderCircuits()}},'+ Raum hinzufügen'))}
+ let showAll=false;
+ function renderCircuits(){cc.innerHTML='';const isValve=c=>outs[c.n-1]&&outs[c.n-1].function==='circuit';
+  const vis=circuits.filter(c=>showAll||c.room);
+  cc.append(h('h3',{style:'margin-top:0'},'Heizkreise (Ventile)'),
+   h('p',{class:'hint'},'Heizkreis n gehört zu Ausgang n. Damit ein Ventil geregelt wird, muss der Ausgang unter „Ventile & Ausgänge“ auf „Heizkreis“ stehen und hier einem Raum zugeordnet sein. Mindestlaufzeit und -pause mindestens so lang wie die Laufzeit des Stellantriebs wählen (thermisch typ. 180–300 s).'),
+   vis.length?h('table',null,h('tr',null,[['Nr.'],['Name'],['Raum'],['aktiv'],['stromlos offen','Haken nur bei Stellantrieben „stromlos offen“ (NO). Standard ist „stromlos geschlossen“ (NC).'],['min. Laufzeit s','Ventil bleibt mindestens so lange offen'],['min. Pause s','Ventil bleibt mindestens so lange zu'],['Zustand']].map(([t,tt])=>h('th',{title:tt||null},t))),
+    vis.map(c=>h('tr',null,h('td',null,c.n),h('td',null,inp(c,'name')),h('td',null,sel([['','– kein Raum –']].concat(rooms.map(r=>[r.id,r.name||r.id])),c.room,v=>c.room=v)),h('td',null,inp(c,'enabled','checkbox')),h('td',null,inp(c,'valveNormallyOpen','checkbox')),h('td',null,inp(c,'minOnSec','number',{class:'n'})),h('td',null,inp(c,'minOffSec','number',{class:'n'})),
+     h('td',null,c.fault?chip(c.faultText||'Fehler','bad'):!isValve(c)&&c.room?chip('Ausgang nicht auf „Heizkreis“','warn'):c.open?chip('offen','warn'):chip('zu'))))):h('p',{class:'muted'},'Noch kein Heizkreis einem Raum zugeordnet. „Alle 16 Heizkreise zeigen“ und beim passenden Ausgang den Raum wählen.'),
+   h('div',{class:'row',style:'margin-top:8px'},h('button',{onclick:()=>{showAll=!showAll;renderCircuits()}},showAll?'Nur belegte Heizkreise zeigen':'Alle 16 Heizkreise zeigen')))}
+ async function save(){for(const r of rooms){if(!String(r.name||'').trim())return toast('Bitte jedem Raum einen Namen geben',true);if(!String(r.id||'').trim())r.id=slugId(r.name,rooms.filter(x=>x!==r).map(x=>x.id))}
+  const body={rooms:rooms.map(r=>({id:r.id.trim(),name:r.name,comfort:+r.comfort,eco:+r.eco,frost:+r.frost,mode:r.mode,hysteresis:+r.hysteresis,groups:String(r.groups).split(',').map(s=>s.trim()).filter(Boolean),schedule:r.schedule.map(s=>String(s||'').split(',').map(x=>x.trim()).filter(Boolean)),modelAssist:r.modelAssist,manualOverrideMin:+r.manualOverrideMin,showOnDisplay:r.showOnDisplay,control:r.control,pwmCycleMin:+r.pwmCycleMin,pwmKp:+r.pwmKp,pwmTnMin:+r.pwmTnMin})),circuits:circuits.map(c=>({n:c.n,name:c.name,room:c.room,enabled:c.enabled,valveNormallyOpen:c.valveNormallyOpen,minOnSec:+c.minOnSec,minOffSec:+c.minOffSec})),globalMode:d.globalMode,globalModeUntilEpoch:d.globalModeUntilEpoch};
+  const ok=await act(()=>PUT('heating',body),'Gespeichert');CAT=null;if(ok){rooms.forEach(r=>delete r._new);renderRooms()}}
  renderRooms();renderCircuits();
 };
 
 // ------------------------------------------------------------ sensors
+const ROLES=[['room','Raumtemperatur'],['flow','Vorlauf'],['return','Rücklauf'],['outdoor','Außen'],['other','Sonstiges']];
+const KINDS={onewire:'1-Wire (Kabel)',rf:'Funk 433 MHz',external:'extern (MQTT/HTTP)',analog:'Analogeingang',virtual:'berechnet'};
 routes['/sensors']=async m=>{
- const [d,heat]=await Promise.all([GET('sensors'),GET('heating')]);const rooms=[['','–']].concat(heat.rooms.map(r=>[r.id,r.name]));
- m.append(h('h2',null,'Sensoren'),h('p',{class:'muted'},'Zentraler Sensor-Manager für 1-Wire-, Funk-, externe (rtl_433/RS485) und Analogsensoren. Höhere Priorität gewinnt innerhalb eines Raums; fällt ein Sensor aus, wird der Ersatzsensor verwendet.'));
+ const [d,heat]=await Promise.all([GET('sensors'),GET('heating')]);const rooms=[['','– kein Raum –']].concat(heat.rooms.map(r=>[r.id,r.name]));
+ m.append(h('h2',null,'Temperatursensoren'));
+ // newly found sensors first: that is what a new installation needs
+ const disc=h('div',{class:'card tbl'+(d.discovered.length?' banner':'')},h('h3',{style:'margin-top:0'},'Neu gefundene Fühler'+(d.discovered.length?' ('+d.discovered.length+')':'')));m.append(disc);
+ if(!d.discovered.length)disc.append(h('p',{class:'muted'},'Keine neuen Fühler. Kabelfühler (1-Wire) erscheinen nach dem Busscan, Funkfühler nach ihrem ersten Telegramm. Tipp: Fühler kurz in der Hand anwärmen, um ihn zu erkennen.'));
+ else disc.append(h('p',{class:'hint',style:'margin-top:-4px'},'Namen eingeben, Raum wählen und „Übernehmen“ – ab dann regelt der Raum mit diesem Fühler.'),h('table',null,h('tr',null,['Fühler','Wert','Name','Raum','Verwendung',''].map(t=>h('th',null,t))),d.discovered.map(x=>{const a={id:x.id,name:'',room:'',role:'room'};return h('tr',null,h('td',null,h('code',null,x.id),h('div',{class:'hint'},(KINDS[x.kind]||x.kind)+' · '+x.seen+'× empfangen')),h('td',null,fmt(x.value,2)+' °C'),h('td',null,inp(a,'name',null,{placeholder:'z. B. Wohnzimmer'})),h('td',null,sel(rooms,'',v=>a.room=v)),h('td',null,sel(ROLES,'room',v=>a.role=v)),h('td',null,h('button',{class:'p',onclick:()=>act(()=>POST('sensors/adopt',a),'Übernommen').then(route)},'Übernehmen')))})));
  const list=h('div',{class:'card tbl'});m.append(list);
- list.append(h('table',null,h('tr',null,['ID','Name','Art','Rolle','Raum','Wert','Status','Alter','Korrektur','Timeout s','Prio','Ersatz',''].map(t=>h('th',null,t))),d.sensors.map(s=>{const e={...s};return h('tr',null,h('td',null,h('code',null,s.id)),h('td',null,inp(e,'name')),h('td',null,s.kind),h('td',null,sel([['room','Raum'],['flow','Vorlauf'],['return','Rücklauf'],['outdoor','Außen'],['other','Sonstige']],e.role,v=>e.role=v)),h('td',null,sel(rooms,e.room,v=>e.room=v)),
-  h('td',null,fmt(s.value,2),s.humidity!=null?' / '+fmt(s.humidity,0)+'%':'',s.batteryOk===false?chip('Batterie','bad'):null),h('td',null,stChip(s.status)),h('td',null,ago(s.ageSec)),h('td',null,inp(e,'offset','number',{step:0.1,class:'n'})),h('td',null,inp(e,'timeoutSec','number',{class:'n'})),h('td',null,inp(e,'priority','number',{class:'n'})),
-  h('td',null,sel([['','–']].concat(d.sensors.filter(x=>x.id!==s.id).map(x=>[x.id,x.name])),e.fallbackId,v=>e.fallbackId=v)),h('td',null,h('label',null,inp(e,'enabled','checkbox'),' aktiv'),' ',h('button',{onclick:()=>act(()=>PUT('sensors/'+encodeURIComponent(s.id),e),'Gespeichert')},'Speichern'),' ',h('button',{class:'d',onclick:()=>confirm('Entfernen?')&&act(()=>DEL('sensors/'+encodeURIComponent(s.id))).then(route)},'×')))})));
+ list.append(h('h3',{style:'margin-top:0'},'Eingerichtete Fühler'),h('p',{class:'hint',style:'margin-top:-4px'},'Korrektur: wird auf jeden Messwert addiert (z. B. −0,3, wenn der Fühler 0,3 K zu warm misst). Mit „⚙“ öffnen sich weitere Einstellungen wie Ersatzfühler und Zeitüberschreitung.'));
+ if(!d.sensors.length)list.append(h('p',{class:'muted'},'Noch keine Fühler eingerichtet.'));
+ else{const tb=h('table',null,h('tr',null,['Name','Raum','Verwendung','Messwert','Korrektur K',''].map(t=>h('th',null,t))));list.append(tb);
+  for(const s of d.sensors){const e={...s};const save=()=>act(()=>PUT('sensors/'+encodeURIComponent(s.id),e),'Gespeichert');
+   const more=h('tr',{style:'display:none'},h('td',{colspan:6},h('div',{class:'form',style:'padding:6px 0'},
+    ...field('Fühler',h('span',null,h('code',null,s.id),' · '+(KINDS[s.kind]||s.kind))),
+    ...field('Ersatzfühler',sel([['','– keiner –']].concat(d.sensors.filter(x=>x.id!==s.id).map(x=>[x.id,x.name||x.id])),e.fallbackId,v=>e.fallbackId=v),'Wird verwendet, wenn dieser Fühler ausfällt.'),
+    ...field('Zeitüberschreitung s',inp(e,'timeoutSec','number',{class:'n'}),'Ohne neuen Messwert so lange gilt der Fühler als ausgefallen (0 = nie).'),
+    ...field('Priorität',inp(e,'priority','number',{class:'n'}),'Hat ein Raum mehrere Fühler, gewinnt die höhere Priorität.'),
+    ...field('Aktiv',inp(e,'enabled','checkbox')),
+    ...field('',h('div',{class:'row'},h('button',{class:'p',onclick:save},'Speichern'),h('button',{class:'d',onclick:()=>confirm('Fühler „'+(s.name||s.id)+'“ entfernen?')&&act(()=>DEL('sensors/'+encodeURIComponent(s.id))).then(route)},'Fühler entfernen'))))));
+   tb.append(h('tr',null,h('td',null,inp(e,'name')),h('td',null,sel(rooms,e.room,v=>e.room=v)),h('td',null,sel(ROLES,e.role,v=>e.role=v)),
+     h('td',null,fmt(s.value,2)+' °C',s.humidity!=null?' · '+fmt(s.humidity,0)+' %':'',' ',stChip(s.status),s.batteryOk===false?chip('Batterie schwach','bad'):null,h('div',{class:'hint'},s.ageSec!=null?'vor '+ago(s.ageSec):'')),
+     h('td',null,inp(e,'offset','number',{step:0.1,class:'n'})),
+     h('td',{style:'white-space:nowrap'},h('button',{onclick:save},'Speichern'),' ',h('button',{title:'Weitere Einstellungen',onclick:()=>{more.style.display=more.style.display?'':'none'}},'⚙'))),more)}}
  // calibration: sensors side by side -> offsets so that all show the same value
  {const cal=h('div',{class:'card tbl'});m.append(cal);const live=d.sensors.filter(x=>x.status==='ok'&&x.raw!=null);
-  const pick={};live.forEach(x=>pick[x.id]=x.kind!=='analog');const ref={mode:'median',value:''};const res=h('div');const spread=h('span',{class:'muted'});
+  const pick={};live.forEach(x=>pick[x.id]=x.kind!=='analog'&&x.role==='room');const ref={mode:'median',value:''};const res=h('div');const spread=h('span',{class:'muted'});
   const upd=()=>{const v=live.filter(x=>pick[x.id]).map(x=>x.value);spread.textContent=v.length>1?'Abweichung der ausgewählten Sensoren jetzt: '+fmt(Math.max(...v)-Math.min(...v),2)+' K':''};
   const refSel=()=>sel([['median','Median aller ausgewählten (empfohlen)'],['mean','Mittelwert aller ausgewählten'],['value','Referenzthermometer (Wert eingeben)']].concat(live.filter(x=>pick[x.id]).map(x=>[x.id,'Bezug: '+(x.name||x.id)])),ref.mode,v=>{ref.mode=v;draw()});
   const draw=()=>{cal.innerHTML='';cal.append(h('h3',{style:'margin-top:0'},'Abgleich – alle Sensoren gleich messen lassen'),
@@ -192,10 +335,7 @@ routes['/sensors']=async m=>{
     res.innerHTML='';res.append(h('p',null,mode==='reset'?'Korrekturen zurückgesetzt.':'Zielwert '+fmt(r.target,2)+' °C – neue Korrekturen:'),h('table',null,r.results.map(x=>h('tr',null,h('td',null,byId[x.id]?byId[x.id].name||x.id:x.id),h('td',null,(x.oldOffset>0?'+':'')+fmt(x.oldOffset,2)+' → '+(x.newOffset>0?'+':'')+fmt(x.newOffset,2)+' K')))));
     toast('Gespeichert');setTimeout(route,2500)}catch(e){toast(e.message,true)}};
   draw()}
- const disc=h('div',{class:'card tbl'},h('h3',{style:'margin-top:0'},'Erkannte, noch nicht zugeordnete Sensoren'));m.append(disc);
- if(!d.discovered.length)disc.append(h('p',{class:'muted'},'Keine. 1-Wire-Sensoren erscheinen nach dem Busscan, Funksensoren nach ihrem ersten gültigen Telegramm.'));
- else disc.append(h('table',null,d.discovered.map(x=>{const a={id:x.id,name:'',room:'',role:'room'};return h('tr',null,h('td',null,h('code',null,x.id)),h('td',null,fmt(x.value,2)+' °C'),h('td',null,x.seen+'×'),h('td',null,inp(a,'name',null,{placeholder:'Name'})),h('td',null,sel(rooms,'',v=>a.room=v)),h('td',null,sel([['room','Raum'],['flow','Vorlauf'],['return','Rücklauf'],['outdoor','Außen'],['other','Sonstige']],'room',v=>a.role=v)),h('td',null,h('button',{class:'p',onclick:()=>act(()=>POST('sensors/adopt',a),'Übernommen').then(route)},'Übernehmen')))})));
- const auto={autoAdoptOneWire:d.autoAdoptOneWire};m.append(h('div',{class:'card row'},h('label',null,inp(auto,'autoAdoptOneWire','checkbox'),' 1-Wire-Sensoren automatisch übernehmen'),h('button',{onclick:()=>act(()=>PUT('sensors',auto),'Gespeichert')},'Speichern')));
+ const auto={autoAdoptOneWire:d.autoAdoptOneWire};m.append(h('div',{class:'card row'},h('label',null,inp(auto,'autoAdoptOneWire','checkbox'),' Neue Kabelfühler (1-Wire) automatisch übernehmen'),h('span',{class:'hint'},'Sie erscheinen dann direkt in der Liste und müssen nur noch einem Raum zugeordnet werden.'),h('button',{onclick:()=>act(()=>PUT('sensors',auto),'Gespeichert')},'Speichern')));
 };
 
 // ------------------------------------------------------------ action / binding editors
@@ -407,11 +547,11 @@ routes['/model']=async m=>{const d=await GET('model');const heat=await GET('heat
    h('div',{class:'row'},Object.entries(x.periods).map(([k,v])=>chip(k+': '+v))),x.context.length?h('details',null,h('summary',null,'Kontextereignisse'),h('ul',null,x.context.slice().reverse().map(c=>h('li',null,dt(c.epoch)+' – '+c.what)))):null,h('button',{class:'d',style:'margin-top:8px',onclick:()=>confirm('Modell zurücksetzen?')&&act(()=>POST('model/'+r.id+'/reset'),'Zurückgesetzt').then(route)},'Zurücksetzen')))}};
 
 // ------------------------------------------------------------ hardware
-routes['/hw/outputs']=async m=>{const io=await GET('io');m.append(h('h2',null,'Hardware – 16 Ausgänge'),h('p',{class:'muted'},'Heizkreis-Ausgänge gehören der Regelung. Handbetrieb ist zeitlich begrenzt und wird von den Sicherheitsfunktionen (Übertemperatur) weiterhin überwacht. Nur „allgemeine“ Ausgänge können von Automationen bzw. Home Assistant geschaltet werden – wenn ausdrücklich freigegeben.'));
+routes['/hw/outputs']=async m=>{const io=await GET('io');m.append(h('h2',null,'Ventile & Ausgänge'),h('div',{class:'card hint'},h('b',null,'Heizkreis (Ventil): '),'wird von der Raumregelung geschaltet – Raum unter „Räume & Zeitpläne → Heizkreise“ zuordnen. ',h('b',null,'Allgemein: '),'freier Schaltausgang (z. B. Pumpe, Licht) für Automationen und Home Assistant, nur wenn unten freigegeben. ',h('b',null,'Testen: '),'„Ein“/„Aus“ schaltet zeitlich begrenzt von Hand, die Sicherheitsfunktionen bleiben aktiv; „Auto“ beendet den Test.'));
  const outs=io.outputs.map(o=>({...o}));const t=h('div',{class:'card tbl'});m.append(t);const dur={sec:600};
- t.append(h('table',null,h('tr',null,['#','Name','Funktion','Automation','Home Assistant','max. Ein s','Zustand','Handbetrieb'].map(x=>h('th',null,x))),outs.map(o=>h('tr',null,h('td',null,o.n),h('td',null,inp(o,'name')),h('td',null,sel([['circuit','Heizkreis'],['general','allgemein'],['disabled','deaktiviert']],o.function,v=>o.function=v)),h('td',null,inp(o,'automationAllowed','checkbox')),h('td',null,inp(o,'haAllowed','checkbox')),h('td',null,inp(o,'maxOnSec','number',{class:'n'})),
-  h('td',null,o.on?chip('EIN','warn'):chip('aus'),o.manual?chip('Hand '+o.manualRemainingSec+' s','warn'):null,o.blocked?h('div',{class:'muted'},o.blocked):null,!o.hwOk?chip('I2C-Fehler','bad'):null),h('td',null,h('button',{onclick:()=>act(()=>POST('outputs/'+o.n+'/manual',{state:true,durationSec:dur.sec}),'Hand EIN').then(route)},'Ein'),' ',h('button',{onclick:()=>act(()=>POST('outputs/'+o.n+'/manual',{state:false,durationSec:dur.sec}),'Hand AUS').then(route)},'Aus'),' ',h('button',{onclick:()=>act(()=>DEL('outputs/'+o.n+'/manual')).then(route)},'Auto')))))
-  ,h('div',{class:'row',style:'margin-top:8px'},'Handbetrieb-Dauer s ',inp(dur,'sec','number',{class:'n'}),h('button',{class:'p',onclick:()=>act(()=>PUT('io',{outputs:outs.map(o=>({n:o.n,name:o.name,function:o.function,automationAllowed:o.automationAllowed,haAllowed:o.haAllowed,maxOnSec:+o.maxOnSec}))}),'Gespeichert')},'Konfiguration speichern')))};
+ t.append(h('table',null,h('tr',null,[['Nr.'],['Name'],['Verwendung'],['Automationen dürfen schalten','nur bei „Allgemein“'],['Home Assistant darf schalten','nur bei „Allgemein“'],['max. Einschaltdauer s','Ausgang schaltet nach dieser Zeit selbst ab; 0 = unbegrenzt (nur „Allgemein“)'],['Zustand'],['Testen']].map(([x,tt])=>h('th',{title:tt||null},x))),outs.map(o=>h('tr',null,h('td',null,o.n),h('td',null,inp(o,'name')),h('td',null,sel([['circuit','Heizkreis (Ventil)'],['general','Allgemein (z. B. Pumpe)'],['disabled','nicht verwendet']],o.function,v=>o.function=v)),h('td',null,inp(o,'automationAllowed','checkbox')),h('td',null,inp(o,'haAllowed','checkbox')),h('td',null,inp(o,'maxOnSec','number',{class:'n'})),
+  h('td',null,o.on?chip('an','warn'):chip('aus'),o.manual?chip('Test, noch '+ago(o.manualRemainingSec),'warn'):null,o.blocked?h('div',{class:'muted'},o.blocked):null,!o.hwOk?chip('I2C-Fehler','bad'):null),h('td',null,h('button',{onclick:()=>act(()=>POST('outputs/'+o.n+'/manual',{state:true,durationSec:dur.sec}),'Hand EIN').then(route)},'Ein'),' ',h('button',{onclick:()=>act(()=>POST('outputs/'+o.n+'/manual',{state:false,durationSec:dur.sec}),'Hand AUS').then(route)},'Aus'),' ',h('button',{onclick:()=>act(()=>DEL('outputs/'+o.n+'/manual')).then(route)},'Auto')))))
+  ,h('div',{class:'row',style:'margin-top:8px'},'Testdauer s ',inp(dur,'sec','number',{class:'n'}),h('button',{class:'p',onclick:()=>act(()=>PUT('io',{outputs:outs.map(o=>({n:o.n,name:o.name,function:o.function,automationAllowed:o.automationAllowed,haAllowed:o.haAllowed,maxOnSec:+o.maxOnSec}))}),'Gespeichert')},'Konfiguration speichern')))};
 routes['/hw/inputs']=async m=>{const [io,heat,cat]=await Promise.all([GET('io'),GET('heating'),catalog(true)]);m.append(h('h2',null,'Hardware – 16 Digitaleingänge'),h('p',{class:'muted'},'Optokoppler-Eingänge (aktiv = gegen GND geschaltet). Taster liefern kurz/lang/gedrückt/losgelassen, Kontakte Ein/Aus – dieselben Ereignisse wie Funkgeräte.'));
  const ins=io.inputs.map(i=>JSON.parse(JSON.stringify(i)));const box=h('div');m.append(box);const rooms=[['','–']].concat(heat.rooms.map(r=>[r.id,r.name]));
  ins.forEach(i=>{const b=h('div');box.append(h('details',{class:'card'},h('summary',null,h('b',null,'DI'+i.n+' '),i.name,' ',i.active?chip('aktiv','warn'):chip('inaktiv'),' ',chip(i.kind),i.function!=='none'?chip(i.function+' '+i.room):null,i.bindings.length?chip(i.bindings.length+' Zuordnung(en)'):null),
