@@ -33,8 +33,9 @@ struct SafetyConfig {
   uint8_t sensorFailDutyPct = 20;
   uint16_t sensorFailCycleMin = 20;
   // Power supply of the valve outputs. Thermal actuators draw several times
-  // their rated power while cold (PTC heater): Danfoss TWA-A 24 V: 2 W running,
-  // inrush < 350 mA. With a rated current set, valves are switched on only
+  // their rated power while cold (PTC heater): Danfoss Thermot 088H3216 /
+  // TWA-A 24 V: 2 W running, inrush up to 350 mA, stroke about 3 min. The
+  // duration of the inrush is not specified: assume the whole stroke. With a rated current set, valves are switched on only
   // while the supply has headroom; the rest wait (staggered start).
   float psuVoltage = 24.f;        // 12 or 24 V DC
   float psuCurrentA = 0.f;        // rated output current, 0 = not limited
@@ -42,7 +43,7 @@ struct SafetyConfig {
   float psuBaseLoadA = 0.25f;     // board and other loads on the same supply
   float valveInrushA = 0.35f;     // per actuator while starting
   float valveHoldW = 2.0f;        // per actuator when warm (running power)
-  uint16_t valveInrushSec = 60;   // duration of the starting phase
+  uint16_t valveInrushSec = 180;  // duration of the starting phase
   float psuBudgetA() const { return psuCurrentA * static_cast<float>(psuUsablePct) / 100.f; }
   float valveHoldA() const { return psuVoltage > 0.f ? valveHoldW / psuVoltage : 0.f; }
   // current reserved when a valve is admitted: the larger of start and hold
