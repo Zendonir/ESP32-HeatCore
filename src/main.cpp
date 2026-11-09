@@ -22,6 +22,7 @@
 #include <esp_heap_caps.h>
 #include <esp_system.h>
 #include <esp_task_wdt.h>
+#include <freertos/idf_additions.h>
 #include <esp_timer.h>
 
 #include <algorithm>
@@ -639,10 +640,10 @@ void bleTask(void*) {
         (lastTry == 0 || now - lastTry > 300000)) {
       lastTry = now;
       size_t freeInt = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-      if (freeInt < 70000) {
+      if (freeInt < 55000) {
         Lock lk(g_sys->mutex());
         char b[96];
-        std::snprintf(b, sizeof(b), "zu wenig freier Arbeitsspeicher (%u KB, noetig 70 KB)",
+        std::snprintf(b, sizeof(b), "zu wenig freier Arbeitsspeicher (%u KB, noetig 55 KB)",
                       static_cast<unsigned>(freeInt / 1024));
         g_sys->ble.radioError = b;
       } else {
@@ -680,6 +681,36 @@ void bleTask(void*) {
     }
     vTaskDelay(pdMS_TO_TICKS(n == 16 ? 5 : 50));
   }
+}
+
+// ---- task creation
+// Stacks of tasks that never write the flash live in the 8 MB PSRAM: the
+// ~320 KB internal RAM is needed by Wi-Fi, lwIP, Bluetooth and DMA buffers.
+// Tasks that write the flash (storage, network/NVS, Bluetooth start with its
+// calibration data, self-test, web server) keep internal stacks: while the
+// flash is written the cache - and with it the PSRAM - is switched off.
+#if !(CONFIG_SPIRAM && CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM)
+#warning "Task stacks cannot be placed in PSRAM with this framework configuration"
+#endif
+struct TaskInfo {
+  const char* name;
+  TaskHandle_t handle;
+  uint32_t stack;
+  bool psram;
+};
+TaskInfo g_tasks[12];
+size_t g_taskCount = 0;
+
+void startTask(TaskFunction_t fn, const char* name, uint32_t stack, UBaseType_t prio, BaseType_t core, bool psram) {
+  TaskHandle_t h = nullptr;
+  bool inPsram = false;
+#if CONFIG_SPIRAM && CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM
+  if (psram && ESP.getPsramSize() > 0)
+    inPsram = xTaskCreatePinnedToCoreWithCaps(fn, name, stack, nullptr, prio, &h, core,
+                                              MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) == pdPASS;
+#endif
+  if (!inPsram) xTaskCreatePinnedToCore(fn, name, stack, nullptr, prio, &h, core);
+  if (g_taskCount < sizeof(g_tasks) / sizeof(g_tasks[0])) g_tasks[g_taskCount++] = {name, h, stack, inPsram};
 }
 
 void saveHistory() {
@@ -856,6 +887,25 @@ void selfTestTask(void*) {
                     " Messwerte");
     else
       addResult(res, "Bluetooth-Thermometer", "fehler", bleErr.empty() ? "Suche nicht aktiv" : bleErr);
+  }
+  {
+    // free stack per task (lowest value since start): basis for tuning the stack sizes
+    std::string det;
+    bool tight = false;
+    for (size_t i = 0; i < g_taskCount; ++i) {
+      if (!g_tasks[i].handle) continue;
+      uint32_t freeB = uxTaskGetStackHighWaterMark(g_tasks[i].handle);
+      tight |= freeB < 1024;
+      char b[64];
+      std::snprintf(b, sizeof(b), "%s%s %.1f/%u KB%s", det.empty() ? "" : ", ", g_tasks[i].name, freeB / 1024.0,
+                    static_cast<unsigned>(g_tasks[i].stack / 1024), g_tasks[i].psram ? " (PSRAM)" : "");
+      det += b;
+    }
+    char b[96];
+    std::snprintf(b, sizeof(b), "; interner RAM frei %u KB, groesster Block %u KB",
+                  static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024),
+                  static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024));
+    addResult(res, "Task-Speicher (frei/gesamt)", tight ? "fehler" : "ok", det + b);
   }
   addResult(res, "PSRAM", ESP.getPsramSize() > 0 ? "ok" : "fehlt", std::to_string(ESP.getPsramSize() / 1024) + " KB");
   addResult(res, "Dateisystem", g_storage.ready() ? "ok" : "fehler",
@@ -1038,16 +1088,17 @@ void setup() {
   g_web->begin();
 
   // 4) tasks
-  xTaskCreatePinnedToCore(controlTask, "control", 12288, nullptr, 5, nullptr, 1);
-  xTaskCreatePinnedToCore(ioTask, "io", 6144, nullptr, 6, nullptr, 1);
-  xTaskCreatePinnedToCore(rfRxTask, "rf-rx", 6144, nullptr, 4, nullptr, 0);
-  xTaskCreatePinnedToCore(rfTxTask, "rf-tx", 6144, nullptr, 3, nullptr, 0);
-  xTaskCreatePinnedToCore(sensorTask, "sensors", 8192, nullptr, 2, nullptr, 0);
-  xTaskCreatePinnedToCore(displayTask, "display", 8192, nullptr, 1, nullptr, 0);
-  xTaskCreatePinnedToCore(netTask, "net", 12288, nullptr, 2, nullptr, 0);
-  xTaskCreatePinnedToCore(storageTask, "storage", 10240, nullptr, 1, nullptr, 0);
-  xTaskCreatePinnedToCore(extPollTask, "extpoll", 6144, nullptr, 1, nullptr, 0);
-  xTaskCreatePinnedToCore(bleTask, "ble", 6144, nullptr, 1, nullptr, 0);
+  //        function     name       stack  prio core PSRAM
+  startTask(controlTask, "control", 12288, 5, 1, true);
+  startTask(ioTask, "io", 6144, 6, 1, true);
+  startTask(rfRxTask, "rf-rx", 6144, 4, 0, true);
+  startTask(rfTxTask, "rf-tx", 6144, 3, 0, false);  // RMT transmit buffers
+  startTask(sensorTask, "sensors", 8192, 2, 0, true);
+  startTask(displayTask, "display", 8192, 1, 0, true);
+  startTask(netTask, "net", 12288, 2, 0, false);    // Wi-Fi settings in NVS
+  startTask(storageTask, "storage", 10240, 1, 0, false);  // flash file system, SD card
+  startTask(extPollTask, "extpoll", 6144, 1, 0, true);
+  startTask(bleTask, "ble", 6144, 1, 0, false);     // Bluetooth start writes calibration data
 
   delay(5000);
   startSelfTest();
