@@ -22,7 +22,6 @@
 #include <esp_heap_caps.h>
 #include <esp_system.h>
 #include <esp_task_wdt.h>
-#include <esp_private/panic_internal.h>
 #include <freertos/idf_additions.h>
 #include <esp_timer.h>
 
@@ -107,7 +106,7 @@ struct ResetTrace {
   uint32_t minHeap;
   uint32_t beats[kBeatCount];
   char reason[64];  // own restarts: why
-  char panic[112];  // crash: cause, task and address (written by the panic handler)
+  char panic[176];  // crash: cause, task, address, backtrace (written by the panic hook)
 };
 constexpr uint32_t kTraceMagic = 0x48435233;  // "HCR3" (layout with crash record)
 RTC_NOINIT_ATTR ResetTrace g_trace;
@@ -116,15 +115,21 @@ RTC_NOINIT_ATTR ResetTrace g_trace;
 constexpr uint32_t kBleStartMagic = 0xB1E57A27;
 RTC_NOINIT_ATTR uint32_t g_bleStartMark;
 
-// ---- crash record: wraps the IDF panic handler (linker option
-// --wrap=esp_panic_handler). Runs in the exception context: IRAM only, no
-// allocation, no locks.
+// ---- crash record: the Arduino core's panic hook (set_arduino_panic_handler)
+// stores cause, task, address and the first backtrace entries in RTC memory.
+// Runs in the exception context: IRAM only, no allocation, no locks.
 static void IRAM_ATTR traceAppend(size_t& n, const char* s) {
   while (s && *s && n + 1 < sizeof(g_trace.panic)) g_trace.panic[n++] = *s++;
   g_trace.panic[n] = 0;
 }
-extern "C" [[noreturn]] void __real_esp_panic_handler(panic_info_t* info);
-extern "C" [[noreturn]] void IRAM_ATTR __wrap_esp_panic_handler(panic_info_t* info) {
+static void IRAM_ATTR traceHex(size_t& n, uint32_t v) {
+  static const char kHex[] DRAM_ATTR = "0123456789abcdef";
+  char h[11] = {'0', 'x'};
+  for (int i = 0; i < 8; ++i) h[2 + i] = kHex[(v >> (28 - 4 * i)) & 0xF];
+  h[10] = 0;
+  traceAppend(n, h);
+}
+static void IRAM_ATTR onPanic(arduino_panic_info_t* info, void*) {
   size_t n = 0;
   g_trace.panic[0] = 0;
   traceAppend(n, info->reason);
@@ -133,12 +138,15 @@ extern "C" [[noreturn]] void IRAM_ATTR __wrap_esp_panic_handler(panic_info_t* in
     traceAppend(n, DRAM_STR(", Task "));
     traceAppend(n, pcTaskGetName(t));
   }
-  static const char kHex[] DRAM_ATTR = "0123456789abcdef";
-  char pc[16] = {',', ' ', 'P', 'C', ' ', '0', 'x'};
-  uint32_t a = reinterpret_cast<uint32_t>(info->addr);
-  for (int i = 0; i < 8; ++i) pc[7 + i] = kHex[(a >> (28 - 4 * i)) & 0xF];
-  pc[15] = 0;
-  traceAppend(n, pc);
+  traceAppend(n, DRAM_STR(", PC "));
+  traceHex(n, reinterpret_cast<uint32_t>(info->pc));
+  if (info->backtrace_len > 1) {
+    traceAppend(n, DRAM_STR(", Backtrace"));
+    for (unsigned i = 1; i < info->backtrace_len && i < 6; ++i) {
+      traceAppend(n, DRAM_STR(" "));
+      traceHex(n, info->backtrace[i]);
+    }
+  }
   if (g_trace.magic != kTraceMagic) {  // crashed before the first snapshot
     g_trace.magic = kTraceMagic;
     g_trace.savedMs = static_cast<uint32_t>(esp_timer_get_time() / 1000);
@@ -146,7 +154,6 @@ extern "C" [[noreturn]] void IRAM_ATTR __wrap_esp_panic_handler(panic_info_t* in
     for (auto& b : g_trace.beats) b = 0;
     g_trace.reason[0] = 0;
   }
-  __real_esp_panic_handler(info);
 }
 
 void beat(Beat b) {
@@ -1070,6 +1077,7 @@ void setup() {
   // Wi-Fi link where send buffers pile up; Wi-Fi, lwIP, DMA buffers and task
   // stacks request internal memory explicitly and are not affected.
   heap_caps_malloc_extmem_enable(128);
+  set_arduino_panic_handler(onPanic, nullptr);  // crash record for "Letzter Neustart"
   // 1) outputs to a defined state before anything else (PCF8574 keeps its
   //    latch across an ESP reset: an OTA restart must not leave valves open)
   g_i2c.begin(board::kI2cSda, board::kI2cScl, board::kI2cHz);
