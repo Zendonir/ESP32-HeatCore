@@ -470,6 +470,8 @@ std::string SensorManager::fromJson(JsonArrayConst arr) {
     // one entry (one name, room and correction per sensor).
     s.id = canonicalSensorId(s.id);
     s.fallbackId = canonicalSensorId(s.fallbackId);
+    // automatically adopted sensors carry their (old) id as name: no own name
+    if (canonicalSensorId(s.name) == s.id) s.name = s.id;
     auto dup = std::find_if(list.begin(), list.end(), [&](const Sensor& x) { return x.id == s.id; });
     if (dup == list.end()) {
       list.push_back(s);
@@ -477,14 +479,13 @@ std::string SensorManager::fromJson(JsonArrayConst arr) {
     }
     // keep the entry that was set up by the user, fill gaps from the other
     auto score = [](const Sensor& x) {
-      return (x.room.empty() ? 0 : 8) + (x.name != x.id && x.name.rfind("ow", 0) != 0 ? 4 : 0) +
+      return (x.room.empty() ? 0 : 8) + (x.name != x.id ? 4 : 0) +
              (x.offset != 0.f ? 2 : 0) + (x.fallbackId.empty() ? 0 : 1);
     };
     Sensor keep = score(s) > score(*dup) ? s : *dup;
     const Sensor& other = score(s) > score(*dup) ? *dup : s;
     if (keep.room.empty()) keep.room = other.room;
-    if ((keep.name == keep.id || keep.name.rfind("ow", 0) == 0) && !(other.name == other.id || other.name.rfind("ow", 0) == 0))
-      keep.name = other.name;
+    if (keep.name == keep.id) keep.name = other.name;
     if (keep.offset == 0.f) keep.offset = other.offset;
     if (keep.fallbackId.empty()) keep.fallbackId = other.fallbackId;
     *dup = keep;
