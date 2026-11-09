@@ -765,9 +765,10 @@ void bleTask(void*) {
 // ---- task creation
 // Stacks of tasks that never write the flash live in the 8 MB PSRAM: the
 // ~320 KB internal RAM is needed by Wi-Fi, lwIP, Bluetooth and DMA buffers.
-// Tasks that write the flash (storage, network/NVS, Bluetooth start with its
-// calibration data, self-test, web server) keep internal stacks: while the
-// flash is written the cache - and with it the PSRAM - is switched off.
+// Tasks that read or write the flash through the flash API (storage,
+// network/NVS, the loop task with the Bluetooth start and its calibration
+// data, self-test, web server/OTA) keep internal stacks: during such
+// accesses the cache - and with it the PSRAM - is switched off.
 #if !(CONFIG_SPIRAM && CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM)
 #warning "Task stacks cannot be placed in PSRAM with this framework configuration"
 #endif
@@ -1188,13 +1189,13 @@ void setup() {
   startTask(controlTask, "control", 12288, 5, 1, true);
   startTask(ioTask, "io", 6144, 6, 1, true);
   startTask(rfRxTask, "rf-rx", 6144, 4, 0, true);
-  startTask(rfTxTask, "rf-tx", 6144, 3, 0, false);  // RMT transmit buffers
+  startTask(rfTxTask, "rf-tx", 6144, 3, 0, true);   // RMT data is on the heap, its ISR is not IRAM-bound
   startTask(sensorTask, "sensors", 8192, 2, 0, true);
   startTask(displayTask, "display", 8192, 1, 0, true);
   startTask(netTask, "net", 12288, 2, 0, false);    // Wi-Fi settings in NVS
   startTask(storageTask, "storage", 10240, 1, 0, false);  // flash file system, SD card
   startTask(extPollTask, "extpoll", 6144, 1, 0, true);
-  startTask(bleTask, "ble", 6144, 1, 0, false);     // Bluetooth start writes calibration data
+  startTask(bleTask, "ble", 6144, 1, 0, true);      // the Bluetooth start (flash writes) runs in the loop task
 
   delay(5000);
   startSelfTest();
