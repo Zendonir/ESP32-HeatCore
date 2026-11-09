@@ -1206,6 +1206,8 @@ ApiResponse ApiRouter::handle(const ApiRequest& req) {
             o["id"] = x.id;
             o["kind"] = sensorKindName(x.kind);
             o["value"] = x.lastValue;
+            if (x.hasHumidity) o["humidity"] = x.humidity;
+            if (x.batteryPct >= 0) o["batteryPct"] = x.batteryPct;
             o["seen"] = x.seen;
           }
           out["autoAdoptOneWire"] = sys.sensors.autoAdoptOneWire;
@@ -1272,6 +1274,21 @@ ApiResponse ApiRouter::handle(const ApiRequest& req) {
           sys.sensors.autoAdoptOneWire = c.body()["autoAdoptOneWire"] | false;
           sys.markDirty(ConfigSection::Sensors);
           out["ok"] = true;
+        } else {
+          c.fail(404, "?");
+        }
+      } else if (head == "ble") {
+        // Bluetooth LE thermometers
+        if (p.size() == 1 && c.is("GET")) {
+          sys.ble.statusJson(out, sys.clock().nowMs());
+        } else if (p.size() == 1 && c.is("PUT")) {
+          if (!c.body()["enabled"].isNull()) sys.ble.cfg.enabled = c.body()["enabled"] | false;
+          sys.markDirty(ConfigSection::Sensors);
+          out["ok"] = true;
+        } else if (p.size() == 2 && p[1] == "key" && c.is("PUT")) {
+          std::string err = sys.ble.setKey(c.body()["mac"] | "", c.body()["key"] | "");
+          if (err.empty()) sys.markDirty(ConfigSection::Sensors);
+          c.okOrFail(err);
         } else {
           c.fail(404, "?");
         }

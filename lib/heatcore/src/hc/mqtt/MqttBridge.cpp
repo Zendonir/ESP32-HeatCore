@@ -186,7 +186,7 @@ void MqttBridge::discovery(std::vector<MqttMsg>& out) {
     d["entity_category"] = "diagnostic";
     addConfig(out, topics, "sensor", "rf_" + id + "_quality", d);
   }
-  // ---- sensors (1-Wire, RF433, external)
+  // ---- sensors (1-Wire, RF433, Bluetooth, external)
   for (auto& s : sys_.sensors.sensors()) {
     std::string sl = slug(s.id);
     std::string st = b + "/sensor/" + sl + "/state";
@@ -225,6 +225,17 @@ void MqttBridge::discovery(std::vector<MqttMsg>& out) {
       d["device_class"] = "battery";
       d["entity_category"] = "diagnostic";
       addConfig(out, topics, "binary_sensor", "sensor_" + sl + "_bat", d);
+    }
+    if (s.batteryPct >= 0) {
+      JsonDocument d;
+      d["name"] = s.name + " Batteriestand";
+      d["state_topic"] = st;
+      d["value_template"] = "{{ value_json.bat }}";
+      d["device_class"] = "battery";
+      d["unit_of_measurement"] = "%";
+      d["state_class"] = "measurement";
+      d["entity_category"] = "diagnostic";
+      addConfig(out, topics, "sensor", "sensor_" + sl + "_batpct", d);
     }
   }
   // ---- RF statistics and transmitter
@@ -426,6 +437,7 @@ void MqttBridge::sensorState(const Sensor& s, std::vector<MqttMsg>& out) const {
     d["t"] = std::round(s.value * 100.f) / 100.f;
     if (s.hasHumidity) d["h"] = s.humidity;
     if (s.batteryOk >= 0) d["bat_low"] = s.batteryOk == 0;
+    if (s.batteryPct >= 0) d["bat"] = s.batteryPct;
     d["status"] = sensorStatusName(s.status);
     out.push_back({p + "/state", toStr(d), true});
   }

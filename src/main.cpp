@@ -32,6 +32,7 @@
 
 #include "hc/core/Log.h"
 #include "hc/system/HeatCoreSystem.h"
+#include "platform/BleScanner.h"
 #include "platform/Board.h"
 #include "platform/EspClock.h"
 #include "platform/I2cBus.h"
@@ -65,6 +66,8 @@ NetManager g_net;
 MqttLink* g_mqtt = nullptr;
 WebUi* g_web = nullptr;
 Ota g_ota;
+BleScanner g_ble;
+bool g_bleBlocked = false;  // last restart was caused by low memory: no Bluetooth this boot
 BoundedQueue<std::string> g_sdLog(64);
 
 std::atomic<bool> g_selfTestRunning{false};
@@ -85,9 +88,9 @@ using Lock = std::lock_guard<std::recursive_mutex>;
 
 // ---- task supervision and restart diagnostics
 enum Beat : uint8_t { kBeatControl, kBeatIo, kBeatRfRx, kBeatRfTx, kBeatSensors, kBeatDisplay, kBeatNet, kBeatStorage,
-                      kBeatExt, kBeatCount };
-const char* const kBeatNames[kBeatCount] = {"control", "io",      "rf-rx",   "rf-tx",  "sensors",
-                                            "display", "net",     "storage", "extpoll"};
+                      kBeatExt, kBeatBle, kBeatCount };
+const char* const kBeatNames[kBeatCount] = {"control", "io",  "rf-rx",   "rf-tx",   "sensors",
+                                            "display", "net", "storage", "extpoll", "ble"};
 std::atomic<uint32_t> g_beat[kBeatCount];
 constexpr uint32_t kTaskWdtMs = 30000;
 
@@ -99,7 +102,7 @@ struct ResetTrace {
   uint32_t beats[kBeatCount];
   char reason[64];  // own restarts: why
 };
-constexpr uint32_t kTraceMagic = 0x48435254;  // "HCRT"
+constexpr uint32_t kTraceMagic = 0x48435232;  // "HCR2" (layout with 10 task beats)
 RTC_NOINIT_ATTR ResetTrace g_trace;
 
 void beat(Beat b) {
@@ -609,6 +612,67 @@ void extPollTask(void*) {
   }
 }
 
+// Bluetooth thermometers: starts the Bluetooth host only when enabled (it
+// takes ~40-60 KB of internal RAM) and feeds received advertisements to the
+// core. A failing radio never affects the other tasks.
+void bleTask(void*) {
+  uint32_t lastTry = 0, lastStatus = 0;
+  bool supervised = false;
+  BleAdvert batch[16];
+  for (;;) {
+    bool want;
+    {
+      Lock lk(g_sys->mutex());
+      want = g_sys->ble.cfg.enabled;
+    }
+    uint32_t now = millis();
+    if (want && !g_ble.started() && !g_bleBlocked && BleScanner::supported() &&
+        (lastTry == 0 || now - lastTry > 300000)) {
+      lastTry = now;
+      size_t freeInt = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+      if (freeInt < 70000) {
+        Lock lk(g_sys->mutex());
+        char b[96];
+        std::snprintf(b, sizeof(b), "zu wenig freier Arbeitsspeicher (%u KB, noetig 70 KB)",
+                      static_cast<unsigned>(freeInt / 1024));
+        g_sys->ble.radioError = b;
+      } else {
+        {
+          Lock lk(g_sys->mutex());
+          g_sys->ble.radioError = "Bluetooth startet ...";
+        }
+        HC_LOGI("ble", "starting Bluetooth host (%u bytes internal RAM free)", static_cast<unsigned>(freeInt));
+        bool ok = g_ble.begin();  // blocks until the host is ready
+        HC_LOGI("ble", "Bluetooth host %s, %u bytes internal RAM free", ok ? "ready" : "failed",
+                static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
+        Lock lk(g_sys->mutex());
+        g_sys->ble.radioError = g_ble.error();
+      }
+    }
+    if (g_ble.started() && !supervised) {
+      watchTask(kBeatBle);
+      supervised = true;
+    }
+    if (supervised) beat(kBeatBle);
+    if (g_ble.started()) g_ble.setScanning(want);
+    size_t n = 0;
+    while (n < 16 && g_ble.pop(batch[n])) ++n;
+    if (n || now - lastStatus > 1000) {
+      lastStatus = now;
+      Lock lk(g_sys->mutex());
+      for (size_t i = 0; i < n; ++i)
+        g_sys->ble.ingest(hc::ble::macFromLittleEndian(batch[i].mac), batch[i].rssi, batch[i].data, batch[i].len,
+                          millis());
+      g_sys->ble.running = g_ble.scanning();
+      g_sys->ble.stats.dropped = g_ble.dropped();
+      if (g_ble.started()) g_sys->ble.radioError = g_ble.error();
+      else if (g_bleBlocked && want)
+        g_sys->ble.radioError = "nach Neustart wegen Speichermangel nicht gestartet (Bluetooth deaktivieren oder neu starten)";
+    }
+    vTaskDelay(pdMS_TO_TICKS(n == 16 ? 5 : 50));
+  }
+}
+
 void saveHistory() {
   std::string blob;
   {
@@ -762,6 +826,28 @@ void selfTestTask(void*) {
   addResult(res, "MQTT", g_mqtt->connected() ? "ok" : "deaktiviert", g_mqtt->stateText());
   addResult(res, "RS485 (GPIO16/17)", g_rs485.active() ? "unbestaetigt" : "deaktiviert",
             "rtl_433-JSON-Eingang, 115200 Baud; Funktion erst mit Gateway pruefbar");
+  {
+    bool enabled, running;
+    std::string bleErr;
+    size_t devs;
+    uint32_t readings;
+    {
+      Lock lk(g_sys->mutex());
+      enabled = g_sys->ble.cfg.enabled;
+      running = g_sys->ble.running;
+      bleErr = g_sys->ble.radioError;
+      devs = g_sys->ble.devices().size();
+      readings = g_sys->ble.stats.readings;
+    }
+    if (!enabled)
+      addResult(res, "Bluetooth-Thermometer", "deaktiviert", "aus (Sensoren -> Bluetooth-Thermometer)");
+    else if (running)
+      addResult(res, "Bluetooth-Thermometer", devs ? "ok" : "unbestaetigt",
+                "Suche aktiv, " + std::to_string(devs) + " Thermometer in Reichweite, " + std::to_string(readings) +
+                    " Messwerte");
+    else
+      addResult(res, "Bluetooth-Thermometer", "fehler", bleErr.empty() ? "Suche nicht aktiv" : bleErr);
+  }
   addResult(res, "PSRAM", ESP.getPsramSize() > 0 ? "ok" : "fehlt", std::to_string(ESP.getPsramSize() / 1024) + " KB");
   addResult(res, "Dateisystem", g_storage.ready() ? "ok" : "fehler",
             std::to_string(g_storage.usedBytes() / 1024) + " / " + std::to_string(g_storage.totalBytes() / 1024) + " KB");
@@ -876,6 +962,8 @@ void setup() {
   g_sys = mem ? new (mem) hc::HeatCoreSystem(g_clock) : new hc::HeatCoreSystem(g_clock);
   g_sys->platform.deviceId = deviceIdFromMac();
   g_sys->platform.resetReason = lastReset;
+  g_bleBlocked = lastReset.find("Arbeitsspeicher") != std::string::npos;
+  g_sys->ble.radioAvailable = BleScanner::supported();
 
   g_ota.begin();  // slot state; a new firmware starts on probation
   g_storage.begin();
@@ -950,6 +1038,7 @@ void setup() {
   xTaskCreatePinnedToCore(netTask, "net", 12288, nullptr, 2, nullptr, 0);
   xTaskCreatePinnedToCore(storageTask, "storage", 10240, nullptr, 1, nullptr, 0);
   xTaskCreatePinnedToCore(extPollTask, "extpoll", 6144, nullptr, 1, nullptr, 0);
+  xTaskCreatePinnedToCore(bleTask, "ble", 6144, nullptr, 1, nullptr, 0);
 
   delay(5000);
   startSelfTest();

@@ -31,6 +31,13 @@ Webinterface.
   Wiederholungen, Timeout, Duty-Cycle-Budget, Loopback-Selbsttest.
 * **Funk-Temperatursensoren:** Decoder-Plug-in-Schnittstelle (Nexus-TH,
   unbestätigt) und rtl_433-JSON über RS485 für externe Empfänger.
+* **Bluetooth-Thermometer:** Thermometer in Reichweite finden und koppeln, z. B.:
+  - Xiaomi/Qingping mit pvvx-Firmware oder Originalfirmware (mit Schlüssel);
+  - Shelly BLU H&T (BTHome);
+  - Govee und SwitchBot.
+
+  Gekoppelte Thermometer arbeiten als normale Fühler und gehen mit Feuchte
+  und Batteriestand an Home Assistant.
 * **OLED:** 5 Seiten, Live-Vorschau im Browser, alle Einstellungen dynamisch,
   Navigation über Digitaleingänge, Funk, MQTT oder Web.
 * **Automationen:** gleichberechtigte Signalquellen, Trigger/Bedingungen/
@@ -67,6 +74,7 @@ Webinterface.
 
 * [Hardware, Pinbelegung, elektrische Prüfung](docs/hardware.md)
 * [433-MHz-Funk, Sicherheit, Funkrecht, Temperatursensoren](docs/rf433.md)
+* [Bluetooth-Thermometer](docs/bluetooth-thermometer.md)
 * [OLED-Display](docs/display.md)
 * [Automationen, Sicherheit, Lernmodell](docs/automation-und-lernmodell.md)
 * [MQTT / Home Assistant und REST-API](docs/mqtt-und-api.md)

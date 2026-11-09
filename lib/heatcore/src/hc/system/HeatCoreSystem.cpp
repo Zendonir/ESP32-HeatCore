@@ -82,6 +82,7 @@ void HeatCoreSystem::loop() {
   if (elapsed(now, lastSecond_) >= 1000) {
     lastSecond_ = now;
     sensors.tick(now);
+    ble.tick(now);
     display.setRoomCount(static_cast<int>(displayRooms().size()));
     display.tick(now, alarms.highest(), alarms.count());
     updateLoopback(now);
@@ -1087,6 +1088,7 @@ void HeatCoreSystem::sectionToJson(ConfigSection s, JsonObject o, bool includeSe
       o["autoAdoptOneWire"] = sensors.autoAdoptOneWire;
       sensors.toJson(o["sensors"].to<JsonArray>(), false);
       external.toJson(o["external"].to<JsonArray>());
+      ble.toJson(o["ble"].to<JsonObject>(), includeSecrets);
       break;
     case ConfigSection::Safety: safety.toJson(o, false); break;
     case ConfigSection::Rf: {
@@ -1160,6 +1162,7 @@ std::string HeatCoreSystem::sectionFromJson(ConfigSection s, JsonObjectConst o) 
       sensors.autoAdoptOneWire = o["autoAdoptOneWire"] | false;
       err = sensors.fromJson(o["sensors"].as<JsonArrayConst>());
       if (err.empty() && !o["external"].isNull()) err = external.fromJson(o["external"].as<JsonArrayConst>());
+      if (err.empty() && !o["ble"].isNull()) err = ble.fromJson(o["ble"].as<JsonObjectConst>());
       break;
     case ConfigSection::Safety: err = safety.fromJson(o); break;
     case ConfigSection::Rf: {
