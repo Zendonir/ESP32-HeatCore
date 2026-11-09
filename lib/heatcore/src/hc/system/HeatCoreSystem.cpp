@@ -1161,6 +1161,14 @@ std::string HeatCoreSystem::sectionFromJson(ConfigSection s, JsonObjectConst o) 
     case ConfigSection::Sensors:
       sensors.autoAdoptOneWire = o["autoAdoptOneWire"] | false;
       err = sensors.fromJson(o["sensors"].as<JsonArrayConst>());
+      if (err.empty())  // 1-Wire ids of earlier versions (with bus number): store the converted list
+        for (JsonObjectConst x : o["sensors"].as<JsonArrayConst>()) {
+          std::string id = x["id"] | "";
+          if (canonicalSensorId(id) != id) {
+            markDirty(ConfigSection::Sensors);
+            break;
+          }
+        }
       if (err.empty() && !o["external"].isNull()) err = external.fromJson(o["external"].as<JsonArrayConst>());
       if (err.empty() && !o["ble"].isNull()) err = ble.fromJson(o["ble"].as<JsonObjectConst>());
       break;

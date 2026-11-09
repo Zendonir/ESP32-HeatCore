@@ -361,6 +361,7 @@ void rfTxTask(void*) {
 
 void sensorTask(void*) {
   uint32_t lastOw = 0, lastRescan = millis(), lastRtcTemp = 0;
+  bool owRescanSoon = false;
   bool owPending = false;
   uint32_t owRequested = 0;
   std::string line;
@@ -388,7 +389,14 @@ void sensorTask(void*) {
         g_ow.collect(readings);
         owPending = false;
       }
-      if ((g_owRescan.exchange(false) || now - lastRescan > 600000) && !owPending) {
+      // A sensor moved to another terminal or a new one shows up within a
+      // minute; after a failed read (sensor unplugged) after 15 s.
+      bool owFailed = false;
+      for (auto& r : readings) owFailed |= !r.ok;
+      if (owFailed) owRescanSoon = true;
+      if ((g_owRescan.exchange(false) || now - lastRescan > 60000 || (owRescanSoon && now - lastRescan > 15000)) &&
+          !owPending) {
+        owRescanSoon = false;
         g_ow.rescan();
         lastRescan = now;
       }
@@ -416,6 +424,7 @@ void sensorTask(void*) {
       for (size_t bus = 0; bus < 3; ++bus) {
         g_sys->platform.oneWireCount[bus] = g_ow.count(bus);
         g_sys->platform.oneWireInfo[bus] = g_ow.info(bus);
+        g_sys->platform.oneWireRoms[bus] = g_ow.roms(bus);
       }
       if (rtcTemp) g_sys->platform.rtcTempC = rtcT;
       while (g_rs485.poll(line)) {

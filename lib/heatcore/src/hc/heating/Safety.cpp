@@ -1,4 +1,5 @@
 #include "hc/heating/Safety.h"
+#include "hc/sensors/SensorId.h"
 
 #include <cmath>
 #include <cstring>
@@ -158,7 +159,7 @@ std::string SafetySupervisor::fromJson(JsonObjectConst o) {
   c.minSetpoint = o["minSetpoint"] | c.minSetpoint;
   c.maxSetpoint = o["maxSetpoint"] | c.maxSetpoint;
   c.maxRoomTemp = o["maxRoomTemp"] | c.maxRoomTemp;
-  c.flowSensorId = o["flowSensorId"] | c.flowSensorId.c_str();
+  c.flowSensorId = canonicalSensorId(o["flowSensorId"] | c.flowSensorId.c_str());
   c.maxFlowTemp = o["maxFlowTemp"] | c.maxFlowTemp;
   c.flowHysteresis = o["flowHysteresis"] | c.flowHysteresis;
   c.flowSensorRequired = o["flowSensorRequired"] | c.flowSensorRequired;

@@ -115,7 +115,7 @@ GPIO43/44 (UART0) sind mit dem W5500 belegt. Serielle Ausgaben laufen deshalb
 | Digital Inputs 1–8 / 9–16 | je 8 Eingänge + GND (potenzialfreie Kontakte gegen GND) |
 | RS485 | A, B |
 | Analog Inputs | GND, 1, 2, 3, 4 – im Anschlussbild als „DC 0–5V“ beschriftet; das Blockschaltbild nennt A3/A4 als 4–20 mA. Vor Gebrauch mit bekannter Spannung prüfen (Betriebsart je Kanal im Webinterface) |
-| GPIO's 1 2 3 + GND + 3.3V | **1-Wire-Busse 1–3** (GPIO47/48/38, Pull-ups auf der Platine): DS18B20 an GND, Daten an 1/2/3, VDD an 3.3V |
+| GPIO's 1 2 3 + GND + 3.3V | **1-Wire-Busse 1–3** (GPIO47/48/38, Pull-ups auf der Platine): DS18B20 an GND, Daten an 1/2/3, VDD an 3.3V. Welcher Fühler an welcher Klemme steckt, ist egal: HeatCore erkennt ihn an seiner Seriennummer (Sensor-ID `ow:<ROM>`), Umstecken behält Name, Raum und Korrektur. |
 | Digital Outputs 1–8 / 9–16 | je 8 Ausgänge + rot markierte Klemme „+12/24V DC Input“ für die Lastversorgung des Blocks |
 | POWER | 12/24 V DC (– / +) |
 

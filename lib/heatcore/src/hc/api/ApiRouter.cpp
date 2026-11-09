@@ -193,6 +193,11 @@ void hardwareJson(HeatCoreSystem& sys, JsonObject o) {
   for (uint8_t c : pl.oneWireCount) ow.add(c);
   JsonArray owi = p["oneWireInfo"].to<JsonArray>();
   for (auto& t : pl.oneWireInfo) owi.add(t);
+  JsonArray owr = p["oneWireRoms"].to<JsonArray>();
+  for (auto& bus : pl.oneWireRoms) {
+    JsonArray a = owr.add<JsonArray>();
+    for (auto& r : bus) a.add(r);
+  }
   p["rs485"] = pl.rs485;
   p["rs485Lines"] = pl.rs485Lines;
   p["rs485Errors"] = pl.rs485Errors;

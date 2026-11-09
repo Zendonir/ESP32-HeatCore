@@ -360,6 +360,20 @@ void MqttBridge::discovery(std::vector<MqttMsg>& out) {
     d["payload_press"] = "PRESS";
     addConfig(out, topics, "button", "rule_" + std::to_string(r.id), d);
   }
+  // ---- 1-Wire sensors had the bus in their id ("ow1:..."): remove those
+  // entities once, they are replaced by the bus-independent ones ("ow:...")
+  if (!legacyCleared_) {
+    legacyCleared_ = true;
+    for (auto& s : sys_.sensors.sensors()) {
+      if (s.kind != SensorKind::OneWire || s.id.rfind("ow:", 0) != 0) continue;
+      for (int bus = 1; bus <= 3; ++bus) {
+        std::string object = "sensor_ow" + std::to_string(bus) + "_" + s.id.substr(3);
+        out.push_back({sys_.mqttCfg.discoveryPrefix + "/sensor/heatcore_" + sys_.platform.deviceId + "/" + object +
+                           "/config",
+                       "", true});
+      }
+    }
+  }
   // ---- remove entities that no longer exist
   for (auto& old : published_)
     if (std::find(topics.begin(), topics.end(), old) == topics.end()) out.push_back({old, "", true});

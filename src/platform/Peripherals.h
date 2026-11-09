@@ -126,6 +126,8 @@ class OneWireBuses {
   void rescan();
   uint8_t count(size_t bus) const { return bus < counts_.size() ? counts_[bus] : 0; }
   std::string info(size_t bus) const { return bus < info_.size() ? info_[bus] : std::string(); }
+  // ROM codes found on a bus (hex), for the diagnosis page
+  std::vector<std::string> roms(size_t bus) const;
 
  private:
   static constexpr size_t kMaxBuses = 3;

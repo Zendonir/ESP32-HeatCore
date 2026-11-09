@@ -10,6 +10,7 @@
 
 #include "hc/core/Clock.h"
 #include "hc/core/Event.h"
+#include "hc/sensors/SensorId.h"
 
 namespace hc {
 
@@ -25,7 +26,7 @@ const char* sensorStatusName(SensorStatus s);
 
 struct Sensor {
   // configuration
-  std::string id;    // "ow1:28FF0A1B2C3D4E5F", "rf:nexus_th:12:1", "ai:2", "ble:A4C1381A2B3C", ...
+  std::string id;    // "ow:28FF0A1B2C3D4E5F" (1-Wire: ROM code, independent of the bus), "rf:nexus_th:12:1", "ai:2", "ble:A4C1381A2B3C", ...
   std::string name;
   SensorKind kind = SensorKind::OneWire;
   SensorRole role = SensorRole::Room;

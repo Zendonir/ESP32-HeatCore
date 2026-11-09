@@ -1,4 +1,5 @@
 #include "hc/automation/Rules.h"
+#include "hc/sensors/SensorId.h"
 
 #include <cstring>
 
@@ -116,7 +117,7 @@ bool triggerFromJson(Trigger& t, JsonObjectConst o, std::string& err) {
     err = std::string("unbekannter Trigger: ") + (o["type"] | "");
     return false;
   }
-  t.ref = o["ref"] | "";
+  t.ref = canonicalSensorRef(o["ref"] | "");  // old 1-Wire ids contained the bus
   t.state = o["state"] | "";
   switch (t.type) {
     case TriggerType::Input: {
@@ -200,7 +201,7 @@ bool conditionFromJson(Condition& c, JsonObjectConst o, std::string& err) {
     return false;
   }
   c.negate = o["negate"] | false;
-  c.ref = o["ref"] | "";
+  c.ref = canonicalSensorRef(o["ref"] | "");
   switch (c.type) {
     case ConditionType::Temperature:
     case ConditionType::Setpoint:

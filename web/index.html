@@ -153,7 +153,7 @@ const HELP={
  '/hw/outputs':'Die 16 Ausgänge der Platine: als Heizkreis (Ventil) oder allgemeiner Schaltausgang nutzen und zum Testen von Hand schalten.',
  '/hw/inputs':'Die 16 Eingänge der Platine: Taster, Fensterkontakte oder Schalter anschließen und ihnen eine Aufgabe geben.',
  '/hw/analog':'Die 4 Analogeingänge (0–5 V oder 4–20 mA) für zusätzliche Messwerte.',
- '/hw/onewire':'Die drei 1-Wire-Anschlüsse für DS18B20-Temperaturfühler mit Diagnose.',
+ '/hw/onewire':'Die drei 1-Wire-Anschlüsse für DS18B20-Temperaturfühler: welcher Fühler gerade wo steckt, mit Diagnose.',
  '/hw/selftest':'Prüft alle Bauteile der Platine und zeigt Systemwerte wie Speicher, Netzwerk und den Grund des letzten Neustarts.',
  '/rf':'Angelernte 433-MHz-Funkgeräte wie Handsender, Fensterkontakte und Funkthermometer.',
  '/rf/learn':'Ein neues Funkgerät anlernen: Lernmodus starten und am Gerät eine Taste drücken.',
@@ -614,7 +614,15 @@ routes['/hw/analog']=async m=>{const io=await GET('io');m.append(h('h2',null,'Ha
   h('p',{class:'muted'},'Wert = Eingang (V bzw. mA) × Skalierung + Offset. Beispiel 4..20 mA → 0..100 °C: Skalierung 6,25, Offset −25.'),
   h('button',{class:'p',style:'margin-top:8px',onclick:()=>act(()=>PUT('io',{analog:ai.map(a=>({n:a.n,name:a.name,enabled:a.enabled,asSensor:a.asSensor,mode:a.mode,dividerGain:+a.dividerGain,shuntOhm:+a.shuntOhm,scale:+a.scale,offset:+a.offset,unit:a.unit}))}),'Gespeichert').then(route)},'Speichern')))};
 routes['/hw/onewire']=async m=>{const [hw,s]=await Promise.all([GET('hardware'),GET('sensors')]);m.append(h('h2',null,'Hardware – 1-Wire-Busse'));const pins=[47,48,38];
- for(let b=0;b<3;b++){const list=s.sensors.filter(x=>x.id.startsWith('ow'+(b+1)+':')).concat(s.discovered.filter(x=>x.id.startsWith('ow'+(b+1)+':')).map(x=>({id:x.id,name:'(nicht zugeordnet)',value:x.value,status:'neu'})));m.append(h('div',{class:'card tbl'},h('h3',{style:'margin-top:0'},'Bus '+(b+1)+' (GPIO'+pins[b]+') – '+hw.platform.oneWire[b]+' Sensor(en)'),hw.platform.oneWireInfo&&hw.platform.oneWireInfo[b]?h('p',{class:list.length?'muted':'bad'},hw.platform.oneWireInfo[b]):null,list.length?h('table',null,list.map(x=>h('tr',null,h('td',null,h('code',null,x.id)),h('td',null,x.name),h('td',null,fmt(x.value,2)+' °C'),h('td',null,stChip(x.status))))):h('p',{class:'muted'},'Keine Sensoren gefunden. Anschluss: GND, Daten an Klemme 1/2/3, VDD an 3,3 V (nicht parasitär).')))}
+ m.append(h('p',{class:'hint'},'Ein Fühler wird an seiner Seriennummer erkannt – an welchem Anschluss er steckt, ist egal. Umstecken ändert nichts an Name, Raum oder Korrektur; der neue Anschluss wird innerhalb einer Minute erkannt.'));
+ const byId={};s.sensors.forEach(x=>byId[x.id]=x);s.discovered.forEach(x=>{if(!byId[x.id])byId[x.id]={id:x.id,name:'(neu – unter Temperatursensoren übernehmen)',value:x.value,status:'neu'}});
+ const roms=hw.platform.oneWireRoms||[[],[],[]];const seen=new Set();
+ for(let b=0;b<3;b++){const list=(roms[b]||[]).map(r=>{const id='ow:'+r;seen.add(id);return byId[id]||{id,name:'(wird gelesen …)',status:'never'}});
+  m.append(h('div',{class:'card tbl'},h('h3',{style:'margin-top:0'},'Anschluss '+(b+1)+' (GPIO'+pins[b]+') – '+hw.platform.oneWire[b]+' Fühler'),hw.platform.oneWireInfo&&hw.platform.oneWireInfo[b]?h('p',{class:list.length?'muted':'bad'},hw.platform.oneWireInfo[b]):null,
+   list.length?h('table',null,list.map(x=>h('tr',null,h('td',null,x.name&&x.name!==x.id?x.name:'',h('div',{class:'hint'},h('code',null,x.id.slice(3)))),h('td',null,x.value!=null?fmt(x.value,2)+' °C':'–'),h('td',null,stChip(x.status))))):h('p',{class:'muted'},'Keine Fühler gefunden. Anschluss: GND, Daten an Klemme 1/2/3, VDD an 3,3 V (nicht parasitär).')))}
+ const missing=s.sensors.filter(x=>x.kind==='onewire'&&!seen.has(x.id));
+ if(missing.length)m.append(h('div',{class:'card tbl'},h('h3',{style:'margin-top:0'},'Eingerichtet, aber an keinem Anschluss gefunden'),h('p',{class:'hint'},'Fühler abgezogen, Kabel unterbrochen oder gerade umgesteckt (wird beim nächsten Busscan wieder gefunden). Nicht mehr benötigte Fühler unter „Temperatursensoren“ entfernen.'),
+  h('table',null,missing.map(x=>h('tr',null,h('td',null,x.name,h('div',{class:'hint'},h('code',null,x.id.slice(3)))),h('td',null,stChip(x.status)))))));
  m.append(h('button',{onclick:()=>act(()=>POST('system/onewire_rescan'),'Busscan gestartet')},'Busse neu scannen'))};
 routes['/hw/selftest']=async m=>{m.append(h('h2',null,'Hardware – Selbsttest & Status'));const c=h('div');m.append(h('div',{class:'row'},h('button',{class:'p',onclick:()=>act(()=>POST('hardware/selftest'),'Selbsttest gestartet')},'Selbsttest starten')),c);
  every(3000,async()=>{const d=await GET('hardware');const p=d.platform;c.innerHTML='';c.append(h('div',{class:'card tbl'},h('h3',{style:'margin-top:0'},'Selbsttest'),d.selfTest.length?h('table',null,d.selfTest.map(t=>h('tr',null,h('td',null,t.component),h('td',null,stChip(t.status)),h('td',{class:'muted'},t.detail)))):h('p',{class:'muted'},'Noch nicht ausgeführt.'),h('p',{class:'hint'},'„unbestätigt“ = Funktion vorhanden, aber ohne angeschlossene/aktive Gegenstelle nicht automatisch prüfbar.')),

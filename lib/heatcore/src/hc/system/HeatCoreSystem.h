@@ -92,6 +92,7 @@ struct PlatformStatus {
   uint32_t controlLoopMaxUs = 0;
   std::array<uint8_t, 3> oneWireCount{{0, 0, 0}};
   std::array<std::string, 3> oneWireInfo;  // bus diagnosis (empty line, short, CRC ...)
+  std::array<std::vector<std::string>, 3> oneWireRoms;  // ROM codes found per bus (sensor id "ow:<rom>")
   std::string rs485 = "-";
   uint32_t rs485Lines = 0, rs485Errors = 0;
   bool rfRxHw = false, rfTxHw = false;
