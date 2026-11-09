@@ -51,6 +51,7 @@ class MqttBridge {
 
   HeatCoreSystem& sys_;
   std::vector<std::string> published_;
+  bool legacyCleared_ = false;  // old 1-Wire entities (id with bus number) removed once
 };
 
 }  // namespace hc

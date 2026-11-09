@@ -65,7 +65,7 @@ eine Korrektur ±10 K überschreiten, wird nichts geändert („liegt der Sensor
 wirklich am gleichen Ort?“). „Korrekturen zurücksetzen“ setzt sie auf 0.
 
 `POST /api/sensors/calibrate` mit
-`{"ids":["ow1:…","ow1:…"],"reference":"median"|"mean"|"value"|"reset"|"<sensor-id>","value":21.3}`
+`{"ids":["ow:28…","ow:28…"],"reference":"median"|"mean"|"value"|"reset"|"<sensor-id>","value":21.3}`
 liefert `target` und je Sensor `raw`, `oldOffset`, `newOffset`.
 
 ## Externe Quellen (Übersicht → Externe Quellen)

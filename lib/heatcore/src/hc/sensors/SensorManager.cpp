@@ -65,12 +65,14 @@ const char* sensorStatusName(SensorStatus s) {
   return "?";
 }
 
-Sensor* SensorManager::find(const std::string& id) {
+Sensor* SensorManager::find(const std::string& idIn) {
+  const std::string id = canonicalSensorId(idIn);  // old ids "ow1:..." still resolve
   for (auto& s : sensors_)
     if (s.id == id) return &s;
   return nullptr;
 }
-const Sensor* SensorManager::find(const std::string& id) const {
+const Sensor* SensorManager::find(const std::string& idIn) const {
+  const std::string id = canonicalSensorId(idIn);
   for (auto& s : sensors_)
     if (s.id == id) return &s;
   return nullptr;
@@ -100,8 +102,9 @@ void SensorManager::update(const std::string& id, float raw, Millis now) {
   updateExtended(id, raw, false, 0.f, -1, 100, now);
 }
 
-void SensorManager::updateExtended(const std::string& id, float raw, bool hasHum, float hum, int8_t battery,
+void SensorManager::updateExtended(const std::string& idIn, float raw, bool hasHum, float hum, int8_t battery,
                                    uint8_t quality, Millis now, int8_t batteryPct) {
+  const std::string id = canonicalSensorId(idIn);
   Sensor* s = find(id);
   if (!s) {
     SensorKind k = sensorKindFromKey(id);
@@ -205,7 +208,10 @@ void SensorManager::noteDiscovered(const std::string& id, float v, bool hasHum, 
   discovered_.push_back({id, sensorKindFromKey(id), v, hasHum, hum, battery, batteryPct, 1, now});
 }
 
-std::string SensorManager::upsert(const Sensor& cfg) {
+std::string SensorManager::upsert(const Sensor& cfgIn) {
+  Sensor cfg = cfgIn;
+  cfg.id = canonicalSensorId(cfg.id);
+  cfg.fallbackId = canonicalSensorId(cfg.fallbackId);
   if (cfg.id.empty() || cfg.id.size() > 40) return "Sensor-ID ungueltig";
   if (cfg.name.size() > 31) return "Name zu lang";
   if (std::fabs(cfg.offset) > 10.f) return "Korrektur max. +-10 K";
@@ -251,8 +257,9 @@ std::string SensorManager::upsert(const Sensor& cfg) {
   return std::string();
 }
 
-std::string SensorManager::adopt(const std::string& id, const std::string& name, const std::string& room,
+std::string SensorManager::adopt(const std::string& idIn, const std::string& name, const std::string& room,
                                  SensorRole role) {
+  const std::string id = canonicalSensorId(idIn);
   Sensor s;
   s.id = id;
   s.name = name.empty() ? id : name;
@@ -277,7 +284,8 @@ std::string SensorManager::adopt(const std::string& id, const std::string& name,
   return std::string();
 }
 
-bool SensorManager::remove(const std::string& id) {
+bool SensorManager::remove(const std::string& idIn) {
+  const std::string id = canonicalSensorId(idIn);
   auto it = std::remove_if(sensors_.begin(), sensors_.end(), [&](const Sensor& s) { return s.id == id; });
   if (it == sensors_.end()) return false;
   sensors_.erase(it, sensors_.end());
@@ -339,8 +347,9 @@ size_t SensorManager::countAvailable() const {
   return n;
 }
 
-std::string SensorManager::calibrate(const std::vector<std::string>& ids, const std::string& reference,
+std::string SensorManager::calibrate(const std::vector<std::string>& ids, const std::string& referenceIn,
                                      float refValue, std::vector<CalibrationResult>& out, float* targetOut) {
+  const std::string reference = canonicalSensorId(referenceIn);  // old 1-Wire ids (with bus) still work
   out.clear();
   if (ids.empty()) return "Keine Sensoren ausgewaehlt";
   if (ids.size() > kMaxSensors) return "Zu viele Sensoren";
@@ -456,8 +465,32 @@ std::string SensorManager::fromJson(JsonArrayConst arr) {
     s.minValid = o["minValid"] | -40.f;
     s.maxValid = o["maxValid"] | 100.f;
     s.configuredMs = clock_.nowMs();
-    list.push_back(s);
+    // 1-Wire ids of earlier versions contained the bus: the same sensor may
+    // be listed once per terminal it was ever connected to. Merge them into
+    // one entry (one name, room and correction per sensor).
+    s.id = canonicalSensorId(s.id);
+    s.fallbackId = canonicalSensorId(s.fallbackId);
+    auto dup = std::find_if(list.begin(), list.end(), [&](const Sensor& x) { return x.id == s.id; });
+    if (dup == list.end()) {
+      list.push_back(s);
+      continue;
+    }
+    // keep the entry that was set up by the user, fill gaps from the other
+    auto score = [](const Sensor& x) {
+      return (x.room.empty() ? 0 : 8) + (x.name != x.id && x.name.rfind("ow", 0) != 0 ? 4 : 0) +
+             (x.offset != 0.f ? 2 : 0) + (x.fallbackId.empty() ? 0 : 1);
+    };
+    Sensor keep = score(s) > score(*dup) ? s : *dup;
+    const Sensor& other = score(s) > score(*dup) ? *dup : s;
+    if (keep.room.empty()) keep.room = other.room;
+    if ((keep.name == keep.id || keep.name.rfind("ow", 0) == 0) && !(other.name == other.id || other.name.rfind("ow", 0) == 0))
+      keep.name = other.name;
+    if (keep.offset == 0.f) keep.offset = other.offset;
+    if (keep.fallbackId.empty()) keep.fallbackId = other.fallbackId;
+    *dup = keep;
   }
+  for (auto& s : list)
+    if (s.fallbackId == s.id) s.fallbackId.clear();
   sensors_ = std::move(list);
   ++revision_;
   return std::string();

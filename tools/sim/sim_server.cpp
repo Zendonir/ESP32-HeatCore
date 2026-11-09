@@ -200,6 +200,10 @@ void simLoop() {
     p.totalPsram = 8 * 1024 * 1024;
     p.rfRxHw = p.rfTxHw = true;
     p.ioExpandersOk = true;
+    // sensor "...0003" was moved from terminal 1 to terminal 3: same sensor, same settings
+    p.oneWireCount = {{2, 2, 1}};
+    p.oneWireRoms = {{{"28FF000000000001", "28FF000000000002"}, {"28FF000000000010", "28FF000000000011"},
+                      {"28FF000000000003"}}};
     g_sys->ble.radioAvailable = true;
     g_sys->ble.running = g_sys->ble.cfg.enabled;
     p.i2cDevices = {0x21, 0x22, 0x24, 0x25, 0x3C, 0x50, 0x68};

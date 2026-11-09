@@ -415,6 +415,13 @@ void OneWireBuses::rescan() {
   }
 }
 
+std::vector<std::string> OneWireBuses::roms(size_t bus) const {
+  std::vector<std::string> r;
+  if (bus < n_)
+    for (auto& a : addrs_[bus]) r.push_back(hc::ow::romHex(a));
+  return r;
+}
+
 void OneWireBuses::request() {
   for (size_t b = 0; b < n_; ++b)
     if (!addrs_[b].empty()) hc::ow::startConversion(links_[b]);
@@ -424,7 +431,8 @@ void OneWireBuses::collect(std::vector<Reading>& out) {
   for (size_t b = 0; b < n_; ++b) {
     for (size_t i = 0; i < addrs_[b].size(); ++i) {
       const hc::ow::Rom& a = addrs_[b][i];
-      std::string id = "ow" + std::to_string(b + 1) + ":" + hc::ow::romHex(a);
+      // the ROM code identifies the sensor, whatever terminal it is connected to
+      std::string id = "ow:" + hc::ow::romHex(a);
       uint8_t sp[9];
       float t = 0.f;
       bool ok = hc::ow::readScratchpad(links_[b], a, sp);
