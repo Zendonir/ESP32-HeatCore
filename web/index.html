@@ -30,6 +30,7 @@ table{width:100%;border-collapse:collapse}
 th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
 th{font-size:12px;color:var(--muted);font-weight:600}
 .tbl{overflow-x:auto}
+.dev{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--line)}.dev>.i{flex:1 1 200px}.dev>.v{flex:0 1 150px}.dev>.s{flex:0 0 70px}.dev>.a{flex:2 1 340px}
 input,select,textarea{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--text);max-width:100%}
 input[type=checkbox]{width:auto}
 input.n{width:90px}
@@ -127,7 +128,7 @@ const DAYS=['Mo','Di','Mi','Do','Fr','Sa','So'];
 // are shown in the expert view (or while open) - nothing is removed.
 const NAV=[
  ['Heizung',[['#/','Übersicht'],['#/rooms','Räume & Zeitpläne'],['#/stats','Statistik'],['#/model','Lernmodell',1]]],
- ['Einrichtung',[['#/setup','Erste Schritte'],['#/sensors','Temperatursensoren'],['#/hw/outputs','Ventile & Ausgänge'],['#/hw/inputs','Taster & Fensterkontakte'],['#/rf','Funkgeräte'],['#/rf/learn','Funkgerät anlernen'],['#/rules','Automationen'],['#/display','Display'],
+ ['Einrichtung',[['#/setup','Erste Schritte'],['#/sensors','Temperatursensoren'],['#/ble','Bluetooth-Thermometer'],['#/hw/outputs','Ventile & Ausgänge'],['#/hw/inputs','Taster & Fensterkontakte'],['#/rf','Funkgeräte'],['#/rf/learn','Funkgerät anlernen'],['#/rules','Automationen'],['#/display','Display'],
   ['#/external','Externe Quellen (MQTT/HTTP)',1],['#/hw/analog','Analogeingänge',1],['#/hw/onewire','1-Wire-Busse',1],['#/rf/sensors','Funk-Temperatursensoren',1]]],
  ['Diagnose',[['#/hw/selftest','Selbsttest & Status'],['#/rules/log','Ereignisprotokoll',1],['#/rf/monitor','Funk-Empfangsmonitor',1],['#/rf/diag','Funkdiagnose',1],['#/rf/tx','Funk-Sender',1],['#/rules/test','Automationen testen',1],['#/rules/catalog','Automations-Bausteine',1],
   ['#/display/pages','Display: Seiten',1],['#/display/settings','Display: Einstellungen',1],['#/display/status','Display: Diagnose',1]]],
@@ -146,6 +147,7 @@ const HELP={
  '/setup':'Was für den Heizbetrieb eingerichtet sein muss – Schritt für Schritt. Erledigte Punkte werden automatisch abgehakt.',
  '/rooms':'Für jeden Raum Wunschtemperaturen und Zeitplan festlegen und unten die Ventile (Heizkreise) zuordnen. Raum anklicken zum Bearbeiten.',
  '/sensors':'Temperaturfühler einem Raum zuordnen, Korrekturen einstellen und mehrere Fühler gegeneinander abgleichen.',
+ '/ble':'Bluetooth-Thermometer in Reichweite finden und koppeln. Gekoppelte Thermometer arbeiten wie jeder andere Fühler und erscheinen automatisch in Home Assistant.',
  '/stats':'Verlauf von Temperatur, Sollwert und Heizzeit der letzten 14 Tage sowie Kennzahlen je Raum.',
  '/model':'Das Lernmodell lernt, wie schnell jeder Raum aufheizt und abkühlt, und hilft so, Überschwingen zu vermeiden.',
  '/hw/outputs':'Die 16 Ausgänge der Platine: als Heizkreis (Ventil) oder allgemeiner Schaltausgang nutzen und zum Testen von Hand schalten.',
@@ -294,13 +296,13 @@ routes['/rooms']=async m=>{
 
 // ------------------------------------------------------------ sensors
 const ROLES=[['room','Raumtemperatur'],['flow','Vorlauf'],['return','Rücklauf'],['outdoor','Außen'],['other','Sonstiges']];
-const KINDS={onewire:'1-Wire (Kabel)',rf:'Funk 433 MHz',external:'extern (MQTT/HTTP)',analog:'Analogeingang',virtual:'berechnet'};
+const KINDS={onewire:'1-Wire (Kabel)',rf:'Funk 433 MHz',ble:'Bluetooth',external:'extern (MQTT/HTTP)',analog:'Analogeingang',virtual:'berechnet'};
 routes['/sensors']=async m=>{
  const [d,heat]=await Promise.all([GET('sensors'),GET('heating')]);const rooms=[['','– kein Raum –']].concat(heat.rooms.map(r=>[r.id,r.name]));
  m.append(h('h2',null,'Temperatursensoren'));
  // newly found sensors first: that is what a new installation needs
  const disc=h('div',{class:'card tbl'+(d.discovered.length?' banner':'')},h('h3',{style:'margin-top:0'},'Neu gefundene Fühler'+(d.discovered.length?' ('+d.discovered.length+')':'')));m.append(disc);
- if(!d.discovered.length)disc.append(h('p',{class:'muted'},'Keine neuen Fühler. Kabelfühler (1-Wire) erscheinen nach dem Busscan, Funkfühler nach ihrem ersten Telegramm. Tipp: Fühler kurz in der Hand anwärmen, um ihn zu erkennen.'));
+ if(!d.discovered.length)disc.append(h('p',{class:'muted'},'Keine neuen Fühler. Kabelfühler (1-Wire) erscheinen nach dem Busscan, Funkfühler nach ihrem ersten Telegramm. Bluetooth-Thermometer koppelst du unter „Bluetooth-Thermometer“. Tipp: Fühler kurz in der Hand anwärmen, um ihn zu erkennen.'));
  else disc.append(h('p',{class:'hint',style:'margin-top:-4px'},'Namen eingeben, Raum wählen und „Übernehmen“ – ab dann regelt der Raum mit diesem Fühler.'),h('table',null,h('tr',null,['Fühler','Wert','Name','Raum','Verwendung',''].map(t=>h('th',null,t))),d.discovered.map(x=>{const a={id:x.id,name:'',room:'',role:'room'};return h('tr',null,h('td',null,h('code',null,x.id),h('div',{class:'hint'},(KINDS[x.kind]||x.kind)+' · '+x.seen+'× empfangen')),h('td',null,fmt(x.value,2)+' °C'),h('td',null,inp(a,'name',null,{placeholder:'z. B. Wohnzimmer'})),h('td',null,sel(rooms,'',v=>a.room=v)),h('td',null,sel(ROLES,'room',v=>a.role=v)),h('td',null,h('button',{class:'p',onclick:()=>act(()=>POST('sensors/adopt',a),'Übernommen').then(route)},'Übernehmen')))})));
  const list=h('div',{class:'card tbl'});m.append(list);
  list.append(h('h3',{style:'margin-top:0'},'Eingerichtete Fühler'),h('p',{class:'hint',style:'margin-top:-4px'},'Korrektur: wird auf jeden Messwert addiert (z. B. −0,3, wenn der Fühler 0,3 K zu warm misst). Mit „⚙“ öffnen sich weitere Einstellungen wie Ersatzfühler und Zeitüberschreitung.'));
@@ -315,7 +317,7 @@ routes['/sensors']=async m=>{
     ...field('Aktiv',inp(e,'enabled','checkbox')),
     ...field('',h('div',{class:'row'},h('button',{class:'p',onclick:save},'Speichern'),h('button',{class:'d',onclick:()=>confirm('Fühler „'+(s.name||s.id)+'“ entfernen?')&&act(()=>DEL('sensors/'+encodeURIComponent(s.id))).then(route)},'Fühler entfernen'))))));
    tb.append(h('tr',null,h('td',null,inp(e,'name')),h('td',null,sel(rooms,e.room,v=>e.room=v)),h('td',null,sel(ROLES,e.role,v=>e.role=v)),
-     h('td',null,fmt(s.value,2)+' °C',s.humidity!=null?' · '+fmt(s.humidity,0)+' %':'',' ',stChip(s.status),s.batteryOk===false?chip('Batterie schwach','bad'):null,h('div',{class:'hint'},s.ageSec!=null?'vor '+ago(s.ageSec):'')),
+     h('td',null,fmt(s.value,2)+' °C',s.humidity!=null?' · '+fmt(s.humidity,0)+' %':'',s.batteryPct!=null?' · 🔋 '+s.batteryPct+' %':'',' ',stChip(s.status),s.batteryOk===false?chip('Batterie schwach','bad'):null,h('div',{class:'hint'},s.ageSec!=null?'vor '+ago(s.ageSec):'')),
      h('td',null,inp(e,'offset','number',{step:0.1,class:'n'})),
      h('td',{style:'white-space:nowrap'},h('button',{onclick:save},'Speichern'),' ',h('button',{title:'Weitere Einstellungen',onclick:()=>{more.style.display=more.style.display?'':'none'}},'⚙'))),more)}}
  // calibration: sensors side by side -> offsets so that all show the same value
@@ -336,6 +338,53 @@ routes['/sensors']=async m=>{
     toast('Gespeichert');setTimeout(route,2500)}catch(e){toast(e.message,true)}};
   draw()}
  const auto={autoAdoptOneWire:d.autoAdoptOneWire};m.append(h('div',{class:'card row'},h('label',null,inp(auto,'autoAdoptOneWire','checkbox'),' Neue Kabelfühler (1-Wire) automatisch übernehmen'),h('span',{class:'hint'},'Sie erscheinen dann direkt in der Liste und müssen nur noch einem Raum zugeordnet werden.'),h('button',{onclick:()=>act(()=>PUT('sensors',auto),'Gespeichert')},'Speichern')));
+};
+
+// ------------------------------------------------------------ Bluetooth thermometers
+const sigText=r=>r>=-65?'gut':r>=-80?'mittel':'schwach';
+routes['/ble']=async m=>{
+ const heat=await GET('heating');const rooms=[['','– kein Raum –']].concat(heat.rooms.map(r=>[r.id,r.name]));
+ const form={};// inputs survive the periodic refresh
+ const top=h('div',{class:'card'}),list=h('div',{class:'card'});
+ m.append(h('h2',null,'Bluetooth-Thermometer'),top,list,
+  h('details',{class:'card adv'},h('summary',null,'Welche Thermometer funktionieren?'),
+   h('ul',null,
+    h('li',null,h('b',null,'Xiaomi / Qingping mit pvvx- oder ATC-Firmware'),' (LYWSD03MMC, MHO-C401, CGG1 …) – Formate „BTHome“, „Custom (pvvx)“ oder „ATC1441“. Empfohlen: kein Schlüssel nötig, Batterie hält lange.'),
+    h('li',null,h('b',null,'Shelly BLU H&T'),' und andere BTHome-v2-Geräte – unverschlüsselt oder verschlüsselt (Schlüssel aus der Shelly-App).'),
+    h('li',null,h('b',null,'Xiaomi mit Originalfirmware'),' (LYWSD03MMC, LYWSDCGQ …) – sendet verschlüsselt. Den 32-stelligen Schlüssel („Bindkey“) liefert z. B. der „Xiaomi Cloud Tokens Extractor“; einfacher ist die pvvx-Firmware.'),
+    h('li',null,h('b',null,'Govee'),' H5072, H5075, H5074, H5051 und ',h('b',null,'SwitchBot'),' Meter / Meter Plus.')),
+   h('p',{class:'hint'},'Die Suche hört nur zu: HeatCore sendet nichts an die Thermometer und verbindet sich nicht. Thermometer von Nachbarn tauchen deshalb ebenfalls auf – gekoppelt (verwendet) wird nur, was du hier koppelst.')));
+ const draw=d=>{
+  const busy=list.contains(document.activeElement)&&document.activeElement.tagName!=='BUTTON';
+  top.innerHTML='';const st={enabled:d.enabled};
+  const state=!d.available?chip('Firmware ohne Bluetooth','bad'):!d.enabled?chip('aus'):d.running?chip('sucht','ok'):chip(d.error||'startet …',d.error&&!/startet/.test(d.error)?'bad':'warn');
+  top.append(h('div',{class:'row'},h('label',null,inp(st,'enabled','checkbox',{onchange:e=>(st.enabled=e.target.checked,act(()=>PUT('ble',st),st.enabled?'Bluetooth-Suche eingeschaltet':'Bluetooth-Suche ausgeschaltet').then(refresh))}),' Bluetooth-Suche einschalten'),state),
+   h('p',{class:'hint'},'Die Bluetooth-Suche teilt sich die Antenne mit dem WLAN. Bei LAN-Betrieb unkritisch; bei schwachem WLAN kann die Weboberfläche etwas langsamer reagieren. Ausschalten gibt den Arbeitsspeicher erst beim nächsten Neustart frei.'),
+   d.enabled?h('div',{class:'hint'},(d.stats.adverts||0)+' Funkpakete empfangen · '+(d.stats.readings||0)+' Messwerte weitergegeben'+(d.stats.dropped?' · '+d.stats.dropped+' verworfen (zu viele Geräte)':'')):null);
+  if(busy)return;
+  list.innerHTML='';const devs=(d.devices||[]).slice().sort((a,b)=>(b.adopted-a.adopted)||(b.rssi-a.rssi));
+  list.append(h('h3',{style:'margin-top:0'},'Thermometer in Reichweite'+(devs.length?' ('+devs.length+')':'')));
+  if(!d.enabled){list.append(h('p',{class:'muted'},'Schalte oben die Bluetooth-Suche ein. Thermometer erscheinen dann innerhalb einer Minute.'));return}
+  if(!devs.length){list.append(h('p',{class:'muted'},'Noch kein Thermometer empfangen. Steht das Thermometer in der Nähe und ist die Batterie voll? Manche Geräte senden nur alle paar Minuten.'));return}
+  list.append(h('p',{class:'hint',style:'margin-top:-4px'},'Namen eingeben, Raum wählen und „Koppeln“. Danach findest du das Thermometer auch unter „Temperatursensoren“ (Korrektur, Abgleich, Ersatzfühler).'));
+  for(const x of devs){const f=form[x.mac]||(form[x.mac]={name:x.name&&!/^(ATC|LYWSD|GVH|Govee)/.test(x.name)?x.name:'',room:'',key:''});
+   const val=x.temp!=null?h('span',null,fmt(x.temp,1)+' °C',x.hum!=null?' · '+fmt(x.hum,0)+' %':'',x.battery!=null?' · 🔋 '+x.battery+' %':''):h('span',{class:'muted'},'–');
+   let actCell;
+   if(x.adopted)actCell=h('span',null,chip('gekoppelt','ok'),' ',h('a',{href:'#/sensors'},'Einstellungen'));
+   else if(x.needsKey||x.keyError)actCell=h('div',{class:'row'},chip(x.keyError?'Schlüssel falsch':'verschlüsselt – Schlüssel nötig',x.keyError?'bad':'warn'),
+     inp(f,'key',null,{placeholder:'32 Hex-Zeichen (Bindkey)',style:'width:20em;max-width:100%;font-family:monospace'}),
+     h('button',{class:'p',onclick:()=>act(()=>PUT('ble/key',{mac:x.mac,key:f.key.trim()}),'Schlüssel gespeichert – Werte erscheinen mit dem nächsten Funkpaket').then(refresh)},'Speichern'));
+   else if(x.unsupported)actCell=h('span',null,chip('nicht auswertbar','warn'),h('div',{class:'hint'},x.encrypted?'ältere Xiaomi-Verschlüsselung – pvvx-Firmware aufspielen':'unbekannte Formatversion oder unplausible Werte'));
+   else if(x.temp==null)actCell=h('span',{class:'muted'},'wartet auf ersten Messwert …');
+   else actCell=h('div',{class:'row'},inp(f,'name',null,{placeholder:'Name, z. B. Bad'}),sel(rooms,f.room,v=>f.room=v),
+     h('button',{class:'p',onclick:()=>act(()=>POST('sensors/adopt',{id:x.id,name:f.name.trim()||x.name||x.mac,room:f.room,role:'room'}),'Gekoppelt').then(refresh)},'Koppeln'));
+   list.append(h('div',{class:'dev'},h('div',{class:'i'},h('b',null,x.name||x.format),h('div',{class:'hint'},h('code',null,x.mac.replace(/(..)(?!$)/g,'$1:')),(x.name?' · '+x.format:'')+(x.encrypted?' · verschlüsselt':'')+(x.hasKey?' · Schlüssel hinterlegt':''))),
+    h('div',{class:'v'},val,h('div',{class:'hint'},'vor '+ago(x.ageSec))),
+    h('div',{class:'s'},sigText(x.rssi),h('div',{class:'hint'},x.rssi+' dBm')),
+    h('div',{class:'a'},actCell,x.hasKey&&!x.needsKey?h('button',{style:'margin-top:6px',onclick:()=>confirm('Schlüssel für '+x.mac+' löschen?')&&act(()=>PUT('ble/key',{mac:x.mac,key:''}),'Schlüssel gelöscht').then(refresh)},'Schlüssel löschen'):null)))}
+ };
+ const refresh=async()=>draw(await GET('ble'));
+ every(5000,refresh);
 };
 
 // ------------------------------------------------------------ action / binding editors

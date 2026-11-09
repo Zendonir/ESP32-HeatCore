@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "hc/automation/AutomationEngine.h"
+#include "hc/ble/BleHub.h"
 #include "hc/core/Alarms.h"
 #include "hc/core/Clock.h"
 #include "hc/core/Event.h"
@@ -133,6 +134,7 @@ class HeatCoreSystem : public IAutomationContext {
   History history;  // recorded operating data (statistics, AI analysis)
   AiState ai;       // MCP access level, token and change journal
   ExternalSources external;  // MQTT subscriptions / HTTP polls of other devices
+  ble::BleHub ble{sensors};  // Bluetooth LE thermometers (passive scanning)
   DisplayManager display;
   AutomationEngine automation;
 

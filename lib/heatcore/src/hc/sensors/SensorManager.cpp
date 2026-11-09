@@ -19,6 +19,7 @@ const char* sensorKindName(SensorKind k) {
     case SensorKind::External: return "external";
     case SensorKind::Analog: return "analog";
     case SensorKind::Virtual: return "virtual";
+    case SensorKind::Ble: return "ble";
   }
   return "?";
 }
@@ -29,6 +30,7 @@ SensorKind sensorKindFromKey(const std::string& id) {
   if (id.rfind("rf:", 0) == 0) return SensorKind::Rf;
   if (id.rfind("ai:", 0) == 0) return SensorKind::Analog;
   if (id.rfind("ext:", 0) == 0) return SensorKind::External;
+  if (id.rfind("ble:", 0) == 0) return SensorKind::Ble;
   return SensorKind::Virtual;
 }
 
@@ -99,7 +101,7 @@ void SensorManager::update(const std::string& id, float raw, Millis now) {
 }
 
 void SensorManager::updateExtended(const std::string& id, float raw, bool hasHum, float hum, int8_t battery,
-                                   uint8_t quality, Millis now) {
+                                   uint8_t quality, Millis now, int8_t batteryPct) {
   Sensor* s = find(id);
   if (!s) {
     SensorKind k = sensorKindFromKey(id);
@@ -113,7 +115,7 @@ void SensorManager::updateExtended(const std::string& id, float raw, bool hasHum
       ++revision_;
       s = &sensors_.back();
     } else {
-      noteDiscovered(id, raw, hasHum, hum, battery, now);
+      noteDiscovered(id, raw, hasHum, hum, battery, batteryPct, now);
       return;
     }
   }
@@ -132,11 +134,16 @@ void SensorManager::updateExtended(const std::string& id, float raw, bool hasHum
     if (s->status == SensorStatus::Never) setStatus(*s, SensorStatus::Fault, now);
     return;
   }
+  // a newly reported quantity (humidity, battery) changes the Home Assistant
+  // entities of the sensor: count it as a configuration revision
+  if ((hasHum && !s->hasHumidity) || (battery >= 0 && s->batteryOk < 0) || (batteryPct >= 0 && s->batteryPct < 0))
+    ++revision_;
   s->raw = raw;
   s->value = raw + s->offset;
   s->hasHumidity = hasHum;
   s->humidity = hum;
   if (battery >= 0) s->batteryOk = battery;
+  if (batteryPct >= 0) s->batteryPct = batteryPct;
   s->quality = quality;
   s->lastUpdateMs = now;
   s->lastEpoch = clock_.epoch();
@@ -181,20 +188,21 @@ void SensorManager::tick(Millis now) {
 }
 
 void SensorManager::noteDiscovered(const std::string& id, float v, bool hasHum, float hum, int8_t battery,
-                                   Millis now) {
+                                   int8_t batteryPct, Millis now) {
   for (auto& d : discovered_) {
     if (d.id == id) {
       d.lastValue = v;
       d.hasHumidity = hasHum;
       d.humidity = hum;
       d.batteryOk = battery;
+      d.batteryPct = batteryPct;
       ++d.seen;
       d.lastMs = now;
       return;
     }
   }
   if (discovered_.size() >= kMaxDiscovered) discovered_.erase(discovered_.begin());
-  discovered_.push_back({id, sensorKindFromKey(id), v, hasHum, hum, battery, 1, now});
+  discovered_.push_back({id, sensorKindFromKey(id), v, hasHum, hum, battery, batteryPct, 1, now});
 }
 
 std::string SensorManager::upsert(const Sensor& cfg) {
@@ -251,7 +259,8 @@ std::string SensorManager::adopt(const std::string& id, const std::string& name,
   s.room = room;
   s.role = role;
   s.kind = sensorKindFromKey(id);
-  if (s.kind == SensorKind::Rf || s.kind == SensorKind::External) s.timeoutSec = 900;  // RF sensors send rarely
+  // RF and Bluetooth sensors send rarely (or are received only now and then)
+  if (s.kind == SensorKind::Rf || s.kind == SensorKind::External || s.kind == SensorKind::Ble) s.timeoutSec = 900;
   // keep the last discovered reading: upsert() removes the discovery entry
   bool haveLast = false;
   DiscoveredSensor last;
@@ -262,7 +271,9 @@ std::string SensorManager::adopt(const std::string& id, const std::string& name,
     }
   std::string err = upsert(s);
   if (!err.empty()) return err;
-  if (haveLast) updateExtended(id, last.lastValue, last.hasHumidity, last.humidity, last.batteryOk, 100, last.lastMs);
+  if (haveLast)
+    updateExtended(id, last.lastValue, last.hasHumidity, last.humidity, last.batteryOk, 100, last.lastMs,
+                   last.batteryPct);
   return std::string();
 }
 
@@ -415,6 +426,7 @@ void SensorManager::toJson(JsonArray arr, bool runtime) const {
       }
       if (s.hasHumidity) o["humidity"] = s.humidity;
       if (s.batteryOk >= 0) o["batteryOk"] = s.batteryOk == 1;
+      if (s.batteryPct >= 0) o["batteryPct"] = s.batteryPct;
       o["quality"] = s.quality;
       o["lastEpoch"] = s.lastEpoch;
       o["ageSec"] = s.updates ? elapsed(clock_.nowMs(), s.lastUpdateMs) / 1000u : 0u;

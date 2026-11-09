@@ -15,7 +15,7 @@ Alles funktioniert ohne MQTT und Home Assistant. MQTT ist optional
 | `<basis>/rf/<id>/state`, `/avail`, `/event`, `/diag` | aus | Zustand, Funkverfügbarkeit, Tastenereignis, Empfangsqualität |
 | `<basis>/rf/stats`, `<basis>/rf/tx/state` | aus | Empfangsstatistik, Senderstatus |
 | `<basis>/rf/tx/<dev>/<cmd>/send` | ein | nur für Befehle mit Freigabe „Home Assistant“ |
-| `<basis>/sensor/<id>/state`, `/avail` | aus | t, h, bat_low, status |
+| `<basis>/sensor/<id>/state`, `/avail` | aus | t, h, bat_low, bat (Batterie %), status |
 | `<basis>/display/state`, `/display/{enabled,contrast,page}/set` | aus/ein | Display |
 | `<basis>/output/<n>/state`, `/set` | aus/ein | nur freigegebene allgemeine Ausgänge, zeitlich begrenzt |
 | `<basis>/circuit/<n>/state` | aus | Ventil offen, Störung |
@@ -25,7 +25,7 @@ Alles funktioniert ohne MQTT und Home Assistant. MQTT ist optional
 
 MQTT-Discovery legt an: Klima-Entität je Raum, Fenster-Sensor je Raum,
 Lernmodellstatus, Funkgeräte (binary_sensor + event + Qualität),
-Temperatur-/Feuchte-/Batteriesensoren, Funkstatistik, Senderstatus,
+Temperatur-/Feuchte-/Batteriesensoren (auch Bluetooth-Thermometer, Batterie in %), Funkstatistik, Senderstatus,
 Sende-Buttons, Display (Schalter, Kontrast, Seite, Störung), freigegebene
 Ausgänge, Ventile und Störungen je Heizkreis, Sammelstörung, Regel-Buttons.
 Entfernte Geräte werden in Home Assistant gelöscht. Nach einem HA-Neustart
@@ -115,6 +115,7 @@ Alle Antworten JSON, Fehler als `{"error": "..."}` mit HTTP-Status.
 | `GET/PUT /api/io`, `POST/DELETE /api/outputs/<n>/manual`, `POST /api/outputs/<n>/request` | Ein-/Ausgänge |
 | `GET/PUT /api/heating`, `POST /api/rooms/<id>/{setpoint,adjust,mode}`, `POST /api/mode` | Räume, Heizkreise |
 | `GET /api/sensors`, `PUT/DELETE /api/sensors/<id>`, `POST /api/sensors/adopt` | Sensor-Manager |
+| `GET/PUT /api/ble`, `PUT /api/ble/key` | Bluetooth-Thermometer, siehe `docs/bluetooth-thermometer.md` |
 | `GET/PUT /api/safety` | Sicherheit (nur lokal) |
 | `GET /api/rf/status`, `PUT /api/rf/config` | Funkstatus und -einstellungen |
 | `GET/POST /api/rf/devices`, `PUT/DELETE /api/rf/devices/<id>` | Empfangsgeräte |

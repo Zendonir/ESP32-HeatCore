@@ -1,6 +1,6 @@
 #pragma once
 // Central sensor manager. All temperature sources (1-Wire, RF433 decoders,
-// external rtl_433 gateway, analog inputs) are handled identically:
+// external rtl_433 gateway, analog inputs, Bluetooth thermometers) are handled identically:
 // offset correction, plausibility, timeout, priority and fallback sensor.
 #include <ArduinoJson.h>
 
@@ -13,7 +13,7 @@
 
 namespace hc {
 
-enum class SensorKind : uint8_t { OneWire = 0, Rf, External, Analog, Virtual };
+enum class SensorKind : uint8_t { OneWire = 0, Rf, External, Analog, Virtual, Ble };
 enum class SensorRole : uint8_t { Room = 0, Flow, Return, Outdoor, Other };
 enum class SensorStatus : uint8_t { Never = 0, Ok, Stale, Fault, Disabled };
 
@@ -25,7 +25,7 @@ const char* sensorStatusName(SensorStatus s);
 
 struct Sensor {
   // configuration
-  std::string id;    // "ow1:28FF0A1B2C3D4E5F", "rf:nexus_th:12:1", "ai:2", ...
+  std::string id;    // "ow1:28FF0A1B2C3D4E5F", "rf:nexus_th:12:1", "ai:2", "ble:A4C1381A2B3C", ...
   std::string name;
   SensorKind kind = SensorKind::OneWire;
   SensorRole role = SensorRole::Room;
@@ -43,6 +43,7 @@ struct Sensor {
   bool hasHumidity = false;
   float humidity = 0.f;
   int8_t batteryOk = -1;
+  int8_t batteryPct = -1;  // battery level in percent, -1 unknown
   uint8_t quality = 0;
   Millis lastUpdateMs = 0;
   Millis configuredMs = 0;  // when the sensor was added/loaded (startup supervision)
@@ -63,6 +64,7 @@ struct DiscoveredSensor {
   bool hasHumidity = false;
   float humidity = 0.f;
   int8_t batteryOk = -1;
+  int8_t batteryPct = -1;
   uint32_t seen = 0;
   Millis lastMs = 0;
 };
@@ -85,7 +87,7 @@ class SensorManager {
   // list (autoAdopt false) or are adopted automatically.
   void update(const std::string& id, float raw, Millis now);
   void updateExtended(const std::string& id, float raw, bool hasHum, float hum, int8_t battery, uint8_t quality,
-                      Millis now);
+                      Millis now, int8_t batteryPct = -1);
   void reportError(const std::string& id, const char* err, Millis now);
   void tick(Millis now);  // timeout supervision
 
@@ -126,7 +128,8 @@ class SensorManager {
 
  private:
   void setStatus(Sensor& s, SensorStatus st, Millis now);
-  void noteDiscovered(const std::string& id, float v, bool hasHum, float hum, int8_t battery, Millis now);
+  void noteDiscovered(const std::string& id, float v, bool hasHum, float hum, int8_t battery, int8_t batteryPct,
+                      Millis now);
   EventBus& bus_;
   const IClock& clock_;
   std::vector<Sensor> sensors_;

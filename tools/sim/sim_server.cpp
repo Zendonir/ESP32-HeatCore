@@ -105,6 +105,47 @@ void demo() {
   g_plants["bad"].T = 21.f;
 }
 
+// ---- Bluetooth "air": a few thermometers in range (BLE scanning is enabled in the web UI)
+std::vector<uint8_t> simPvvx(const ble::Mac& m, float t, float h, int bat, uint8_t cnt) {
+  int16_t ti = static_cast<int16_t>(std::lround(t * 100.f));
+  uint16_t hi = static_cast<uint16_t>(std::lround(h * 100.f));
+  std::vector<uint8_t> a = {0x0B, 0x09, 'A', 'T', 'C', '_', '6', 'E', '2', '1', '0', '7', 0x12, 0x16, 0x1A, 0x18};
+  for (int i = 5; i >= 0; --i) a.push_back(m[static_cast<size_t>(i)]);
+  for (uint8_t b : {static_cast<uint8_t>(ti & 0xFF), static_cast<uint8_t>(ti >> 8), static_cast<uint8_t>(hi & 0xFF),
+                    static_cast<uint8_t>(hi >> 8), uint8_t{0xB8}, uint8_t{0x0B}, static_cast<uint8_t>(bat), cnt,
+                    uint8_t{0x04}})
+    a.push_back(b);
+  return a;
+}
+
+std::vector<uint8_t> simBtHome(float t, int hum, int bat, uint8_t cnt) {
+  int16_t ti = static_cast<int16_t>(std::lround(t * 10.f));
+  return {0x02, 0x01, 0x06, 0x0D, 0x16, 0xD2, 0xFC, 0x44, 0x00, cnt, 0x01, static_cast<uint8_t>(bat), 0x2E,
+          static_cast<uint8_t>(hum), 0x45, static_cast<uint8_t>(ti & 0xFF), static_cast<uint8_t>(ti >> 8)};
+}
+
+void simBleAir() {
+  static uint8_t cnt = 0;
+  ++cnt;
+  Millis now = g_clock.ms;
+  float wave = std::sin(now / 9.0e5f);
+  ble::Mac a{}, b{}, c{}, d{};
+  ble::parseMac("A4:C1:38:6E:21:07", a);  // pvvx firmware
+  ble::parseMac("7C:C6:B6:61:0E:2F", b);  // Shelly BLU H&T (BTHome)
+  ble::parseMac("A4:C1:38:1A:2B:3C", c);  // Xiaomi stock firmware (encrypted, key e9efaa6873f9f9c87a5e75a5f814801c)
+  ble::parseMac("D4:11:22:33:44:55", d);  // Govee H5075 of the neighbours
+  auto pv = simPvvx(a, 21.3f + wave * 0.4f, 48.f + wave * 3.f, 87, cnt);
+  g_sys->ble.ingest(a, -63, pv.data(), pv.size(), now);
+  auto bt = simBtHome(19.6f - wave * 0.3f, 55, 100, cnt);
+  g_sys->ble.ingest(b, -71, bt.data(), bt.size(), now);
+  // MiBeacon v5 frame of test_ble.cpp (fixed 23.4 C: the MAC is part of the encryption)
+  const uint8_t mi[] = {0x02, 0x01, 0x06, 0x1A, 0x16, 0x95, 0xFE, 0x58, 0x50, 0x5B, 0x05, 0x37, 0x3C, 0x2B, 0x1A,
+                        0x38, 0xC1, 0xA4, 0x13, 0xED, 0x9E, 0x75, 0xD6, 0x01, 0x02, 0x03, 0x4C, 0x6A, 0x50, 0x1D};
+  g_sys->ble.ingest(c, -78, mi, sizeof(mi), now);
+  const uint8_t gv[] = {0x09, 0xFF, 0x88, 0xEC, 0x00, 0x03, 0x4C, 0x5B, 0x64, 0x00};
+  g_sys->ble.ingest(d, -94, gv, sizeof(gv), now);
+}
+
 std::string sensorFor(const std::string& room) {
   for (auto& s : g_sys->sensors.sensors())
     if (s.room == room && s.role == SensorRole::Room) return s.id;
@@ -112,7 +153,7 @@ std::string sensorFor(const std::string& room) {
 }
 
 void simLoop() {
-  Millis lastMinute = 0;
+  Millis lastMinute = 0, lastBle = 0;
   while (g_run) {
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
     std::lock_guard<std::recursive_mutex> lk(g_sys->mutex());
@@ -132,6 +173,10 @@ void simLoop() {
         }
         g_sys->sensors.update("ow2:28FF000000000010", g_outdoor, g_clock.ms);
         g_sys->sensors.update("ow2:28FF000000000011", 34.f + std::sin(g_clock.ms / 3.6e6f) * 3.f, g_clock.ms);
+      }
+      if (elapsed(g_clock.ms, lastBle) >= 10000) {
+        lastBle = g_clock.ms;
+        simBleAir();
       }
       g_sys->reportInputs(g_inputs, true);
       g_sys->reportOutputWrite(true);
@@ -155,6 +200,8 @@ void simLoop() {
     p.totalPsram = 8 * 1024 * 1024;
     p.rfRxHw = p.rfTxHw = true;
     p.ioExpandersOk = true;
+    g_sys->ble.radioAvailable = true;
+    g_sys->ble.running = g_sys->ble.cfg.enabled;
     p.i2cDevices = {0x21, 0x22, 0x24, 0x25, 0x3C, 0x50, 0x68};
     g_sys->display.hw.present = g_sys->display.hw.initialized = true;
   }
