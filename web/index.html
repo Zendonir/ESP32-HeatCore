@@ -357,7 +357,7 @@ routes['/ble']=async m=>{
  const draw=d=>{
   const busy=list.contains(document.activeElement)&&document.activeElement.tagName!=='BUTTON';
   top.innerHTML='';const st={enabled:d.enabled};
-  const state=!d.available?chip('Firmware ohne Bluetooth','bad'):!d.enabled?chip('aus'):d.running?chip('sucht','ok'):chip(d.error||'startet …',d.error&&!/startet/.test(d.error)?'bad':'warn');
+  const state=!d.available?chip('Firmware ohne Bluetooth','bad'):!d.enabled?(d.error&&/abgestuerzt/.test(d.error)?chip(d.error,'bad'):chip('aus')):d.running?chip('sucht','ok'):chip(d.error||'startet …',d.error&&!/startet/.test(d.error)?'bad':'warn');
   top.append(h('div',{class:'row'},h('label',null,inp(st,'enabled','checkbox',{onchange:e=>(st.enabled=e.target.checked,act(()=>PUT('ble',st),st.enabled?'Bluetooth-Suche eingeschaltet':'Bluetooth-Suche ausgeschaltet').then(refresh))}),' Bluetooth-Suche einschalten'),state),
    h('p',{class:'hint'},'Die Bluetooth-Suche teilt sich die Antenne mit dem WLAN. Bei LAN-Betrieb unkritisch; bei schwachem WLAN kann die Weboberfläche etwas langsamer reagieren. Ausschalten gibt den Arbeitsspeicher erst beim nächsten Neustart frei.'),
    d.enabled?h('div',{class:'hint'},(d.stats.adverts||0)+' Funkpakete empfangen · '+(d.stats.readings||0)+' Messwerte weitergegeben'+(d.stats.dropped?' · '+d.stats.dropped+' verworfen (zu viele Geräte)':'')):null);

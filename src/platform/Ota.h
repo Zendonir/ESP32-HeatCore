@@ -41,6 +41,8 @@ class Ota {
   // when the image was rejected and the caller must restart (safe outputs
   // first) so that the bootloader returns to the previous firmware.
   bool probation(bool healthy, uint32_t uptimeMs);
+  // new firmware not confirmed yet (rollback armed)
+  bool onProbation() const { return !probationDone_; }
   void rejectAndRestart();
 
   void fillStatus(hc::FirmwareStatus& s);
@@ -58,7 +60,7 @@ class Ota {
   std::string error_;
   hc::FirmwareStatus status_;
   uint32_t healthySinceMs_ = 0;
-  bool probationDone_ = true;
+  std::atomic<bool> probationDone_{true};
 };
 
 }  // namespace platform

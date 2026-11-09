@@ -69,6 +69,10 @@ WebUi* g_web = nullptr;
 Ota g_ota;
 BleScanner g_ble;
 bool g_bleBlocked = false;  // last restart was caused by low memory: no Bluetooth this boot
+bool g_bleCrashed = false;  // the device crashed during/after the Bluetooth start: switched off
+// Bluetooth host start runs in the loop task (16 KB stack, idle otherwise):
+// 0 idle, 1 requested, 2 started, 3 failed
+std::atomic<int> g_bleInit{0};
 BoundedQueue<std::string> g_sdLog(64);
 
 std::atomic<bool> g_selfTestRunning{false};
@@ -102,9 +106,55 @@ struct ResetTrace {
   uint32_t minHeap;
   uint32_t beats[kBeatCount];
   char reason[64];  // own restarts: why
+  char panic[176];  // crash: cause, task, address, backtrace (written by the panic hook)
 };
-constexpr uint32_t kTraceMagic = 0x48435232;  // "HCR2" (layout with 10 task beats)
+constexpr uint32_t kTraceMagic = 0x48435233;  // "HCR3" (layout with crash record)
 RTC_NOINIT_ATTR ResetTrace g_trace;
+// set while the Bluetooth host starts and during its first minutes: a crash
+// in that time switches Bluetooth off on the next start (no restart loop)
+constexpr uint32_t kBleStartMagic = 0xB1E57A27;
+RTC_NOINIT_ATTR uint32_t g_bleStartMark;
+
+// ---- crash record: the Arduino core's panic hook (set_arduino_panic_handler)
+// stores cause, task, address and the first backtrace entries in RTC memory.
+// Runs in the exception context: IRAM only, no allocation, no locks.
+static void IRAM_ATTR traceAppend(size_t& n, const char* s) {
+  while (s && *s && n + 1 < sizeof(g_trace.panic)) g_trace.panic[n++] = *s++;
+  g_trace.panic[n] = 0;
+}
+static void IRAM_ATTR traceHex(size_t& n, uint32_t v) {
+  static const char kHex[] DRAM_ATTR = "0123456789abcdef";
+  char h[11] = {'0', 'x'};
+  for (int i = 0; i < 8; ++i) h[2 + i] = kHex[(v >> (28 - 4 * i)) & 0xF];
+  h[10] = 0;
+  traceAppend(n, h);
+}
+static void IRAM_ATTR onPanic(arduino_panic_info_t* info, void*) {
+  size_t n = 0;
+  g_trace.panic[0] = 0;
+  traceAppend(n, info->reason);
+  TaskHandle_t t = xTaskGetCurrentTaskHandleForCore(info->core);
+  if (t) {
+    traceAppend(n, DRAM_STR(", Task "));
+    traceAppend(n, pcTaskGetName(t));
+  }
+  traceAppend(n, DRAM_STR(", PC "));
+  traceHex(n, reinterpret_cast<uint32_t>(info->pc));
+  if (info->backtrace_len > 1) {
+    traceAppend(n, DRAM_STR(", Backtrace"));
+    for (unsigned i = 1; i < info->backtrace_len && i < 6; ++i) {
+      traceAppend(n, DRAM_STR(" "));
+      traceHex(n, info->backtrace[i]);
+    }
+  }
+  if (g_trace.magic != kTraceMagic) {  // crashed before the first snapshot
+    g_trace.magic = kTraceMagic;
+    g_trace.savedMs = static_cast<uint32_t>(esp_timer_get_time() / 1000);
+    g_trace.minHeap = 0;
+    for (auto& b : g_trace.beats) b = 0;
+    g_trace.reason[0] = 0;
+  }
+}
 
 void beat(Beat b) {
   g_beat[b] = millis();
@@ -161,6 +211,8 @@ std::string describeLastReset() {
   if (traced) {
     s += " nach " + uptimeText(g_trace.savedMs);
     if (r == ESP_RST_SW && g_trace.reason[0]) s += ": " + std::string(g_trace.reason, strnlen(g_trace.reason, sizeof(g_trace.reason)));
+    if (r != ESP_RST_SW && g_trace.panic[0])
+      s += ": " + std::string(g_trace.panic, strnlen(g_trace.panic, sizeof(g_trace.panic)));
     if (r != ESP_RST_SW) {
       std::string stuck;
       for (int i = 0; i < kBeatCount; ++i) {
@@ -169,12 +221,13 @@ std::string describeLastReset() {
           stuck += (stuck.empty() ? "" : ", ") + std::string(kBeatNames[i]) + " (seit " + std::to_string(age / 1000) + " s)";
       }
       if (!stuck.empty()) s += "; zuletzt haengend: " + stuck;
-      s += "; min. freier RAM " + std::to_string(g_trace.minHeap / 1024) + " KB";
+      if (g_trace.minHeap) s += "; min. freier RAM " + std::to_string(g_trace.minHeap / 1024) + " KB";
     }
   }
   s += " [" + std::to_string(static_cast<int>(r)) + "]";
   g_trace.magic = 0;  // start a fresh trace
   g_trace.reason[0] = 0;
+  g_trace.panic[0] = 0;
   return s;
 }
 
@@ -626,7 +679,7 @@ void extPollTask(void*) {
 // takes ~40-60 KB of internal RAM) and feeds received advertisements to the
 // core. A failing radio never affects the other tasks.
 void bleTask(void*) {
-  uint32_t lastTry = 0, lastStatus = 0;
+  uint32_t lastTry = 0, lastStatus = 0, bleOkSince = 0;
   bool supervised = false;
   BleAdvert batch[16];
   for (;;) {
@@ -636,8 +689,20 @@ void bleTask(void*) {
       want = g_sys->ble.cfg.enabled;
     }
     uint32_t now = millis();
-    if (want && !g_ble.started() && !g_bleBlocked && BleScanner::supported() &&
-        (lastTry == 0 || now - lastTry > 300000)) {
+    // the loop task owns the scanner while it starts it (g_bleInit == 1):
+    // touch it only when idle; observing 2/3 below synchronizes with begin()
+    bool initBusy = g_bleInit.load() == 1;
+    bool ready = !initBusy && g_ble.started();
+    // Start only after a new firmware has been confirmed: a problem in the
+    // Bluetooth start can then never prevent an update from being accepted.
+    bool probation = g_ota.onProbation();
+    if (want && !initBusy && !ready && !g_bleBlocked && BleScanner::supported() && probation && g_bleInit == 0 &&
+        now - lastStatus > 1000) {
+      Lock lk(g_sys->mutex());
+      g_sys->ble.radioError = "startet, sobald die neue Firmware bestaetigt ist (ca. 3 min nach dem Update)";
+    }
+    if (want && !initBusy && !ready && !g_bleBlocked && BleScanner::supported() && !probation && g_bleInit == 0 &&
+        now > 20000 && (lastTry == 0 || now - lastTry > 300000)) {
       lastTry = now;
       size_t freeInt = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
       if (freeInt < 55000) {
@@ -652,30 +717,44 @@ void bleTask(void*) {
           g_sys->ble.radioError = "Bluetooth startet ...";
         }
         HC_LOGI("ble", "starting Bluetooth host (%u bytes internal RAM free)", static_cast<unsigned>(freeInt));
-        bool ok = g_ble.begin();  // blocks until the host is ready
-        HC_LOGI("ble", "Bluetooth host %s, %u bytes internal RAM free", ok ? "ready" : "failed",
-                static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
-        Lock lk(g_sys->mutex());
-        g_sys->ble.radioError = g_ble.error();
+        g_bleStartMark = kBleStartMagic;  // a crash from here on switches Bluetooth off
+        g_bleInit = 1;                     // the loop task starts the host
       }
     }
-    if (g_ble.started() && !supervised) {
+    int init = g_bleInit.load();
+    if (init >= 2) {
+      g_bleInit = 0;
+      bool ok = init == 2;
+      if (ok) bleOkSince = now ? now : 1;
+      else g_bleStartMark = 0;
+      ready = ok && g_ble.started();
+      HC_LOGI("ble", "Bluetooth host %s, %u bytes internal RAM free", ok ? "ready" : "failed",
+              static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
+      Lock lk(g_sys->mutex());
+      g_sys->ble.radioError = g_ble.error();
+    }
+    // 10 minutes without a crash: the Bluetooth start counts as good
+    if (bleOkSince && now - bleOkSince > 600000) {
+      g_bleStartMark = 0;
+      bleOkSince = 0;
+    }
+    if (ready && !supervised) {
       watchTask(kBeatBle);
       supervised = true;
     }
     if (supervised) beat(kBeatBle);
-    if (g_ble.started()) g_ble.setScanning(want);
+    if (ready) g_ble.setScanning(want);
     size_t n = 0;
-    while (n < 16 && g_ble.pop(batch[n])) ++n;
+    while (ready && n < 16 && g_ble.pop(batch[n])) ++n;
     if (n || now - lastStatus > 1000) {
       lastStatus = now;
       Lock lk(g_sys->mutex());
       for (size_t i = 0; i < n; ++i)
         g_sys->ble.ingest(hc::ble::macFromLittleEndian(batch[i].mac), batch[i].rssi, batch[i].data, batch[i].len,
                           millis());
-      g_sys->ble.running = g_ble.scanning();
+      g_sys->ble.running = ready && g_ble.scanning();
       g_sys->ble.stats.dropped = g_ble.dropped();
-      if (g_ble.started()) g_sys->ble.radioError = g_ble.error();
+      if (ready) g_sys->ble.radioError = g_ble.error();
       else if (g_bleBlocked && want)
         g_sys->ble.radioError = "nach Neustart wegen Speichermangel nicht gestartet (Bluetooth deaktivieren oder neu starten)";
     }
@@ -992,12 +1071,13 @@ void loadConfiguration() {
 }  // namespace
 
 void setup() {
-  // Allocations from 512 bytes go to the 8 MB PSRAM first (default: only
+  // Allocations from 128 bytes go to the 8 MB PSRAM first (default: only
   // from 4 KB). Strings, JSON documents, HTTP responses and WebSocket
   // messages otherwise exhaust the ~320 KB internal RAM, especially on a weak
   // Wi-Fi link where send buffers pile up; Wi-Fi, lwIP, DMA buffers and task
   // stacks request internal memory explicitly and are not affected.
-  heap_caps_malloc_extmem_enable(512);
+  heap_caps_malloc_extmem_enable(128);
+  set_arduino_panic_handler(onPanic, nullptr);  // crash record for "Letzter Neustart"
   // 1) outputs to a defined state before anything else (PCF8574 keeps its
   //    latch across an ESP reset: an OTA restart must not leave valves open)
   g_i2c.begin(board::kI2cSda, board::kI2cScl, board::kI2cHz);
@@ -1022,11 +1102,27 @@ void setup() {
   g_sys->platform.deviceId = deviceIdFromMac();
   g_sys->platform.resetReason = lastReset;
   g_bleBlocked = lastReset.find("Arbeitsspeicher") != std::string::npos;
+  {
+    esp_reset_reason_t rr = esp_reset_reason();
+    bool crash = rr == ESP_RST_PANIC || rr == ESP_RST_INT_WDT || rr == ESP_RST_TASK_WDT || rr == ESP_RST_WDT;
+    g_bleCrashed = g_bleStartMark == kBleStartMagic && crash;
+    g_bleStartMark = 0;
+  }
   g_sys->ble.radioAvailable = BleScanner::supported();
 
   g_ota.begin();  // slot state; a new firmware starts on probation
   g_storage.begin();
   loadConfiguration();
+  if (g_bleCrashed) {
+    Lock lk(g_sys->mutex());
+    if (g_sys->ble.cfg.enabled) {
+      g_sys->ble.cfg.enabled = false;
+      g_sys->markDirty(hc::ConfigSection::Sensors);
+    }
+    g_sys->ble.radioError = "automatisch ausgeschaltet: das Geraet ist beim Bluetooth-Start abgestuerzt (" + lastReset +
+                            "). Erneut einschalten probiert es noch einmal.";
+    HC_LOGE("ble", "crash during Bluetooth start - Bluetooth switched off");
+  }
   {
     std::string blob;
     if (g_storage.loadHistory(blob) && g_sys->history.deserialize(blob)) {
@@ -1141,6 +1237,8 @@ void loop() {
     setRestartReason("neue Firmware nicht bestaetigt - Ruecksprung");
     g_ota.rejectAndRestart();
   }
+  // Bluetooth host start requested by the ble task (needs a large stack once)
+  if (g_bleInit == 1) g_bleInit = g_ble.begin() ? 2 : 3;
   // Reboot (OTA, user request): close all valves first, then restart.
   if (g_web && g_web->rebootRequested()) {
     if (!g_trace.reason[0]) setRestartReason("Neustart ueber Webinterface oder Update");

@@ -89,6 +89,15 @@ wird nicht unterstützt; sie wird als „nicht auswertbar“ angezeigt.
   Stack frei ist, wo er liegt und wie viel internes RAM frei ist. War der letzte Neustart durch Speichermangel
   ausgelöst, bleibt Bluetooth bis zum nächsten Neustart aus. Damit kann keine
   Neustartschleife entstehen.
+- Bluetooth startet erst, wenn sich eine neue Firmware nach dem Update selbst
+  bestätigt hat (etwa 3 min). Ein Problem beim Bluetooth-Start kann so nie
+  ein Update verhindern.
+- Stürzt das Gerät beim Bluetooth-Start oder in den ersten 10 Minuten danach
+  ab, schaltet HeatCore Bluetooth beim nächsten Start selbst aus. Die Seite
+  zeigt den Grund. Erneutes Einschalten probiert es noch einmal.
+- Bei jedem Absturz merkt sich die Firmware Ursache, Task und Adresse. Sie
+  stehen unter „Selbsttest & Status → Letzter Neustart“, ein USB-Kabel ist
+  dafür nicht nötig.
 - Der Selbsttest zeigt den Zustand unter „Bluetooth-Thermometer“.
 
 ## REST-API
