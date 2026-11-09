@@ -726,8 +726,8 @@ void bleTask(void*) {
       g_bleInit = 0;
       bool ok = init == 2;
       if (ok) bleOkSince = now ? now : 1;
-      ready = ok && g_ble.started();
       else g_bleStartMark = 0;
+      ready = ok && g_ble.started();
       HC_LOGI("ble", "Bluetooth host %s, %u bytes internal RAM free", ok ? "ready" : "failed",
               static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
       Lock lk(g_sys->mutex());
