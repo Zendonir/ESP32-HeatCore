@@ -82,8 +82,11 @@ wird nicht unterstützt; sie wird als „nicht auswertbar“ angezeigt.
 - Der Bluetooth-Stack startet erst beim Einschalten der Suche und belegt dann
   etwa 40–60 KB internen Arbeitsspeicher. Ausschalten stoppt die Suche sofort,
   der Speicher wird aber erst beim nächsten Neustart frei.
-- Sind beim Einschalten weniger als 70 KB frei, startet Bluetooth nicht, und
-  die Seite zeigt den Grund. War der letzte Neustart durch Speichermangel
+- Sind beim Einschalten weniger als 55 KB frei, startet Bluetooth nicht, und
+  die Seite zeigt den Grund. Seit 0.11.3 liegen die Stacks der Tasks, die
+  nie in den Flash schreiben, im 8-MB-PSRAM. Das spart rund 46 KB internen
+  RAM. Der Selbsttest zeigt unter „Task-Speicher“ für jede Task, wie viel
+  Stack frei ist, wo er liegt und wie viel internes RAM frei ist. War der letzte Neustart durch Speichermangel
   ausgelöst, bleibt Bluetooth bis zum nächsten Neustart aus. Damit kann keine
   Neustartschleife entstehen.
 - Der Selbsttest zeigt den Zustand unter „Bluetooth-Thermometer“.
