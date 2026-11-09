@@ -65,17 +65,33 @@ void BleHub::ingest(const Mac& advMac, int rssi, const uint8_t* adv, size_t len,
   if (r.batteryPct >= 0) d.batteryPct = r.batteryPct;
   bool repeat = r.counter >= 0 && r.counter == d.lastCounter;  // same message sent several times
   if (r.counter >= 0) d.lastCounter = r.counter;
-  if (!d.hasTemp || !(r.hasTemp || r.hasHum || r.batteryPct >= 0) || repeat) return;
+  // Only a new temperature refreshes the sensor: humidity or battery messages
+  // alone must not keep a stale temperature alive (the sensor times out and
+  // the room falls back). Humidity and battery ride along with the next one.
+  if (r.hasTemp && !repeat) {
+    d.tempMs = now;
+    d.newTemp = true;
+  }
+  flush(d, now);
+}
+
+// Forwards a pending temperature, at most once per interval; a value received
+// within the interval is delivered when it expires (tick), not dropped.
+void BleHub::flush(BleDevice& d, Millis now) {
+  if (!d.newTemp) return;
   if (d.forwarded && elapsed(now, d.lastForwardMs) < kForwardIntervalMs) return;
+  d.newTemp = false;
   d.forwarded = true;
   d.lastForwardMs = now;
   ++stats.readings;
   int8_t batOk = d.batteryPct < 0 ? -1 : (d.batteryPct >= 15 ? 1 : 0);
-  sensors_.updateExtended(sensorId(mac), d.temp, d.hasHum, d.hum, batOk, qualityFromRssi(rssi), now,
+  sensors_.updateExtended(sensorId(d.mac), d.temp, d.hasHum, d.hum, batOk, qualityFromRssi(d.rssi), d.tempMs,
                           static_cast<int8_t>(d.batteryPct));
 }
 
 void BleHub::tick(Millis now) {
+  if (cfg.enabled)
+    for (auto& d : devices_) flush(d, now);
   devices_.erase(std::remove_if(devices_.begin(), devices_.end(),
                                 [&](const BleDevice& d) { return elapsed(now, d.lastMs) > kForgetMs; }),
                  devices_.end());

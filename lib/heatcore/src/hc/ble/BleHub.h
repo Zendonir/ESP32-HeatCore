@@ -36,8 +36,10 @@ struct BleDevice {
   int64_t lastCounter = -1;
   uint32_t adverts = 0;
   Millis lastMs = 0;
+  Millis tempMs = 0;         // reception of the last new temperature
   Millis lastForwardMs = 0;
   bool forwarded = false;
+  bool newTemp = false;      // a temperature not yet forwarded (waits for the interval)
 };
 
 struct BleStats {
@@ -80,6 +82,7 @@ class BleHub {
 
  private:
   BleDevice& device(const Mac& m, Millis now);
+  void flush(BleDevice& d, Millis now);
   SensorManager& sensors_;
   std::vector<BleDevice> devices_;
   uint32_t revision_ = 0;

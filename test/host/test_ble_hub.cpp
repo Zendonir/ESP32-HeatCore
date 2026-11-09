@@ -88,6 +88,16 @@ TEST(ble_hub_discover_adopt_and_rate_limit) {
   CHECK_EQ(s->updates, upd + 1);
   CHECK_NEAR(s->value, 21.7f, 0.01f);
   CHECK_NEAR(s->humidity, 49.f, 0.01f);
+  // a new value inside the interval, then only repeats of it: delivered when the interval expires
+  r.clock.advance(5000);
+  send(r, m, pvvx(m, 22.4f, 48.f, 79, 4));
+  CHECK_NEAR(s->value, 21.7f, 0.01f);
+  for (int i = 0; i < 30; ++i) {
+    r.run(1000, false);
+    send(r, m, pvvx(m, 22.4f, 48.f, 79, 4));
+  }
+  CHECK_EQ(s->updates, upd + 2);
+  CHECK_NEAR(s->value, 22.4f, 0.01f);
 
   auto st = parse(call(api, "GET", "/api/ble"));
   CHECK(st["enabled"] | false);
@@ -164,6 +174,16 @@ TEST(ble_hub_split_xiaomi_messages_and_device_list_limit) {
   CHECK_NEAR(s->value, 22.1f, 0.01f);
   CHECK(s->hasHumidity);
   CHECK_NEAR(s->humidity, 48.3f, 0.01f);
+  // only humidity and battery messages from now on: the temperature is not
+  // refreshed by them, the sensor times out (room falls back)
+  for (int i = 0; i < 20 * 60 / 10; ++i) {
+    r.run(10000, false);
+    send(r, m, mi(static_cast<uint8_t>(10 + i), {0x06, 0x10, 0x02, 0xE3, 0x01}));
+  }
+  CHECK(!s->available());
+  send(r, m, mi(200, {0x04, 0x10, 0x02, 0xDD, 0x00}));
+  r.run(1000, false);
+  CHECK(s->available());
   // many devices in range: the list stays bounded, the oldest is forgotten
   for (int i = 0; i < 40; ++i) {
     r.clock.advance(10);
