@@ -41,6 +41,12 @@ TEST(onewire_id_is_bus_independent_and_migrated) {
   r.sys.sensors.update("ow1:28DC26D8000000DE", 21.5f, r.clock.ms);
   CHECK_NEAR(s->value, 21.2f, 0.001f);
   CHECK(r.sys.sensors.discovered().empty());
+  // calibration against a reference given with its old id
+  r.sys.sensors.update("ow:2848F0503A190100", 20.5f, r.clock.ms);
+  std::vector<SensorManager::CalibrationResult> res;
+  CHECK_STR(r.sys.sensors.calibrate({"ow1:28DC26D8000000DE", "ow2:2848F0503A190100"}, "ow2:2848F0503A190100", 0.f, res),
+            "");
+  CHECK_NEAR(s->offset, -1.0f, 0.001f);  // raw 21.5 -> 20.5
 
   // the reverse order of the duplicates gives the same result
   r.load(ConfigSection::Sensors, R"({"sensors":[

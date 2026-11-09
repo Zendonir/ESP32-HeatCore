@@ -347,8 +347,9 @@ size_t SensorManager::countAvailable() const {
   return n;
 }
 
-std::string SensorManager::calibrate(const std::vector<std::string>& ids, const std::string& reference,
+std::string SensorManager::calibrate(const std::vector<std::string>& ids, const std::string& referenceIn,
                                      float refValue, std::vector<CalibrationResult>& out, float* targetOut) {
+  const std::string reference = canonicalSensorId(referenceIn);  // old 1-Wire ids (with bus) still work
   out.clear();
   if (ids.empty()) return "Keine Sensoren ausgewaehlt";
   if (ids.size() > kMaxSensors) return "Zu viele Sensoren";
