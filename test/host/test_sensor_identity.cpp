@@ -55,6 +55,13 @@ TEST(onewire_id_is_bus_independent_and_migrated) {
   CHECK_EQ(r.sys.sensors.sensors().size(), 1u);
   CHECK_STR(r.sys.sensors.sensors()[0].name, "Bad");
   CHECK_NEAR(r.sys.sensors.sensors()[0].offset, -0.3f, 0.001f);
+  // two automatically adopted entries (name = old id): no old id left as name
+  r.load(ConfigSection::Sensors, R"({"sensors":[
+      {"id":"ow1:28DC26D8000000DE","name":"ow1:28DC26D8000000DE"},
+      {"id":"ow3:28DC26D8000000DE","name":"ow3:28DC26D8000000DE"},
+      {"id":"ow2:2848F0503A190100","name":"ow2:2848F0503A190100"}]})");
+  CHECK_EQ(r.sys.sensors.sensors().size(), 2u);
+  for (auto& x : r.sys.sensors.sensors()) CHECK_STR(x.name, x.id);
 
   // safety and rules referring to old ids are converted
   r.load(ConfigSection::Safety, R"({"flowSensorId":"ow2:2848F0503A190100"})");
