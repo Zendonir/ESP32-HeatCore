@@ -63,8 +63,8 @@ bool BleScanner::begin() {
     error_ = "Bluetooth-Stack startet nicht";
     return false;
   }
-  started_ = true;
   error_.clear();
+  started_ = true;
   return true;
 }
 

@@ -682,15 +682,19 @@ void bleTask(void*) {
       want = g_sys->ble.cfg.enabled;
     }
     uint32_t now = millis();
+    // the loop task owns the scanner while it starts it (g_bleInit == 1):
+    // touch it only when idle; observing 2/3 below synchronizes with begin()
+    bool initBusy = g_bleInit.load() == 1;
+    bool ready = !initBusy && g_ble.started();
     // Start only after a new firmware has been confirmed: a problem in the
     // Bluetooth start can then never prevent an update from being accepted.
     bool probation = g_ota.onProbation();
-    if (want && !g_ble.started() && !g_bleBlocked && BleScanner::supported() && probation && g_bleInit == 0 &&
+    if (want && !initBusy && !ready && !g_bleBlocked && BleScanner::supported() && probation && g_bleInit == 0 &&
         now - lastStatus > 1000) {
       Lock lk(g_sys->mutex());
       g_sys->ble.radioError = "startet, sobald die neue Firmware bestaetigt ist (ca. 3 min nach dem Update)";
     }
-    if (want && !g_ble.started() && !g_bleBlocked && BleScanner::supported() && !probation && g_bleInit == 0 &&
+    if (want && !initBusy && !ready && !g_bleBlocked && BleScanner::supported() && !probation && g_bleInit == 0 &&
         now > 20000 && (lastTry == 0 || now - lastTry > 300000)) {
       lastTry = now;
       size_t freeInt = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
@@ -715,6 +719,7 @@ void bleTask(void*) {
       g_bleInit = 0;
       bool ok = init == 2;
       if (ok) bleOkSince = now ? now : 1;
+      ready = ok && g_ble.started();
       else g_bleStartMark = 0;
       HC_LOGI("ble", "Bluetooth host %s, %u bytes internal RAM free", ok ? "ready" : "failed",
               static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
@@ -726,23 +731,23 @@ void bleTask(void*) {
       g_bleStartMark = 0;
       bleOkSince = 0;
     }
-    if (g_ble.started() && !supervised) {
+    if (ready && !supervised) {
       watchTask(kBeatBle);
       supervised = true;
     }
     if (supervised) beat(kBeatBle);
-    if (g_ble.started()) g_ble.setScanning(want);
+    if (ready) g_ble.setScanning(want);
     size_t n = 0;
-    while (n < 16 && g_ble.pop(batch[n])) ++n;
+    while (ready && n < 16 && g_ble.pop(batch[n])) ++n;
     if (n || now - lastStatus > 1000) {
       lastStatus = now;
       Lock lk(g_sys->mutex());
       for (size_t i = 0; i < n; ++i)
         g_sys->ble.ingest(hc::ble::macFromLittleEndian(batch[i].mac), batch[i].rssi, batch[i].data, batch[i].len,
                           millis());
-      g_sys->ble.running = g_ble.scanning();
+      g_sys->ble.running = ready && g_ble.scanning();
       g_sys->ble.stats.dropped = g_ble.dropped();
-      if (g_ble.started()) g_sys->ble.radioError = g_ble.error();
+      if (ready) g_sys->ble.radioError = g_ble.error();
       else if (g_bleBlocked && want)
         g_sys->ble.radioError = "nach Neustart wegen Speichermangel nicht gestartet (Bluetooth deaktivieren oder neu starten)";
     }
