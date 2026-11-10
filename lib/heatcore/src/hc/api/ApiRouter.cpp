@@ -1282,6 +1282,20 @@ ApiResponse ApiRouter::handle(const ApiRequest& req) {
         } else {
           c.fail(404, "?");
         }
+      } else if (head == "heatdemand") {
+        // heat demand to the boiler / heating circuit (e.g. RC35 heating circuit 2 via EMS-ESP)
+        if (p.size() == 1 && c.is("GET")) {
+          sys.heatDemand.toJson(out["config"].to<JsonObject>());
+          sys.heatDemandStatusJson(out["status"].to<JsonObject>());
+        } else if (p.size() == 1 && c.is("PUT")) {
+          c.okOrFail(sys.heatDemandFromJson(c.body()));
+        } else if (p.size() == 2 && p[1] == "test" && c.is("POST")) {
+          std::string which = c.body()["send"] | "";
+          if (which != "on" && which != "off" && which != "fallback") c.fail(400, "send: on, off oder fallback");
+          else c.okOrFail(sys.heatDemandSend(which));
+        } else {
+          c.fail(404, "?");
+        }
       } else if (head == "ble") {
         // Bluetooth LE thermometers
         if (p.size() == 1 && c.is("GET")) {
