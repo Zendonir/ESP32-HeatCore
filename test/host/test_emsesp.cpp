@@ -288,3 +288,35 @@ TEST(emsesp_validation) {
   CHECK_EQ(sent.size(), 2u);
   CHECK_STR(sent[1].payload, "day");
 }
+
+TEST(emsesp_output_change_keeps_circuit_and_retake_waits_for_report) {
+  Rig r;
+  std::vector<Sent> sent;
+  ApiRouter api(r.sys);
+  setup(r, sent, api);
+  r.load(ConfigSection::Io, R"j({"outputs":[{"n":9,"name":"Pumpe","function":"general"},{"n":10,"name":"Pumpe 2","function":"general"}]})j");
+  CHECK_EQ(call(api, "PUT", "/api/heatdemand", R"j({"enabled":true,"target":"emsesp","output":9,"runOnSec":600,"minOnSec":300,"minOffSec":120})j").status, 200);
+  Rc35 rc;
+  feed(r, 19.f, 120, &rc, &sent);
+  CHECK(r.sys.heatDemand.active);
+  CHECK(r.output(9));
+  CHECK_STR(r.sys.ems.cfg.savedReduce, "outdoor");
+  // only the pump output changes: the heating circuit stays taken over, nothing is sent
+  size_t n = sent.size();
+  CHECK_EQ(call(api, "PUT", "/api/heatdemand", R"j({"enabled":true,"target":"emsesp","output":10,"runOnSec":600,"minOnSec":300,"minOffSec":120})j").status, 200);
+  CHECK_EQ(sent.size(), n);
+  CHECK_STR(r.sys.ems.cfg.savedReduce, "outdoor");
+  CHECK_STR(r.sys.ems.cfg.savedMode, "auto");
+  r.run(2000, false);
+  CHECK(!r.output(9));
+  CHECK(r.output(10));
+  // given back by the test button and taken over again at once: the cached
+  // report (HeatCore's own day / switch-off) must not become the "original"
+  CHECK_EQ(call(api, "POST", "/api/heatdemand/test", R"j({"send":"fallback"})j").status, 200);
+  CHECK(r.sys.ems.cfg.savedReduce.empty());
+  r.run(3000, false);  // no report in between
+  CHECK(r.sys.ems.cfg.savedReduce.empty());
+  feed(r, 19.f, 90, &rc, &sent);  // the RC35 reports auto / outdoor again; taken over after a minute
+  CHECK_STR(r.sys.ems.cfg.savedReduce, "outdoor");
+  CHECK_STR(r.sys.ems.cfg.savedMode, "auto");
+}

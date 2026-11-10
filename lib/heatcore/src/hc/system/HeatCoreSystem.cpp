@@ -1290,6 +1290,7 @@ void HeatCoreSystem::updateHeatDemand(Millis now) {
     bool ok = ems.st.mode == (hd.active ? EmsMode::Day : EmsMode::Night) && ems.st.reduce == EmsReduce::NoFrost;
     send = !ok && elapsed(now, hd.lastSendMs) >= EmsEsp::kConfirmMs;
   }
+  if (hd.cfg.target == "mqtt" && hd.cfg.topic.empty()) send = false;  // output only
   if (send) heatDemandSend(hd.active ? "on" : "off");
 }
 
@@ -1309,8 +1310,6 @@ std::string HeatCoreSystem::heatDemandSend(const std::string& which) {
     }
     return err;
   }
-  hd.lastSendMs = now ? now : 1;
-  hd.sentOnce = true;
   const std::string& payload = which == "on" ? hd.cfg.payloadOn : which == "off" ? hd.cfg.payloadOff : hd.cfg.payloadFallback;
   std::string err;
   if (hd.cfg.topic.empty()) err = "kein MQTT-Thema eingetragen";
@@ -1318,9 +1317,12 @@ std::string HeatCoreSystem::heatDemandSend(const std::string& which) {
   else if (!mqttCfg.enabled) err = "MQTT ist ausgeschaltet (System -> MQTT)";
   else if (!mqttPublishRaw) err = "MQTT nicht verfuegbar";
   if (!err.empty()) {
+    hd.sentOnce = false;  // still pending: sent as soon as it can be (also with repeat 0)
     hd.lastSent = err;
     return err;
   }
+  hd.lastSendMs = now ? now : 1;
+  hd.sentOnce = true;
   mqttPublishRaw(hd.cfg.topic, payload, hd.cfg.retain);
   ++hd.sends;
   hd.lastSent = which;
@@ -1328,11 +1330,18 @@ std::string HeatCoreSystem::heatDemandSend(const std::string& which) {
 }
 
 void HeatCoreSystem::heatDemandRelease() {
+  heatDemandReleaseTarget();
+  heatDemandReleaseOutput(heatDemand.cfg.output);
+}
+
+void HeatCoreSystem::heatDemandReleaseTarget() {
   HeatDemand& hd = heatDemand;
   if (hd.cfg.target == "emsesp" ? !ems.cfg.savedReduce.empty() || hd.sentOnce
                                 : !hd.cfg.payloadFallback.empty() && !hd.cfg.topic.empty())
     heatDemandSend("fallback");
-  int n = hd.cfg.output;
+}
+
+void HeatCoreSystem::heatDemandReleaseOutput(int n) {
   if (n >= 1 && n <= kNumOutputs && io.outCfg[static_cast<size_t>(n - 1)].function == OutputFunction::General)
     io.setRequest(n - 1, false, clock_.nowMs());
 }
@@ -1350,17 +1359,23 @@ std::string HeatCoreSystem::heatDemandFromJson(JsonObjectConst o) {
   std::string err = heatDemand.fromJson(o);
   if (!err.empty()) return err;
   const HeatDemandConfig& nc = heatDemand.cfg;
-  // switched off, or another target (output, topic, messages - e.g. another
-  // heating circuit): give the old target back, then serve the new one now
-  bool targetChanged = old.output != nc.output || old.target != nc.target || old.topic != nc.topic || old.payloadOn != nc.payloadOn ||
-                       old.payloadOff != nc.payloadOff || old.payloadFallback != nc.payloadFallback;
+  // switched off, or another target (EMS-ESP <-> MQTT, topic, messages - e.g.
+  // another heating circuit): give the old target back, then serve the new one
+  // now. Only the output changed: release the old output, the heating circuit
+  // stays taken over (giving it back and taking it over again at once could
+  // remember HeatCore's own settings as the original ones).
+  bool targetChanged = old.target != nc.target ||
+                       (nc.target == "mqtt" && (old.topic != nc.topic || old.payloadOn != nc.payloadOn ||
+                                                old.payloadOff != nc.payloadOff ||
+                                                old.payloadFallback != nc.payloadFallback));
   if (wasEnabled && (!nc.enabled || targetChanged)) {
     HeatDemandConfig cur = heatDemand.cfg;
     heatDemand.cfg = old;
-    heatDemandRelease();
+    heatDemandReleaseTarget();
     heatDemand.cfg = cur;
     heatDemand.sentOnce = false;  // the new target gets the current state right away
   }
+  if (wasEnabled && (!nc.enabled || old.output != nc.output)) heatDemandReleaseOutput(old.output);
   markDirty(ConfigSection::Heating);
   return std::string();
 }
@@ -1404,6 +1419,9 @@ std::string HeatCoreSystem::emsSend(const std::string& which) {
     // give the heating circuit back to the thermostat as it was
     pub("mode", ems.cfg.savedMode.empty() ? std::string("auto") : ems.cfg.savedMode);
     if (!ems.cfg.savedReduce.empty() && ems.cfg.savedReduce != "nofrost") pub("reducemode", ems.cfg.savedReduce);
+    // the cached thermostat data still show HeatCore's own settings: a new
+    // take-over must wait for the next report, or it would remember those
+    ems.st.thermoMs = 0;
     if (!ems.cfg.savedReduce.empty()) {
       HC_LOGI(TAG, "EMS-ESP: heating circuit %u given back (mode %s, reduction %s)", ems.cfg.hc,
               ems.cfg.savedMode.c_str(), ems.cfg.savedReduce.c_str());

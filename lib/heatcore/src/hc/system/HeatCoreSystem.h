@@ -255,6 +255,8 @@ class HeatCoreSystem : public IAutomationContext {
   void controlCycle(Millis now);
   void updateHeatDemand(Millis now);
   std::string emsSend(const std::string& which);  // heat demand target "emsesp"
+  void heatDemandReleaseTarget();                 // fallback to the MQTT / EMS-ESP target
+  void heatDemandReleaseOutput(int output);
   void computeOutputs(Millis now);
   void minuteTasks(Millis now);
   void checkCircuitFaults(Millis now);
