@@ -11,7 +11,9 @@ constexpr const char* TAG = "mqtt";
 }
 
 MqttLink::MqttLink(hc::HeatCoreSystem& sys) : sys_(sys), bridge_(sys), client_(net_) {
-  client_.setBufferSize(4096);
+  // EMS-ESP publishes ~3 KB per device (thermostat_data with two circuits);
+  // the buffer is allocated once (PSRAM)
+  client_.setBufferSize(8192);
   client_.setKeepAlive(30);
   client_.setSocketTimeout(5);
   client_.setCallback([this](char* t, uint8_t* p, unsigned int l) { onMessage(t, p, l); });

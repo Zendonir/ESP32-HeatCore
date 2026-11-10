@@ -26,6 +26,10 @@ struct HeatDemandConfig {
   uint16_t minOffSec = 300;        // shortest off-period
   uint16_t repeatSec = 300;        // resend the current state (0 = only on change)
   int output = 0;                  // general output 1..16, 0 = none
+  // "mqtt": free MQTT message (topic/payloads below)
+  // "emsesp": heating circuit of the EMS-ESP connection, switched directly
+  //           (day / night with switch-off reduction, given back with auto)
+  std::string target = "mqtt";
   std::string topic;               // full MQTT topic, empty = no MQTT
   std::string payloadOn, payloadOff;
   std::string payloadFallback;     // sent when HeatCore gives control back (disabled, restart)

@@ -30,6 +30,7 @@ SensorKind sensorKindFromKey(const std::string& id) {
   if (id.rfind("rf:", 0) == 0) return SensorKind::Rf;
   if (id.rfind("ai:", 0) == 0) return SensorKind::Analog;
   if (id.rfind("ext:", 0) == 0) return SensorKind::External;
+  if (id.rfind("ems:", 0) == 0) return SensorKind::External;
   if (id.rfind("ble:", 0) == 0) return SensorKind::Ble;
   return SensorKind::Virtual;
 }

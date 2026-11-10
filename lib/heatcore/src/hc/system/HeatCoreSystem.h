@@ -19,6 +19,7 @@
 #include "hc/core/Clock.h"
 #include "hc/core/Event.h"
 #include "hc/display/Display.h"
+#include "hc/ems/EmsEsp.h"
 #include "hc/heating/HeatDemand.h"
 #include "hc/heating/Heating.h"
 #include "hc/heating/Safety.h"
@@ -138,6 +139,7 @@ class HeatCoreSystem : public IAutomationContext {
   ExternalSources external;  // MQTT subscriptions / HTTP polls of other devices
   ble::BleHub ble{sensors};  // Bluetooth LE thermometers (passive scanning)
   HeatDemand heatDemand;     // tells boiler / heating circuit / pump when rooms need heat
+  EmsEsp ems;                // EMS-ESP gateway: boiler/thermostat/mixer values, heating circuit control
   DisplayManager display;
   AutomationEngine automation;
 
@@ -213,6 +215,12 @@ class HeatCoreSystem : public IAutomationContext {
   std::string heatDemandSend(const std::string& which);  // "on" | "off" | "fallback" (also test)
   void heatDemandRelease();                             // give control back (disable, restart)
 
+  // ---- EMS-ESP
+  // MQTT message from EMS-ESP: parses it and feeds the "ems:..." sensors. True if it was one.
+  bool emsIngest(const std::string& topic, const std::string& payload);
+  std::string emsFromJson(JsonObjectConst o);  // API (keeps the remembered reduction mode)
+  void emsStatusJson(JsonObject o) const;
+
   // ---- IAutomationContext
   Millis now() const override { return clock_.nowMs(); }
   int64_t epoch() const override { return clock_.epoch(); }
@@ -246,6 +254,7 @@ class HeatCoreSystem : public IAutomationContext {
   void runBindings(const std::vector<InputBinding>& bindings, const Event& e);
   void controlCycle(Millis now);
   void updateHeatDemand(Millis now);
+  std::string emsSend(const std::string& which);  // heat demand target "emsesp"
   void computeOutputs(Millis now);
   void minuteTasks(Millis now);
   void checkCircuitFaults(Millis now);

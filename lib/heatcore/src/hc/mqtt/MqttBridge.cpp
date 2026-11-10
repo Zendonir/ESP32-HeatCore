@@ -59,6 +59,7 @@ std::vector<std::string> MqttBridge::subscriptions() const {
   std::vector<std::string> s = {b + "/room/+/+/set", b + "/mode/set",   b + "/rf/tx/+/+/send", b + "/display/+/set",
                                 b + "/output/+/set", b + "/rule/+/run", b + "/in/#"};
   for (auto& t : sys_.external.mqttTopics()) s.push_back(t);  // other devices (Shelly, Button+, ...)
+  for (auto& t : sys_.ems.topics()) s.push_back(t);            // EMS-ESP boiler / thermostat / mixer
   return s;
 }
 
@@ -613,6 +614,7 @@ void MqttBridge::onEvent(const Event& e, std::vector<MqttMsg>& out) const {
 
 bool MqttBridge::handle(const std::string& topic, const std::string& payload, std::string* error) {
   // values and buttons of other devices (external sources)
+  if (sys_.emsIngest(topic, payload)) return true;  // EMS-ESP data
   bool external = sys_.external.ingestMqtt(sys_, topic, payload, sys_.clock().nowMs());
   std::string b = base() + "/";
   if (topic.compare(0, b.size(), b) != 0) return external;

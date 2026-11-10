@@ -128,7 +128,7 @@ const DAYS=['Mo','Di','Mi','Do','Fr','Sa','So'];
 // are shown in the expert view (or while open) - nothing is removed.
 const NAV=[
  ['Heizung',[['#/','Übersicht'],['#/rooms','Räume & Zeitpläne'],['#/stats','Statistik'],['#/model','Lernmodell',1]]],
- ['Einrichtung',[['#/setup','Erste Schritte'],['#/sensors','Temperatursensoren'],['#/ble','Bluetooth-Thermometer'],['#/hw/outputs','Ventile & Ausgänge'],['#/heatdemand','Wärmeanforderung (Kessel)'],['#/hw/inputs','Taster & Fensterkontakte'],['#/rf','Funkgeräte'],['#/rf/learn','Funkgerät anlernen'],['#/rules','Automationen'],['#/display','Display'],
+ ['Einrichtung',[['#/setup','Erste Schritte'],['#/sensors','Temperatursensoren'],['#/ble','Bluetooth-Thermometer'],['#/hw/outputs','Ventile & Ausgänge'],['#/heatdemand','Wärmeanforderung (Kessel)'],['#/emsesp','EMS-ESP (Kessel)'],['#/hw/inputs','Taster & Fensterkontakte'],['#/rf','Funkgeräte'],['#/rf/learn','Funkgerät anlernen'],['#/rules','Automationen'],['#/display','Display'],
   ['#/external','Externe Quellen (MQTT/HTTP)',1],['#/hw/analog','Analogeingänge',1],['#/hw/onewire','1-Wire-Busse',1],['#/rf/sensors','Funk-Temperatursensoren',1]]],
  ['Diagnose',[['#/hw/selftest','Selbsttest & Status'],['#/rules/log','Ereignisprotokoll',1],['#/rf/monitor','Funk-Empfangsmonitor',1],['#/rf/diag','Funkdiagnose',1],['#/rf/tx','Funk-Sender',1],['#/rules/test','Automationen testen',1],['#/rules/catalog','Automations-Bausteine',1],
   ['#/display/pages','Display: Seiten',1],['#/display/settings','Display: Einstellungen',1],['#/display/status','Display: Diagnose',1]]],
@@ -152,6 +152,7 @@ const HELP={
  '/model':'Das Lernmodell lernt, wie schnell jeder Raum aufheizt und abkühlt, und hilft so, Überschwingen zu vermeiden.',
  '/hw/outputs':'Die 16 Ausgänge der Platine: als Heizkreis (Ventil) oder allgemeiner Schaltausgang nutzen und zum Testen von Hand schalten.',
  '/heatdemand':'Sagt dem Kessel bzw. Heizkreis (z. B. Heizkreis 2 am RC35 über EMS-ESP), wann HeatCore-Räume Wärme brauchen – und schaltet bei Bedarf eine Pumpe.',
+ '/emsesp':'Liest Kessel, Thermostat (z. B. RC35) und Mischer über das EMS-ESP-Gateway und stellt den Heizkreis für die Wärmeanforderung bereit.',
  '/hw/inputs':'Die 16 Eingänge der Platine: Taster, Fensterkontakte oder Schalter anschließen und ihnen eine Aufgabe geben.',
  '/hw/analog':'Die 4 Analogeingänge (0–5 V oder 4–20 mA) für zusätzliche Messwerte.',
  '/hw/onewire':'Die drei 1-Wire-Anschlüsse für DS18B20-Temperaturfühler: welcher Fühler gerade wo steckt, mit Diagnose.',
@@ -343,41 +344,79 @@ routes['/sensors']=async m=>{
 
 // ------------------------------------------------------------ heat demand (boiler / heating circuit)
 routes['/heatdemand']=async m=>{
- const [d,heat,io]=await Promise.all([GET('heatdemand'),GET('heating'),GET('io')]);const c=d.config;
- c.rooms=c.rooms||[];const mins={};for(const k of ['runOnSec','minOnSec','minOffSec','repeatSec'])mins[k]=Math.round((c[k]||0)/60*10)/10;
+ const [d,heat,io,ems]=await Promise.all([GET('heatdemand'),GET('heating'),GET('io'),GET('emsesp')]);const c=d.config;
+ c.rooms=c.rooms||[];c.target=c.target||'mqtt';const mins={};for(const k of ['runOnSec','minOnSec','minOffSec','repeatSec'])mins[k]=Math.round((c[k]||0)/60*10)/10;
  const outs=[[0,'– kein Ausgang –']].concat(io.outputs.filter(o=>o.function==='general').map(o=>[o.n,'Ausgang '+o.n+(o.name?' – '+o.name:'')]));
- const st=h('div',{class:'card'});const inputs={};
+ const st=h('div',{class:'card'});const inputs={};const hc=ems.config.hc||2;
  const field2=(label,k,help)=>{const i=inp(c,k,null,{style:'width:100%;font-family:monospace'});inputs[k]=i;return field(label,i,help)};
+ const mq=h('div',{class:'form'},
+   ...field2('MQTT-Thema','topic','Vollständiges Thema. MQTT muss unter System → MQTT eingerichtet sein.'),
+   ...field2('Nachricht „Wärme an“','payloadOn'),
+   ...field2('Nachricht „Wärme aus“','payloadOff'),
+   ...field2('Nachricht „Rückgabe“','payloadFallback','Wird gesendet, wenn HeatCore die Steuerung abgibt (Funktion aus, Neustart).'),
+   ...field('Retain',inp(c,'retain','checkbox'),'Normalerweise aus.'));
+ const emsHint=h('div',{class:'hint'});
+ const showTarget=()=>{mq.style.display=c.target==='mqtt'?'':'none';emsHint.style.display=c.target==='emsesp'?'':'none';
+  emsHint.innerHTML='';emsHint.append(ems.config.enabled?'Heizkreis '+hc+' über EMS-ESP („'+ems.config.base+'“). HeatCore stellt die Absenkart beim Übernehmen selbst auf Abschaltbetrieb und gibt den Heizkreis später so zurück, wie er war.':h('span',{class:'bad'},'Die EMS-ESP-Anbindung ist noch aus – zuerst unter Einrichtung → EMS-ESP einschalten.'),' ',h('a',{href:'#/emsesp'},'EMS-ESP-Einstellungen'))};
  m.append(h('h2',null,'Wärmeanforderung (Kessel/Heizkreis)'),st,
   h('div',{class:'card'},h('h3',{style:'margin-top:0'},'Einstellungen'),h('div',{class:'form'},
    ...field('Aktiv',inp(c,'enabled','checkbox')),
+   ...field('Ziel',h('div',null,sel([['emsesp','Heizkreis am Thermostat über EMS-ESP (direkt)'],['mqtt','Eigene MQTT-Nachricht']],c.target,v=>{c.target=v;showTarget()}),emsHint)),
    ...field('Räume',h('div',null,heat.rooms.map(r=>{const cb=h('input',{type:'checkbox'});cb.checked=c.rooms.includes(r.id);cb.onchange=()=>{c.rooms=cb.checked?c.rooms.concat(r.id):c.rooms.filter(x=>x!==r.id)};return h('label',{style:'margin-right:12px'},cb,' '+(r.name||r.id))})),'Keiner angehakt = alle Räume. Nur Räume am gesteuerten Heizkreis anhaken.'),
    ...field('Nachlauf min',inp(mins,'runOnSec','number',{class:'n',step:1}),'So lange bleibt der Heizkreis nach dem letzten Wärmebedarf an (Fußbodenheizung: 10–20).'),
    ...field('Mindestlaufzeit min',inp(mins,'minOnSec','number',{class:'n',step:1}),'Verhindert kurzes Takten des Heizkreises.'),
    ...field('Mindestpause min',inp(mins,'minOffSec','number',{class:'n',step:1})),
-   ...field('Wiederholen alle min',inp(mins,'repeatSec','number',{class:'n',step:1}),'Sendet den Zustand regelmäßig erneut (0 = nur bei Änderung). Stellt sicher, dass der Heizkreis auch nach einer Änderung am RC35 oder einem Neustart von EMS-ESP stimmt.'),
-   ...field('Ausgang (optional)',sel(outs,c.output||0,v=>c.output=+v),'Zum Beispiel die Pumpe des Fußbodenverteilers. Nur Ausgänge mit der Funktion „Allgemein“.'),
-   ...field2('MQTT-Thema','topic','Vollständiges Thema, z. B. ems-esp/thermostat. MQTT muss unter System → MQTT eingerichtet sein (gleicher Broker wie EMS-ESP).'),
-   ...field2('Nachricht „Wärme an“','payloadOn'),
-   ...field2('Nachricht „Wärme aus“','payloadOff'),
-   ...field2('Nachricht „Rückgabe“','payloadFallback','Wird gesendet, wenn HeatCore die Steuerung abgibt (Funktion aus, Neustart): der Heizkreis regelt dann wieder selbst.'),
-   ...field('Retain',inp(c,'retain','checkbox'),'Normalerweise aus.'),
+   ...field('Wiederholen alle min',inp(mins,'repeatSec','number',{class:'n',step:1}),'Eigene MQTT-Nachricht: sendet den Zustand regelmäßig erneut (0 = nur bei Änderung). Mit EMS-ESP wird nur gesendet, wenn das Thermostat etwas anderes meldet.'),
+   ...field('Ausgang (optional)',sel(outs,c.output||0,v=>c.output=+v),'Zum Beispiel die Pumpe des Fußbodenverteilers. Nur Ausgänge mit der Funktion „Allgemein“.')),
+   mq,
+   h('div',{class:'form'},
    ...field('',h('div',{class:'row'},
-    h('button',{onclick:()=>{const v={topic:'ems-esp/thermostat',payloadOn:'{"cmd":"mode","data":"day","hc":2}',payloadOff:'{"cmd":"mode","data":"night","hc":2}',payloadFallback:'{"cmd":"mode","data":"auto","hc":2}'};for(const k in v){c[k]=v[k];if(inputs[k])inputs[k].value=v[k]}toast('Vorlage eingesetzt – prüfen und speichern')}},'Vorlage: EMS-ESP, Heizkreis 2 am RC35'),
     h('button',{class:'p',onclick:()=>{const b={...c};for(const k in mins)b[k]=Math.round((+mins[k]||0)*60);act(()=>PUT('heatdemand',b),'Gespeichert').then(refresh)}},'Speichern'))),
-   ...field('Testen',h('div',{class:'row'},['on','off','fallback'].map(w=>h('button',{onclick:()=>act(()=>POST('heatdemand/test',{send:w}),'Gesendet').then(refresh)},{on:'„An“ senden',off:'„Aus“ senden',fallback:'„Rückgabe“ senden'}[w]))),'Sendet die gespeicherte Nachricht sofort – am RC35 bzw. im EMS-ESP-Protokoll prüfen, ob der Heizkreis umschaltet.'))),
+   ...field('Testen',h('div',{class:'row'},['on','off','fallback'].map(w=>h('button',{onclick:()=>act(()=>POST('heatdemand/test',{send:w}),'Gesendet').then(refresh)},{on:'„Wärme an“ senden',off:'„Wärme aus“ senden',fallback:'„Rückgabe“ senden'}[w]))),'Sendet sofort (gespeicherte Einstellungen). Am Thermostat bzw. unten im Zustand prüfen, ob der Heizkreis umschaltet.'))),
   h('details',{class:'card adv'},h('summary',null,'So funktioniert es mit RC35 und EMS-ESP'),
    h('ul',null,
-    h('li',null,'Braucht einer der Räume Wärme, schaltet HeatCore Heizkreis 2 am RC35 auf „Tag“. Ist kein Bedarf mehr da, nach dem Nachlauf auf „Nacht“. Heizkreis 1 (Heizkörper) und der Kessel bleiben beim RC35.'),
-    h('li',null,'Damit „Nacht“ den Heizkreis wirklich abschaltet (Pumpe und Mischer aus), am RC35 für Heizkreis 2 die Absenkart „Abschaltbetrieb“ einstellen (EMS-ESP: reducemode „nofrost“). Bei „reduziert“ läuft er mit abgesenkter Temperatur weiter.'),
-    h('li',null,'Die Vorlauftemperatur bestimmt weiter die Heizkurve des RC35 für Heizkreis 2. Die Raumtemperaturen regelt HeatCore über die Ventile.'),
-    h('li',null,'Wird HeatCore neu gestartet oder die Funktion abgeschaltet, sendet es die Nachricht „Rückgabe“ (Automatik). Fällt HeatCore unerwartet aus, bleibt der letzte Zustand stehen: in Home Assistant lässt sich dafür eine Automation anlegen („HeatCore nicht erreichbar → Heizkreis 2 auf Automatik“).'),
-    h('li',null,'Die Nachrichten der Vorlage entsprechen der EMS-ESP-Befehlsschnittstelle (Thema ems-esp/thermostat, {"cmd":…,"data":…,"hc":2}). Ist dein EMS-ESP-Basisthema anders, das Thema anpassen. Mit „Testen“ prüfen.'))));
- const refresh=async()=>{const x=(await GET('heatdemand')).status;st.innerHTML='';
-  st.append(h('div',{class:'row'},h('b',null,'Zustand: '),!x.enabled?chip('aus'):x.active?chip('Wärme angefordert','ok'):chip('keine Anforderung'),x.enabled&&x.sinceSec?h('span',{class:'muted'},' seit '+ago(x.sinceSec)):null),
+    h('li',null,'Braucht einer der Räume Wärme, schaltet HeatCore den Heizkreis am RC35 auf „Tag“, ist kein Bedarf mehr da, nach dem Nachlauf auf „Nacht“. Die anderen Heizkreise (z. B. Heizkörper) und der Kessel bleiben beim RC35.'),
+    h('li',null,'Beim Übernehmen merkt sich HeatCore Betriebsart und Absenkart des Heizkreises und stellt die Absenkart auf „Abschaltbetrieb“ (in Home Assistant: „Frostschutz“) – erst so schaltet „Nacht“ Pumpe und Mischer wirklich ab. Der Frostschutz des RC35 bleibt aktiv.'),
+    h('li',null,'Das Thermostat bestätigt jeden Befehl über EMS-ESP. Meldet es etwas anderes (z. B. am RC35 verstellt), korrigiert HeatCore das – höchstens einmal pro Minute.'),
+    h('li',null,'Die Vorlauftemperatur bestimmt weiter die Heizkurve des RC35. Die Raumtemperaturen regelt HeatCore über die Ventile.'),
+    h('li',null,'Wird die Funktion abgeschaltet oder HeatCore kontrolliert neu gestartet, bekommt der Heizkreis Betriebsart und Absenkart zurück. Fällt HeatCore unerwartet aus, bleibt der letzte Zustand stehen: in Home Assistant lässt sich dafür eine Automation anlegen („HeatCore nicht erreichbar → Heizkreis auf Automatik“).'))));
+ showTarget();
+ const refresh=async()=>{const x=(await GET('heatdemand')).status;st.innerHTML='';const e=x.ems;
+  st.append(...[h('div',{class:'row'},h('b',null,'Zustand: '),!x.enabled?chip('aus'):x.active?chip('Wärme angefordert','ok'):chip('keine Anforderung'),x.enabled&&x.sinceSec?h('span',{class:'muted'},' seit '+ago(x.sinceSec)):null),
    x.enabled?h('div',{class:'hint'},(x.requesting&&x.requesting.length?'Wärmebedarf: '+x.requesting.map(id=>{const r=heat.rooms.find(y=>y.id===id);return r?r.name||id:id}).join(', '):'Kein Raum braucht gerade Wärme')+(x.runOnLeftSec!=null?' · Nachlauf noch '+ago(x.runOnLeftSec):'')):null,
-   x.enabled?h('div',{class:'hint'},'Zuletzt gesendet: '+(x.lastSent||'–')+(x.lastSentAgoSec?' (vor '+ago(x.lastSentAgoSec)+')':'')+' · '+x.sends+' Nachrichten'):null,
-   x.warning?h('p',{class:'bad'},x.warning):null)};
+   e?h('div',{class:'row'},h('span',null,'Heizkreis '+e.hc+' am Thermostat: '),e.fresh?h('b',null,e.modeText+' · '+e.reduceText):h('span',{class:'muted'},'keine aktuellen Daten'),
+     e.confirmed===true?chip('bestätigt','ok'):e.confirmed===false?chip('weicht ab – wird korrigiert','warn'):null,
+     e.pump!=null?h('span',{class:'muted'},' · Pumpe '+(e.pump?'an':'aus')):null,e.flow!=null?h('span',{class:'muted'},' · Vorlauf '+e.flow+' °C'):null):null,
+   x.enabled?h('div',{class:'hint'},'Zuletzt gesendet: '+(x.lastSent||'–')+(x.lastSentAgoSec?' (vor '+ago(x.lastSentAgoSec)+')':'')+' · '+x.sends+' Befehle'+(e&&e.takenOver?' · Heizkreis von HeatCore übernommen':'')):null,
+   x.warning?h('p',{class:'bad'},x.warning):null].filter(Boolean))};
+ every(5000,refresh);
+};
+
+// ------------------------------------------------------------ EMS-ESP (boiler, thermostat, mixer)
+routes['/emsesp']=async m=>{
+ const d=await GET('emsesp');const c=d.config;
+ const st=h('div');
+ m.append(h('h2',null,'EMS-ESP (Kessel und Thermostat)'),
+  h('div',{class:'card'},h('h3',{style:'margin-top:0'},'Anbindung'),h('div',{class:'form'},
+   ...field('Aktiv',inp(c,'enabled','checkbox'),'Liest Kessel, Thermostat und Mischer über MQTT (gleicher Broker wie EMS-ESP, System → MQTT).'),
+   ...field('Basisthema',inp(c,'base',null,{style:'font-family:monospace'}),'Wie in EMS-ESP unter Einstellungen → MQTT (Standard: ems-esp). MQTT-Format „verschachtelt“ (Standard).'),
+   ...field('Heizkreis',sel([[1,'Heizkreis 1'],[2,'Heizkreis 2'],[3,'Heizkreis 3'],[4,'Heizkreis 4']],c.hc,v=>c.hc=+v),'Den HeatCore schalten darf (Wärmeanforderung) – z. B. die Fußbodenheizung. Die anderen bleiben unberührt.'),
+   ...field('Als Sensoren',inp(c,'sensors','checkbox'),'Außentemperatur, Vorläufe und Warmwasser erscheinen unter Temperatursensoren („ems:…“).'),
+   ...field('',h('div',{class:'row'},h('button',{class:'p',onclick:()=>act(()=>PUT('emsesp',c),'Gespeichert').then(refresh)},'Speichern'),
+     h('button',{onclick:()=>act(()=>POST('emsesp/sensors',{}),'Sensoren übernommen').then(refresh)},'Werte als Sensoren übernehmen'))))),
+  st);
+ const v=(x,u)=>x==null?'–':x+(u||'');const yn=x=>x==null?'–':x?'an':'aus';
+ const tbl=rows=>h('table',null,rows.map(([k,val])=>h('tr',null,h('td',null,k),h('td',null,h('b',null,val)))));
+ const age=g=>g.ageSec<0?chip('keine Daten','warn'):g.fresh?h('span',{class:'muted'},'vor '+ago(g.ageSec)):chip('veraltet ('+ago(g.ageSec)+')','warn');
+ const refresh=async()=>{const x=(await GET('emsesp')).status;st.innerHTML='';
+  if(!x.enabled){st.append(h('div',{class:'card'},h('p',{class:'muted'},'Aus.')));return}
+  const b=x.boiler,t=x.thermostat,mx=x.mixer;
+  st.append(
+   h('div',{class:'card'},h('div',{class:'row'},h('b',null,'EMS-ESP: '),x.online===false?chip('offline','bad'):x.online?chip('online','ok'):chip('Status unbekannt'),h('span',{class:'muted'},' '+x.messages+' Nachrichten'),x.takenOver?chip('Heizkreis '+t.hc+' von HeatCore übernommen','ok'):null),
+    x.error?h('p',{class:'bad'},x.error):null),
+   h('div',{class:'card'},h('h3',{style:'margin-top:0'},'Kessel ',age(b)),tbl([['Außentemperatur',v(b.outdoor,' °C')],['Vorlauf (Soll)',v(b.flow,' °C')+' ('+v(b.setFlow,' °C')+')'],['Rücklauf',v(b.return,' °C')],['Brenner',yn(b.burner)+(b.burnPower!=null?' · '+b.burnPower+' %':'')],['Heizbetrieb',yn(b.heatingActive)],['Warmwasser',v(b.dhw,' °C')+(b.dhwActive?' · wird bereitet':'')],['Anlagendruck',v(b.pressure,' bar')],['Statusmeldung',b.serviceCode||'–'],['Letzter Fehler',b.lastCode||'–']])),
+   h('div',{class:'card'},h('h3',{style:'margin-top:0'},'Thermostat, Heizkreis '+t.hc+' ',age(t)),t.modeText?tbl([['Betriebsart',t.modeText+(t.modeType?' (gerade '+t.modeType+')':'')],['Absenkart',t.reduceText],['Raumsoll',v(t.selTemp,' °C')],['Berechneter Vorlauf',v(t.targetFlow,' °C')],['Sommer/Winter',t.summerMode||'–'],['Heizsystem',t.heatingType||'–'],['Gedämpfte Außentemp.',v(t.dampedOutdoor,' °C')],['Letzter Fehler',t.lastCode||'–']]):h('p',{class:'muted'},'Noch keine Daten für diesen Heizkreis.')),
+   h('div',{class:'card'},h('h3',{style:'margin-top:0'},'Mischer, Heizkreis '+t.hc+' ',age(mx)),mx.ageSec<0?h('p',{class:'muted'},'Kein Mischermodul für diesen Heizkreis gemeldet.'):tbl([['Vorlauf',v(mx.flow,' °C')],['Mischer',v(mx.valve,' %')],['Pumpe',yn(mx.pump)]])))};
  every(5000,refresh);
 };
 

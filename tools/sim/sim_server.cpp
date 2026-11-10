@@ -103,6 +103,46 @@ void demo() {
      "triggers":[{"type":"manual"}],"actions":[{"type":"set_global_mode","mode":"vacation","durationSec":604800}]}]})");
   for (auto& r : g_sys->heating.rooms) g_plants[r.id] = Plant{};
   g_plants["bad"].T = 21.f;
+  // EMS-ESP with an RC35 (heating circuit 2 = underfloor heating of the living room)
+  loadJson(ConfigSection::Mqtt, R"({"enabled":true,"host":"broker.sim"})");
+  JsonDocument e;
+  deserializeJson(e, R"({"enabled":true,"base":"ems-esp","hc":2,"sensors":true})");
+  g_sys->emsFromJson(e.as<JsonObjectConst>());
+}
+
+// ---- EMS-ESP "bus": an RC35 that follows the commands of the heat demand
+struct SimRc35 {
+  std::string mode = "auto", reduce = "Au\xc3\x9f" "en";
+} g_rc;
+
+void simEmsCommand(const std::string& topic, const std::string& payload) {
+  const std::string b = g_sys->ems.cfg.base + "/thermostat/hc" + std::to_string(g_sys->ems.cfg.hc) + "/";
+  if (topic == b + "mode") g_rc.mode = payload == "day" ? "Tag" : payload == "night" ? "Nacht" : "auto";
+  if (topic == b + "reducemode")
+    g_rc.reduce = payload == "nofrost" ? "Frostschutz" : payload == "reduce" ? "reduziert" : payload == "room" ? "Raum" : "Au\xc3\x9f" "en";
+}
+
+void simEmsBus() {
+  if (!g_sys->ems.cfg.enabled) return;
+  const std::string base = g_sys->ems.cfg.base, hc = "hc" + std::to_string(g_sys->ems.cfg.hc);
+  bool on = g_rc.mode == "Tag" || (g_rc.mode == "auto" && g_rc.reduce != "Frostschutz");
+  float flow = on ? 28.f + (5.f - g_outdoor) * 0.4f : 20.f;
+  char buf[640];
+  std::snprintf(buf, sizeof(buf),
+                R"({"heatingactive":"%s","tapwateractive":"aus","selflowtemp":46,"outdoortemp":%.1f,"curflowtemp":%.1f,)"
+                R"("rettemp":%.1f,"syspress":1.5,"burngas":"%s","curburnpow":%d,"servicecode":"-H",)"
+                R"("lastcode":"9H(267) 14.07.2025 08:41","dhw":{"curtemp":59.6}})",
+                on ? "an" : "aus", g_outdoor, on ? 47.5f : 35.f, on ? 43.f : 33.f, on ? "an" : "aus", on ? 20 : 0);
+  g_sys->emsIngest(base + "/boiler_data", buf);
+  std::snprintf(buf, sizeof(buf),
+                R"({"dampedoutdoortemp":%.0f,"%s":{"seltemp":19.5,"mode":"%s","modetype":"%s","reducemode":"%s",)"
+                R"("targetflowtemp":%.0f,"summermode":"Winter","heatingtype":"Fussboden"}})",
+                g_outdoor, hc.c_str(), g_rc.mode.c_str(), on ? "Tag" : "Nacht", g_rc.reduce.c_str(), flow);
+  g_sys->emsIngest(base + "/thermostat_data", buf);
+  std::snprintf(buf, sizeof(buf), R"({"%s":{"flowtemphc":%.1f,"valvestatus":%d,"pumpstatus":"%s"}})", hc.c_str(),
+                flow + 0.4f, on ? 35 : 0, on ? "an" : "aus");
+  g_sys->emsIngest(base + "/mixer_data", buf);
+  g_sys->emsIngest(base + "/status", "online");
 }
 
 // ---- Bluetooth "air": a few thermometers in range (BLE scanning is enabled in the web UI)
@@ -177,6 +217,7 @@ void simLoop() {
       if (elapsed(g_clock.ms, lastBle) >= 10000) {
         lastBle = g_clock.ms;
         simBleAir();
+        simEmsBus();
       }
       g_sys->reportInputs(g_inputs, true);
       g_sys->reportOutputWrite(true);
@@ -428,6 +469,7 @@ int main(int argc, char** argv) {
   g_sys->platform.ip = "127.0.0.1";
   g_sys->platform.netDetail = "LAN verbunden, WLAN aus";
   g_sys->platform.firmware.slotSize = 0x400000;
+  g_sys->mqttPublishRaw = [](const std::string& t, const std::string& p, bool) { simEmsCommand(t, p); };
   g_sys->platformCommand = [](const std::string& cmd, JsonObjectConst) -> std::string {
     if (cmd == "selftest") {
       g_sys->selfTest = {{"Simulator", "ok", "alle Komponenten simuliert"},

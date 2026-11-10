@@ -38,6 +38,7 @@ void HeatDemand::toJson(JsonObject o) const {
   o["minOffSec"] = cfg.minOffSec;
   o["repeatSec"] = cfg.repeatSec;
   o["output"] = cfg.output;
+  o["target"] = cfg.target;
   o["topic"] = cfg.topic;
   o["payloadOn"] = cfg.payloadOn;
   o["payloadOff"] = cfg.payloadOff;
@@ -55,6 +56,7 @@ std::string HeatDemand::fromJson(JsonObjectConst o) {
   n.minOffSec = o["minOffSec"] | n.minOffSec;
   n.repeatSec = o["repeatSec"] | n.repeatSec;
   n.output = o["output"] | 0;
+  n.target = o["target"] | "mqtt";
   n.topic = o["topic"] | "";
   n.payloadOn = o["payloadOn"] | "";
   n.payloadOff = o["payloadOff"] | "";
@@ -64,14 +66,16 @@ std::string HeatDemand::fromJson(JsonObjectConst o) {
   if (n.minOnSec > 7200 || n.minOffSec > 7200) return "Mindestlauf-/pausenzeit max. 120 min";
   if (n.repeatSec != 0 && (n.repeatSec < 30 || n.repeatSec > 3600)) return "Wiederholen 0 oder 30..3600 s";
   if (n.output < 0 || n.output > 16) return "Ausgang 0..16";
+  if (n.target != "mqtt" && n.target != "emsesp") return "Ziel: mqtt oder emsesp";
+  bool mqtt = n.target == "mqtt";
   if (n.topic.size() > 120) return "MQTT-Thema max. 120 Zeichen";
   for (char c : n.topic)
     if (c == '+' || c == '#' || c == ' ') return "MQTT-Thema ohne Leerzeichen und Platzhalter (+, #)";
-  if (!n.topic.empty() && (n.payloadOn.empty() || n.payloadOff.empty()))
+  if (mqtt && !n.topic.empty() && (n.payloadOn.empty() || n.payloadOff.empty()))
     return "Nachricht fuer Ein und Aus angeben";
   if (n.payloadOn.size() > 200 || n.payloadOff.size() > 200 || n.payloadFallback.size() > 200)
     return "Nachrichten max. 200 Zeichen";
-  if (n.enabled && n.topic.empty() && n.output == 0) return "MQTT-Thema oder Ausgang angeben";
+  if (n.enabled && mqtt && n.topic.empty() && n.output == 0) return "MQTT-Thema oder Ausgang angeben";
   bool wasEnabled = cfg.enabled;
   cfg = std::move(n);
   ++revision;

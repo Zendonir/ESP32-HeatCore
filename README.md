@@ -60,6 +60,10 @@ Webinterface.
   (z. B. Heizkreis 2 am RC35 über EMS-ESP) und/oder über einen Ausgang
   (Pumpe), wann Räume Wärme brauchen. Mit Nachlauf, Mindestzeiten und
   Rückgabe an die eigene Regelung.
+* **EMS-ESP (Buderus/Junkers):** liest Kessel, Thermostat und Mischer über
+  das EMS-ESP-Gateway, bietet Außentemperatur, Vorläufe und Warmwasser als
+  Sensoren an und schaltet einen RC35-Heizkreis direkt – mit Rückmeldung
+  des Thermostats und Rückgabe der ursprünglichen Einstellungen.
 * **Home Assistant (optional):** MQTT-Discovery für alle Komponenten,
   eingeschränkte Rechte.
 
@@ -80,6 +84,7 @@ Webinterface.
 * [433-MHz-Funk, Sicherheit, Funkrecht, Temperatursensoren](docs/rf433.md)
 * [Bluetooth-Thermometer](docs/bluetooth-thermometer.md)
 * [Wärmeanforderung an Kessel/Heizkreis (z. B. RC35 über EMS-ESP)](docs/waermeanforderung.md)
+* [EMS-ESP: Kessel, Thermostat und Mischer lesen](docs/emsesp.md)
 * [OLED-Display](docs/display.md)
 * [Automationen, Sicherheit, Lernmodell](docs/automation-und-lernmodell.md)
 * [MQTT / Home Assistant und REST-API](docs/mqtt-und-api.md)
