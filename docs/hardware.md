@@ -35,7 +35,7 @@ Definiert in `src/platform/Board.h`.
 | I²C-Steckleiste (OLED) | XH2.54-4P | P19: SDA, SCL, GND, 3,3 V (A16-Schaltplan und Bestückungsdruck der V3.1 identisch) |
 | W5500 SCK/MOSI/MISO/CS/INT/RST | 42/43/44/15/2/1 | dokumentiert |
 | SD-Karte MOSI/SCK/MISO/CS/CD | 12/13/14/11/21 | dokumentiert |
-| Taster S1 / S2 | EN (Reset) / GPIO0 (Boot) | Produktseite; **keine Benutzertasten** |
+| Taster S1 / S2 | EN (Reset) / GPIO0 (Boot, „DOWNLOAD“) | Produktseite; S2 bedient das Display (ab 0.13.1) |
 | Freie GPIOs | GPIO39 / 40 / 41 | Blockschaltbild: ohne Pull-up auf der Platine; von der Firmware nicht belegt |
 | Versorgung | 12/24 V DC | Produktseite, Verpolschutz (NTC) |
 
@@ -199,8 +199,11 @@ GPIO43/44 (UART0) sind mit dem W5500 belegt. Serielle Ausgaben laufen deshalb
 
 ## Bedienelemente
 
-S1 (Reset) und S2 (Boot, GPIO0 = Strapping-Pin) werden **nicht** als
-Benutzertasten verwendet. Display-Navigation und Raumfunktionen erfolgen über:
+S1 (Reset) ist keine Benutzertaste. S2 (Boot/„DOWNLOAD“, GPIO0) zählt nur
+beim Einschalten als Strapping-Pin (gedrückt = Download-Modus); danach liest
+HeatCore ihn als Displaytaste: kurz = Display an / nächste Seite, lang (2 s) =
+Display dunkel. Ein beim Start gedrückter Taster wird erst nach dem Loslassen
+ausgewertet. Weitere Display-Navigation und Raumfunktionen erfolgen über:
 
 * Digitaleingänge (Aktionen „Display: nächste Seite“, „nächster Raum“,
   „Sollwert des angezeigten Raums ±0,5“),

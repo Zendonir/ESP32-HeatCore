@@ -8,7 +8,22 @@ namespace platform {
 
 namespace {
 constexpr const char* TAG = "mqtt";
+
+// PubSubClient::state() as text for the web UI
+const char* stateReason(int s) {
+  switch (s) {
+    case -4: return "Broker antwortet nicht (Zeitueberschreitung)";
+    case -3: return "Verbindung abgebrochen";
+    case -2: return "Broker nicht erreichbar - Adresse/Port pruefen";
+    case 1: return "Broker lehnt das Protokoll ab";
+    case 2: return "Broker lehnt die Client-ID ab";
+    case 3: return "Broker nicht verfuegbar";
+    case 4: return "Benutzer oder Passwort falsch";
+    case 5: return "nicht berechtigt (Benutzer/Rechte im Broker pruefen)";
+    default: return "Verbindung fehlgeschlagen";
+  }
 }
+}  // namespace
 
 MqttLink::MqttLink(hc::HeatCoreSystem& sys) : sys_(sys), bridge_(sys), client_(net_) {
   // EMS-ESP publishes ~3 KB per device (thermostat_data with two circuits);
@@ -60,9 +75,12 @@ bool MqttLink::connect() {
                 : client_.connect(clientId_.c_str(), cfg_.user.c_str(), cfg_.password.c_str(), willTopic_.c_str(), 1,
                                   true, "offline");
   if (!ok) {
-    HC_LOGW(TAG, "connect to %s:%u failed (state %d)", host_.c_str(), cfg_.port, client_.state());
+    int st = client_.state();
+    HC_LOGW(TAG, "connect to %s:%u failed (state %d)", host_.c_str(), cfg_.port, st);
+    lastError_ = std::string(stateReason(st)) + " (" + host_ + ":" + std::to_string(cfg_.port) + ")";
     return false;
   }
+  lastError_.clear();
   std::vector<std::string> subs;
   {
     std::lock_guard<std::recursive_mutex> lk(sys_.mutex());
@@ -112,6 +130,10 @@ void MqttLink::loop(bool online) {
     }
     reconnect_ = false;
     cfg_.enabled = enabled;
+    // new settings: try at once, not after the back-off of earlier failures
+    backoffMs_ = 2000;
+    lastAttempt_ = millis() - backoffMs_;
+    if (!enabled) lastError_.clear();
     if (!enabled || !online) out_.clear();  // a reconnect keeps what is still queued
     wasConnected_ = false;
     if (!enabled || !online) return;

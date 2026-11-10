@@ -1,4 +1,5 @@
 #include "SimRig.h"
+#include "hc/io/LocalButton.h"
 
 using namespace hc;
 using sim::Rig;
@@ -480,4 +481,61 @@ TEST(io_input_bank_swap) {
   JsonDocument d;
   r.sys.io.toJson(d.to<JsonObject>(), false);
   CHECK(d["swapInputBanks"].as<bool>());
+}
+
+TEST(board_button_debounce_short_long) {
+  LocalButton b;
+  b.begin(false);
+  Millis t = 1000;
+  auto run = [&](bool down, Millis ms) {
+    LocalButton::Press got = LocalButton::Press::None;
+    for (Millis e = 0; e < ms; e += 20) {
+      t += 20;
+      LocalButton::Press p = b.update(down, t);
+      if (p != LocalButton::Press::None) got = p;
+    }
+    return got;
+  };
+  // bounce shorter than the debounce time: nothing
+  CHECK(run(true, 20) == LocalButton::Press::None);
+  CHECK(run(false, 200) == LocalButton::Press::None);
+  // short press: reported on release
+  CHECK(run(true, 300) == LocalButton::Press::None);
+  CHECK(run(false, 100) == LocalButton::Press::Short);
+  // long press: reported while held, release reports nothing
+  CHECK(run(true, 2200) == LocalButton::Press::Long);
+  CHECK(run(false, 100) == LocalButton::Press::None);
+  // held at start (download-mode reset): ignored until released once
+  LocalButton c;
+  c.begin(true);
+  Millis u = 0;
+  bool any = false;
+  for (int i = 0; i < 200; ++i) any |= c.update(true, u += 20) != LocalButton::Press::None;
+  for (int i = 0; i < 10; ++i) any |= c.update(false, u += 20) != LocalButton::Press::None;
+  CHECK(!any);
+}
+
+TEST(board_button_display) {
+  Rig r;
+  r.basicRoom();
+  r.sys.display.cfg.timeoutSec = 60;
+  r.run(1000, false);
+  int p0 = r.sys.display.page();
+  CHECK(r.sys.display.screenOn());
+  // on: next page
+  r.sys.boardButton(false);
+  CHECK(r.sys.display.page() != p0);
+  // long press: dark; short press wakes without changing the page
+  r.sys.boardButton(true);
+  CHECK(!r.sys.display.screenOn());
+  int p1 = r.sys.display.page();
+  r.sys.boardButton(false);
+  CHECK(r.sys.display.screenOn());
+  CHECK_EQ(r.sys.display.page(), p1);
+  // switched off in the settings / Home Assistant: the button switches it on
+  r.sys.display.cfg.enabled = false;
+  CHECK(!r.sys.display.screenOn());
+  r.sys.boardButton(false);
+  CHECK(r.sys.display.cfg.enabled);
+  CHECK(r.sys.display.screenOn());
 }

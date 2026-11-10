@@ -35,6 +35,7 @@
 #include "hc/system/HeatCoreSystem.h"
 #include "platform/BleScanner.h"
 #include "platform/Board.h"
+#include "hc/io/LocalButton.h"
 #include "platform/EspClock.h"
 #include "platform/I2cBus.h"
 #include "platform/MqttLink.h"
@@ -320,8 +321,19 @@ void ioTask(void*) {
   watchTask(kBeatIo);
   uint32_t lastWrite = 0, lastVerify = 0;
   bool watchdogActive = false;
+  // BOOT/"DOWNLOAD" button (S2): display on / next page, long press = dark
+  pinMode(board::kBootButton, INPUT_PULLUP);
+  hc::LocalButton bootButton;
+  bootButton.begin(digitalRead(board::kBootButton) == LOW);
   for (;;) {
     beat(kBeatIo);
+    {
+      hc::LocalButton::Press bp = bootButton.update(digitalRead(board::kBootButton) == LOW, millis());
+      if (bp != hc::LocalButton::Press::None) {
+        Lock lk(g_sys->mutex());
+        g_sys->boardButton(bp == hc::LocalButton::Press::Long);
+      }
+    }
     {
       Busy b;
       uint16_t in = 0;
@@ -630,6 +642,7 @@ void netTask(void*) {
         p.wifiRssi = g_net.rssi();
         p.mqtt = g_mqtt->stateText();
         p.mqttConnected = g_mqtt->connected();
+        p.mqttError = g_mqtt->lastError();
         p.timeSynced = g_net.timeSynced();
       }
     }
@@ -943,7 +956,17 @@ void selfTestTask(void*) {
   } else {
     addResult(res, "WLAN", "deaktiviert", "aus (LAN hat Vorrang oder nicht eingerichtet)");
   }
-  addResult(res, "MQTT", g_mqtt->connected() ? "ok" : "deaktiviert", g_mqtt->stateText());
+  {
+    bool on;
+    std::string err;
+    {
+      Lock lk(g_sys->mutex());
+      on = g_sys->mqttCfg.enabled;
+      err = g_sys->platform.mqttError;
+    }
+    addResult(res, "MQTT", g_mqtt->connected() ? "ok" : on ? "fehler" : "deaktiviert",
+              std::string(g_mqtt->stateText()) + (err.empty() || g_mqtt->connected() ? "" : ": " + err));
+  }
   addResult(res, "RS485 (GPIO16/17)", g_rs485.active() ? "unbestaetigt" : "deaktiviert",
             "rtl_433-JSON-Eingang, 115200 Baud; Funktion erst mit Gateway pruefbar");
   {
@@ -993,6 +1016,7 @@ void selfTestTask(void*) {
   {
     Lock lk(g_sys->mutex());
     g_sys->selfTest = std::move(res);
+    g_sys->selfTestMs = g_sys->now() ? g_sys->now() : 1;
     g_sys->platform.i2cDevices = found;
     g_sys->platform.rtcPresent = g_rtc.present();
     g_sys->platform.rtcValid = rtcValid;

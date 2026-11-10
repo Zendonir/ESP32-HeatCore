@@ -75,6 +75,7 @@ struct PlatformStatus {
   int wifiRssi = 0;
   std::string mqtt = "aus";  // aus | getrennt | verbunden
   bool mqttConnected = false;
+  std::string mqttError;  // why the last connection attempt failed
   std::string sd = "-";
   uint64_t sdTotalBytes = 0, sdUsedBytes = 0;
   uint32_t freeHeap = 0, minFreeHeap = 0, freePsram = 0, totalPsram = 0;
@@ -148,6 +149,7 @@ class HeatCoreSystem : public IAutomationContext {
   MqttConfig mqttCfg;
   PlatformStatus platform;
   std::vector<SelfTestItem> selfTest;
+  Millis selfTestMs = 0;  // when the self test finished (0 = not yet)
 
   // ---- hooks installed by the platform (never block!)
   std::function<void(const Event&)> onEvent;
@@ -214,6 +216,10 @@ class HeatCoreSystem : public IAutomationContext {
   void heatDemandStatusJson(JsonObject o) const;
   std::string heatDemandSend(const std::string& which);  // "on" | "off" | "fallback" (also test)
   void heatDemandRelease();                             // give control back (disable, restart)
+
+  // ---- button on the board ("DOWNLOAD"/BOOT, S2): short press = display on /
+  // next page (a switched-off display is switched on), long press = screen dark
+  void boardButton(bool longPress);
 
   // ---- EMS-ESP
   // MQTT message from EMS-ESP: parses it and feeds the "ems:..." sensors. True if it was one.

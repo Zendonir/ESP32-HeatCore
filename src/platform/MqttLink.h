@@ -24,6 +24,8 @@ class MqttLink {
   // Called from the system event hook (system lock held).
   void onEvent(const hc::Event& e);
   const char* stateText();
+  // why the last connection attempt failed ("" = connected or not tried); net task only
+  const std::string& lastError() const { return lastError_; }
 
  private:
   bool connect();
@@ -36,7 +38,7 @@ class MqttLink {
   PubSubClient client_;
   BoundedQueue<hc::MqttMsg> out_{120};
   hc::MqttConfig cfg_;
-  std::string host_, clientId_, willTopic_;
+  std::string host_, clientId_, willTopic_, lastError_;
   uint32_t lastAttempt_ = 0;
   uint32_t backoffMs_ = 2000;
   uint32_t lastState_ = 0;
