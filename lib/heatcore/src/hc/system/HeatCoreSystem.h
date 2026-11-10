@@ -19,6 +19,7 @@
 #include "hc/core/Clock.h"
 #include "hc/core/Event.h"
 #include "hc/display/Display.h"
+#include "hc/heating/HeatDemand.h"
 #include "hc/heating/Heating.h"
 #include "hc/heating/Safety.h"
 #include "hc/io/IoManager.h"
@@ -136,6 +137,7 @@ class HeatCoreSystem : public IAutomationContext {
   AiState ai;       // MCP access level, token and change journal
   ExternalSources external;  // MQTT subscriptions / HTTP polls of other devices
   ble::BleHub ble{sensors};  // Bluetooth LE thermometers (passive scanning)
+  HeatDemand heatDemand;     // tells boiler / heating circuit / pump when rooms need heat
   DisplayManager display;
   AutomationEngine automation;
 
@@ -148,6 +150,8 @@ class HeatCoreSystem : public IAutomationContext {
   // ---- hooks installed by the platform (never block!)
   std::function<void(const Event&)> onEvent;
   std::function<void(const std::string& suffix, const std::string& payload, bool retain)> mqttPublish;
+  // publishes to an absolute topic (other devices, e.g. EMS-ESP)
+  std::function<void(const std::string& topic, const std::string& payload, bool retain)> mqttPublishRaw;
   std::function<void(const std::string& message, int level)> notify;
   std::function<std::string(const std::string& cmd, JsonObjectConst args)> platformCommand;
 
@@ -203,6 +207,12 @@ class HeatCoreSystem : public IAutomationContext {
   std::vector<ConfigSection> takeDirty();
   std::string validateBindings(const std::vector<InputBinding>& b, EventSource src) const;
 
+  // ---- heat demand
+  std::string heatDemandFromJson(JsonObjectConst o);   // API: validated against outputs/rooms
+  void heatDemandStatusJson(JsonObject o) const;
+  std::string heatDemandSend(const std::string& which);  // "on" | "off" | "fallback" (also test)
+  void heatDemandRelease();                             // give control back (disable, restart)
+
   // ---- IAutomationContext
   Millis now() const override { return clock_.nowMs(); }
   int64_t epoch() const override { return clock_.epoch(); }
@@ -235,6 +245,7 @@ class HeatCoreSystem : public IAutomationContext {
                      uint32_t demandSec, const Event& e);
   void runBindings(const std::vector<InputBinding>& bindings, const Event& e);
   void controlCycle(Millis now);
+  void updateHeatDemand(Millis now);
   void computeOutputs(Millis now);
   void minuteTasks(Millis now);
   void checkCircuitFaults(Millis now);

@@ -374,6 +374,14 @@ void MqttBridge::discovery(std::vector<MqttMsg>& out) {
       }
     }
   }
+  // ---- heat demand (boiler / heating circuit)
+  if (sys_.heatDemand.cfg.enabled) {
+    JsonDocument d;
+    d["name"] = "Waermeanforderung";
+    d["state_topic"] = b + "/heatdemand/state";
+    d["device_class"] = "heat";
+    addConfig(out, topics, "binary_sensor", "heatdemand", d);
+  }
   // ---- remove entities that no longer exist
   for (auto& old : published_)
     if (std::find(topics.begin(), topics.end(), old) == topics.end()) out.push_back({old, "", true});
@@ -502,6 +510,7 @@ void MqttBridge::state(std::vector<MqttMsg>& out) const {
   std::string b = base();
   out.push_back({availabilityTopic(), "online", true});
   out.push_back({b + "/mode/state", globalModeName(sys_.heating.globalMode), true});
+  if (sys_.heatDemand.cfg.enabled) out.push_back({b + "/heatdemand/state", sys_.heatDemand.active ? "ON" : "OFF", true});
   for (auto& r : sys_.heating.rooms) {
     roomState(r, out);
     if (const ThermalModel* m = sys_.model.find(r.id)) {

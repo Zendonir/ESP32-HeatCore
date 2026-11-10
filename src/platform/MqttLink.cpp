@@ -133,6 +133,7 @@ void MqttLink::loop(bool online) {
     {
       std::lock_guard<std::recursive_mutex> lk(sys_.mutex());
       sig = sys_.heating.revision() * 31u + sys_.rfReg.revision() * 17u + sys_.sensors.revision() * 7u +
+            sys_.heatDemand.revision * 13u +
             static_cast<uint32_t>(sys_.automation.rules().size()) * 3u;
       for (auto& r : sys_.automation.rules()) sig += r.enabled ? r.id : 0;
     }

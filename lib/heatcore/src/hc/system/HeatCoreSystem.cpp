@@ -83,6 +83,7 @@ void HeatCoreSystem::loop() {
     lastSecond_ = now;
     sensors.tick(now);
     ble.tick(now);
+    updateHeatDemand(now);
     display.setRoomCount(static_cast<int>(displayRooms().size()));
     display.tick(now, alarms.highest(), alarms.count());
     updateLoopback(now);
@@ -1083,7 +1084,10 @@ void HeatCoreSystem::sectionToJson(ConfigSection s, JsonObject o, bool includeSe
     case ConfigSection::Network: networkConfigToJson(netCfg, o, includeSecrets); break;
     case ConfigSection::Mqtt: mqttConfigToJson(mqttCfg, o, includeSecrets); break;
     case ConfigSection::Io: io.toJson(o, false); break;
-    case ConfigSection::Heating: heating.toJson(o, false); break;
+    case ConfigSection::Heating:
+      heating.toJson(o, false);
+      heatDemand.toJson(o["heatDemand"].to<JsonObject>());
+      break;
     case ConfigSection::Sensors:
       o["autoAdoptOneWire"] = sensors.autoAdoptOneWire;
       sensors.toJson(o["sensors"].to<JsonArray>(), false);
@@ -1151,6 +1155,7 @@ std::string HeatCoreSystem::sectionFromJson(ConfigSection s, JsonObjectConst o) 
     }
     case ConfigSection::Heating:
       err = heating.fromJson(o);
+      if (err.empty() && !o["heatDemand"].isNull()) err = heatDemand.fromJson(o["heatDemand"].as<JsonObjectConst>());
       if (err.empty()) {
         model.removeMissing(heating.rooms);
         std::vector<std::string> ids;
@@ -1237,6 +1242,108 @@ std::string HeatCoreSystem::sectionFromJson(ConfigSection s, JsonObjectConst o) 
     markDirty(s);
   }
   return err;
+}
+
+// ------------------------------------------------ heat demand
+
+namespace {
+// A PWM room needs heat for its whole cycle while its duty is above 0 - but
+// only while PWM control is valid: a failed sensor, over-temperature or an
+// open window inhibit the valve, a cached duty must not keep the heat source on.
+bool roomNeedsHeat(const Room& r) {
+  if (r.demand) return true;
+  return r.control == RoomControl::Pwm && r.pwmRunning && r.hasTemp && !r.sensorFail && !r.overTemp &&
+         !r.windowOpen() && r.duty > 0.5f;
+}
+}  // namespace
+
+void HeatCoreSystem::updateHeatDemand(Millis now) {
+  HeatDemand& hd = heatDemand;
+  bool any = false;
+  std::vector<std::string> req;
+  for (auto& r : heating.rooms) {
+    if (!hd.cfg.rooms.empty() && std::find(hd.cfg.rooms.begin(), hd.cfg.rooms.end(), r.id) == hd.cfg.rooms.end())
+      continue;
+    if (roomNeedsHeat(r)) {
+      any = true;
+      req.push_back(r.id);
+    }
+  }
+  HeatDemand::Step st = hd.update(any, std::move(req), now, begunMs_);
+  if (!hd.cfg.enabled) return;
+  // the output follows the demand (only a general output, never a heating circuit)
+  int n = hd.cfg.output;
+  if (n >= 1 && n <= kNumOutputs && io.outCfg[static_cast<size_t>(n - 1)].function == OutputFunction::General &&
+      io.out[static_cast<size_t>(n - 1)].request != hd.active)
+    io.setRequest(n - 1, hd.active, now);
+  if (st.changed) {
+    HC_LOGI(TAG, "heat demand %s", hd.active ? "on" : "off");
+    if (mqttPublish && mqttCfg.enabled) mqttPublish("heatdemand/state", hd.active ? "ON" : "OFF", true);
+  }
+  if (st.send) heatDemandSend(hd.active ? "on" : "off");
+}
+
+std::string HeatCoreSystem::heatDemandSend(const std::string& which) {
+  HeatDemand& hd = heatDemand;
+  Millis now = clock_.nowMs();
+  hd.lastSendMs = now ? now : 1;
+  hd.sentOnce = true;
+  const std::string& payload = which == "on" ? hd.cfg.payloadOn : which == "off" ? hd.cfg.payloadOff : hd.cfg.payloadFallback;
+  std::string err;
+  if (hd.cfg.topic.empty()) err = "kein MQTT-Thema eingetragen";
+  else if (payload.empty()) err = "keine Nachricht fuer \"" + which + "\" eingetragen";
+  else if (!mqttCfg.enabled) err = "MQTT ist ausgeschaltet (System -> MQTT)";
+  else if (!mqttPublishRaw) err = "MQTT nicht verfuegbar";
+  if (!err.empty()) {
+    hd.lastSent = err;
+    return err;
+  }
+  mqttPublishRaw(hd.cfg.topic, payload, hd.cfg.retain);
+  ++hd.sends;
+  hd.lastSent = which;
+  return std::string();
+}
+
+void HeatCoreSystem::heatDemandRelease() {
+  HeatDemand& hd = heatDemand;
+  if (!hd.cfg.payloadFallback.empty() && !hd.cfg.topic.empty()) heatDemandSend("fallback");
+  int n = hd.cfg.output;
+  if (n >= 1 && n <= kNumOutputs && io.outCfg[static_cast<size_t>(n - 1)].function == OutputFunction::General)
+    io.setRequest(n - 1, false, clock_.nowMs());
+}
+
+std::string HeatCoreSystem::heatDemandFromJson(JsonObjectConst o) {
+  int n = o["output"] | 0;
+  if (n >= 1 && n <= kNumOutputs && io.outCfg[static_cast<size_t>(n - 1)].function != OutputFunction::General)
+    return "Ausgang " + std::to_string(n) + " ist kein allgemeiner Ausgang (unter Ventile & Ausgaenge umstellen)";
+  for (const char* r : o["rooms"].as<JsonArrayConst>())
+    if (r && *r && !heating.room(r)) return std::string("Raum unbekannt: ") + r;
+  bool wasEnabled = heatDemand.cfg.enabled;
+  HeatDemandConfig old = heatDemand.cfg;
+  std::string err = heatDemand.fromJson(o);
+  if (!err.empty()) return err;
+  const HeatDemandConfig& nc = heatDemand.cfg;
+  // switched off, or another target (output, topic, messages - e.g. another
+  // heating circuit): give the old target back, then serve the new one now
+  bool targetChanged = old.output != nc.output || old.topic != nc.topic || old.payloadOn != nc.payloadOn ||
+                       old.payloadOff != nc.payloadOff || old.payloadFallback != nc.payloadFallback;
+  if (wasEnabled && (!nc.enabled || targetChanged)) {
+    HeatDemandConfig cur = heatDemand.cfg;
+    heatDemand.cfg = old;
+    heatDemandRelease();
+    heatDemand.cfg = cur;
+    heatDemand.sentOnce = false;  // the new target gets the current state right away
+  }
+  markDirty(ConfigSection::Heating);
+  return std::string();
+}
+
+void HeatCoreSystem::heatDemandStatusJson(JsonObject o) const {
+  heatDemand.statusJson(o, clock_.nowMs());
+  int n = heatDemand.cfg.output;
+  if (n >= 1 && n <= kNumOutputs && io.outCfg[static_cast<size_t>(n - 1)].function != OutputFunction::General)
+    o["warning"] = "Ausgang " + std::to_string(n) + " ist kein allgemeiner Ausgang - wird nicht geschaltet";
+  if (!heatDemand.cfg.topic.empty() && !mqttCfg.enabled) o["warning"] = "MQTT ist ausgeschaltet - es wird nichts gesendet";
 }
 
 }  // namespace hc

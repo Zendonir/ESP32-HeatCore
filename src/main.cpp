@@ -1169,6 +1169,9 @@ void setup() {
         g_sdLog.push(line);
       }
     };
+    g_sys->mqttPublishRaw = [](const std::string& topic, const std::string& payload, bool retain) {
+      g_mqtt->enqueue({topic, payload, retain});
+    };
     g_sys->mqttPublish = [](const std::string& suffix, const std::string& payload, bool retain) {
       g_mqtt->enqueue({g_sys->baseTopic() + "/" + suffix, payload, retain});
     };
@@ -1243,6 +1246,10 @@ void loop() {
   // Reboot (OTA, user request): close all valves first, then restart.
   if (g_web && g_web->rebootRequested()) {
     if (!g_trace.reason[0]) setRestartReason("Neustart ueber Webinterface oder Update");
+    {
+      Lock lk(g_sys->mutex());
+      g_sys->heatDemandRelease();  // heating circuit back to its own control while HeatCore restarts
+    }
     g_shutdown = true;
     delay(800);  // let the HTTP response go out
     safeShutdown();

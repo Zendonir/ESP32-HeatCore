@@ -56,6 +56,10 @@ Webinterface.
 * **Externe Quellen:** Temperaturen, Luftfeuchte, Batterie und Tasten anderer
   Geräte per MQTT oder HTTP (z. B. Shelly BLU über einen Shelly, Button+,
   Zigbee2MQTT); Raumwerte als einfache MQTT-Themen für Anzeigen.
+* **Wärmeanforderung:** meldet dem Kessel bzw. einem Heizkreis per MQTT
+  (z. B. Heizkreis 2 am RC35 über EMS-ESP) und/oder über einen Ausgang
+  (Pumpe), wann Räume Wärme brauchen. Mit Nachlauf, Mindestzeiten und
+  Rückgabe an die eigene Regelung.
 * **Home Assistant (optional):** MQTT-Discovery für alle Komponenten,
   eingeschränkte Rechte.
 
@@ -75,6 +79,7 @@ Webinterface.
 * [Hardware, Pinbelegung, elektrische Prüfung](docs/hardware.md)
 * [433-MHz-Funk, Sicherheit, Funkrecht, Temperatursensoren](docs/rf433.md)
 * [Bluetooth-Thermometer](docs/bluetooth-thermometer.md)
+* [Wärmeanforderung an Kessel/Heizkreis (z. B. RC35 über EMS-ESP)](docs/waermeanforderung.md)
 * [OLED-Display](docs/display.md)
 * [Automationen, Sicherheit, Lernmodell](docs/automation-und-lernmodell.md)
 * [MQTT / Home Assistant und REST-API](docs/mqtt-und-api.md)
