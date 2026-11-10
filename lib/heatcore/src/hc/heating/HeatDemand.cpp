@@ -74,6 +74,7 @@ std::string HeatDemand::fromJson(JsonObjectConst o) {
   if (n.enabled && n.topic.empty() && n.output == 0) return "MQTT-Thema oder Ausgang angeben";
   bool wasEnabled = cfg.enabled;
   cfg = std::move(n);
+  ++revision;
   if (!cfg.enabled || !wasEnabled) reset();
   return std::string();
 }

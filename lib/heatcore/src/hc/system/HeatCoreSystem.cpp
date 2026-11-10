@@ -1247,7 +1247,14 @@ std::string HeatCoreSystem::sectionFromJson(ConfigSection s, JsonObjectConst o) 
 // ------------------------------------------------ heat demand
 
 namespace {
-bool roomNeedsHeat(const Room& r) { return r.control == RoomControl::Pwm ? (r.duty > 0.5f || r.demand) : r.demand; }
+// A PWM room needs heat for its whole cycle while its duty is above 0 - but
+// only while PWM control is valid: a failed sensor, over-temperature or an
+// open window inhibit the valve, a cached duty must not keep the heat source on.
+bool roomNeedsHeat(const Room& r) {
+  if (r.demand) return true;
+  return r.control == RoomControl::Pwm && r.pwmRunning && r.hasTemp && !r.sensorFail && !r.overTemp &&
+         !r.windowOpen() && r.duty > 0.5f;
+}
 }  // namespace
 
 void HeatCoreSystem::updateHeatDemand(Millis now) {
@@ -1312,16 +1319,20 @@ std::string HeatCoreSystem::heatDemandFromJson(JsonObjectConst o) {
   for (const char* r : o["rooms"].as<JsonArrayConst>())
     if (r && *r && !heating.room(r)) return std::string("Raum unbekannt: ") + r;
   bool wasEnabled = heatDemand.cfg.enabled;
-  int oldOutput = heatDemand.cfg.output;
   HeatDemandConfig old = heatDemand.cfg;
   std::string err = heatDemand.fromJson(o);
   if (!err.empty()) return err;
-  // switched off, or the output changed: give the old target back
-  if (wasEnabled && (!heatDemand.cfg.enabled || oldOutput != heatDemand.cfg.output)) {
-    HeatDemandConfig now = heatDemand.cfg;
+  const HeatDemandConfig& nc = heatDemand.cfg;
+  // switched off, or another target (output, topic, messages - e.g. another
+  // heating circuit): give the old target back, then serve the new one now
+  bool targetChanged = old.output != nc.output || old.topic != nc.topic || old.payloadOn != nc.payloadOn ||
+                       old.payloadOff != nc.payloadOff || old.payloadFallback != nc.payloadFallback;
+  if (wasEnabled && (!nc.enabled || targetChanged)) {
+    HeatDemandConfig cur = heatDemand.cfg;
     heatDemand.cfg = old;
     heatDemandRelease();
-    heatDemand.cfg = now;
+    heatDemand.cfg = cur;
+    heatDemand.sentOnce = false;  // the new target gets the current state right away
   }
   markDirty(ConfigSection::Heating);
   return std::string();

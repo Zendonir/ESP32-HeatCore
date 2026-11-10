@@ -37,6 +37,7 @@ class HeatDemand {
   static constexpr uint32_t kStartDelayMs = 60000;  // sensors and rooms settle after a start
 
   HeatDemandConfig cfg;
+  uint32_t revision = 0;  // configuration changes (Home Assistant discovery)
   // runtime
   bool active = false;
   Millis changedMs = 0;

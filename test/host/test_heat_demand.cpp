@@ -150,3 +150,43 @@ TEST(heat_demand_validation_and_pwm_rooms) {
   feed(r, 20.6f, 20 * 60);  // 0.4 K below: 16 % duty, valve mostly closed
   CHECK(r.sys.heatDemand.active);
 }
+
+TEST(heat_demand_target_change_releases_old_target) {
+  Rig r;
+  std::vector<Sent> sent;
+  setup(r, sent);
+  ApiRouter api(r.sys);
+  CHECK_EQ(call(api, "PUT", "/api/heatdemand", kEms).status, 200);
+  feed(r, 19.f, 90);
+  CHECK(r.sys.heatDemand.active);
+  uint32_t rev = r.sys.heatDemand.revision;
+  // the user moves the function from heating circuit 2 to circuit 3
+  std::string hc3 = kEms;
+  for (size_t p; (p = hc3.find("\\\"hc\\\":2")) != std::string::npos;) hc3.replace(p, 9, "\\\"hc\\\":3");
+  size_t n = sent.size();
+  CHECK_EQ(call(api, "PUT", "/api/heatdemand", hc3.c_str()).status, 200);
+  // circuit 2 gets its fallback (auto), circuit 3 the current state (day) right away
+  CHECK(sent.size() >= n + 1);
+  CHECK(sent[n].payload.find("auto") != std::string::npos && sent[n].payload.find("\"hc\":2") != std::string::npos);
+  r.run(1500, false);
+  CHECK(sent.back().payload.find("day") != std::string::npos && sent.back().payload.find("\"hc\":3") != std::string::npos);
+  CHECK(r.sys.heatDemand.revision != rev);  // Home Assistant discovery is refreshed
+}
+
+TEST(heat_demand_ignores_stale_pwm_duty) {
+  Rig r;
+  std::vector<Sent> sent;
+  setup(r, sent);
+  r.load(ConfigSection::Heating, R"({"rooms":[{"id":"wohnen","name":"W","comfort":21,"eco":18,"frost":7,"mode":"comfort",
+      "control":"pwm","pwmCycleMin":20,"pwmKp":40,"pwmTnMin":0}],"circuits":[{"n":1,"room":"wohnen","minOnSec":60,"minOffSec":60}]})");
+  ApiRouter api(r.sys);
+  CHECK_EQ(call(api, "PUT", "/api/heatdemand", kEms).status, 200);
+  feed(r, 20.f, 3 * 60);
+  CHECK(r.sys.heatDemand.active);
+  CHECK(r.sys.heating.room("wohnen")->duty > 0.5f);
+  // the sensor fails (default: no emergency heating): the cached duty must not keep the circuit on
+  r.run(40u * 60u * 1000u, false);  // no more readings: sensor times out (300 s), run-on 10 min
+  const Room* w = r.sys.heating.room("wohnen");
+  CHECK(w->sensorFail);
+  CHECK(!r.sys.heatDemand.active);
+}
