@@ -1407,6 +1407,26 @@ void HeatCoreSystem::heatDemandStatusJson(JsonObject o) const {
   if ((!heatDemand.cfg.topic.empty() || heatDemand.cfg.target == "emsesp") && !mqttCfg.enabled) o["warning"] = "MQTT ist ausgeschaltet - es wird nichts gesendet";
 }
 
+// ------------------------------------------------ board button
+
+void HeatCoreSystem::boardButton(bool longPress) {
+  if (longPress) {
+    display.sleep();
+    return;
+  }
+  if (!display.cfg.enabled) {  // switched off (web, Home Assistant): the local button switches it on
+    display.cfg.enabled = true;
+    markDirty(ConfigSection::Display);
+    display.wake();
+    Event e(EventType::DisplayPageChanged, EventSource::Display);  // Home Assistant shows "on" again
+    e.ts = clock_.nowMs();
+    e.a = display.page() + 1;
+    bus.post(e);
+    return;
+  }
+  display.next();  // a dark screen only wakes up, otherwise next page
+}
+
 // ------------------------------------------------ EMS-ESP
 
 std::string HeatCoreSystem::emsSend(const std::string& which) {

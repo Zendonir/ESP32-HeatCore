@@ -88,9 +88,9 @@ constexpr int kSdMiso = 14;
 constexpr int kSdCs = 11;
 constexpr int kSdDetect = 21;
 
-// ---- Buttons: S1 = EN/RESET, S2 = BOOT (GPIO0, strapping pin). Neither is
-// usable as a normal user button: navigation uses digital inputs, RF
-// remotes or the web interface instead.
+// ---- Buttons: S1 = EN/RESET, S2 = BOOT/"DOWNLOAD" (GPIO0, strapping pin,
+// pulled up on the PCB, low while pressed). GPIO0 only matters at reset (held
+// down = download mode); afterwards it is read as the local display button.
 constexpr int kBootButton = 0;
 
 // ---- Free GPIOs on the V3 header (block diagram: no pull-ups on the PCB).

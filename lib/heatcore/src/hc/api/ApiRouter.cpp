@@ -76,6 +76,7 @@ void statusJson(HeatCoreSystem& sys, JsonObject o) {
   o["network"] = pl.network;
   o["ip"] = pl.ip;
   o["mqtt"] = pl.mqtt;
+  if (!pl.mqttError.empty() && !pl.mqttConnected) o["mqttError"] = pl.mqttError;
   o["globalMode"] = globalModeName(sys.heating.globalMode);
   o["outputs"] = sys.outputMask();
   o["alarmCount"] = static_cast<int>(sys.alarms.count());
@@ -203,6 +204,7 @@ void hardwareJson(HeatCoreSystem& sys, JsonObject o) {
   p["rs485Errors"] = pl.rs485Errors;
   p["rfRxHw"] = pl.rfRxHw;
   p["rfTxHw"] = pl.rfTxHw;
+  if (sys.selfTestMs) o["selfTestAgeSec"] = elapsed(sys.clock().nowMs(), sys.selfTestMs) / 1000u;
   JsonArray st = o["selfTest"].to<JsonArray>();
   for (auto& t : sys.selfTest) {
     JsonObject x = st.add<JsonObject>();

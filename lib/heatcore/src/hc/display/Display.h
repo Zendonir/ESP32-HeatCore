@@ -114,6 +114,7 @@ class DisplayManager {
   bool select(int page1Based);
   void roomNext();
   void wake();
+  void sleep() { on_ = false; }  // screen dark until the next activity
   void tick(Millis now, AlarmLevel highestAlarm, size_t alarmCount);
 
   int page() const { return static_cast<int>(page_); }

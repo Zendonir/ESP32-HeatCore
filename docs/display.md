@@ -36,3 +36,13 @@ Navigation über Digitaleingänge, Funktasten, MQTT/Home Assistant und das
 Webinterface mit denselben Aktionen: nächste/vorherige Seite, Seite wählen,
 wecken, nächster Raum, Sollwert des angezeigten Raums ±. Der erste Tastendruck
 bei dunklem Display weckt nur.
+
+**Taster „DOWNLOAD“ (S2) auf der Platine:**
+
+* kurz drücken: dunkles Display einschalten, sonst nächste Seite. Ist das
+  Display in den Einstellungen bzw. in Home Assistant ausgeschaltet, schaltet
+  der Taster es wieder ein.
+* lang drücken (2 s): Display sofort dunkel.
+
+Beim Einschalten der Stromversorgung darf der Taster nicht gedrückt sein –
+sonst startet der Chip im Download-Modus (zum Flashen).
