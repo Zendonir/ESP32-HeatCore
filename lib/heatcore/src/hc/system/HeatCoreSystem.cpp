@@ -1087,6 +1087,7 @@ void HeatCoreSystem::sectionToJson(ConfigSection s, JsonObject o, bool includeSe
     case ConfigSection::Heating:
       heating.toJson(o, false);
       heatDemand.toJson(o["heatDemand"].to<JsonObject>());
+      ems.toJson(o["emsesp"].to<JsonObject>());
       break;
     case ConfigSection::Sensors:
       o["autoAdoptOneWire"] = sensors.autoAdoptOneWire;
@@ -1155,6 +1156,7 @@ std::string HeatCoreSystem::sectionFromJson(ConfigSection s, JsonObjectConst o) 
     }
     case ConfigSection::Heating:
       err = heating.fromJson(o);
+      if (err.empty() && !o["emsesp"].isNull()) err = ems.fromJson(o["emsesp"].as<JsonObjectConst>(), false);
       if (err.empty() && !o["heatDemand"].isNull()) err = heatDemand.fromJson(o["heatDemand"].as<JsonObjectConst>());
       if (err.empty()) {
         model.removeMissing(heating.rooms);
@@ -1280,14 +1282,34 @@ void HeatCoreSystem::updateHeatDemand(Millis now) {
     HC_LOGI(TAG, "heat demand %s", hd.active ? "on" : "off");
     if (mqttPublish && mqttCfg.enabled) mqttPublish("heatdemand/state", hd.active ? "ON" : "OFF", true);
   }
-  if (st.send) heatDemandSend(hd.active ? "on" : "off");
+  bool send = st.send;
+  if (hd.cfg.target == "emsesp" && hd.sentOnce && !st.changed && ems.thermostatFresh(now)) {
+    // the thermostat confirms the state: repeat only when it reports something
+    // else (changed at the RC35, lost command), never blindly - every command
+    // is written to the thermostat
+    bool ok = ems.st.mode == (hd.active ? EmsMode::Day : EmsMode::Night) && ems.st.reduce == EmsReduce::NoFrost;
+    send = !ok && elapsed(now, hd.lastSendMs) >= EmsEsp::kConfirmMs;
+  }
+  if (hd.cfg.target == "mqtt" && hd.cfg.topic.empty()) send = false;  // output only
+  if (send) heatDemandSend(hd.active ? "on" : "off");
 }
 
 std::string HeatCoreSystem::heatDemandSend(const std::string& which) {
   HeatDemand& hd = heatDemand;
   Millis now = clock_.nowMs();
-  hd.lastSendMs = now ? now : 1;
-  hd.sentOnce = true;
+  if (hd.cfg.target == "emsesp") {
+    std::string err = emsSend(which);
+    if (err.empty()) {
+      hd.lastSendMs = now ? now : 1;
+      hd.sentOnce = true;
+      ++hd.sends;
+      hd.lastSent = which;
+    } else {
+      hd.sentOnce = false;  // not sent: try again next second (e.g. waiting for thermostat data)
+      hd.lastSent = err;
+    }
+    return err;
+  }
   const std::string& payload = which == "on" ? hd.cfg.payloadOn : which == "off" ? hd.cfg.payloadOff : hd.cfg.payloadFallback;
   std::string err;
   if (hd.cfg.topic.empty()) err = "kein MQTT-Thema eingetragen";
@@ -1295,9 +1317,12 @@ std::string HeatCoreSystem::heatDemandSend(const std::string& which) {
   else if (!mqttCfg.enabled) err = "MQTT ist ausgeschaltet (System -> MQTT)";
   else if (!mqttPublishRaw) err = "MQTT nicht verfuegbar";
   if (!err.empty()) {
+    hd.sentOnce = false;  // still pending: sent as soon as it can be (also with repeat 0)
     hd.lastSent = err;
     return err;
   }
+  hd.lastSendMs = now ? now : 1;
+  hd.sentOnce = true;
   mqttPublishRaw(hd.cfg.topic, payload, hd.cfg.retain);
   ++hd.sends;
   hd.lastSent = which;
@@ -1305,9 +1330,18 @@ std::string HeatCoreSystem::heatDemandSend(const std::string& which) {
 }
 
 void HeatCoreSystem::heatDemandRelease() {
+  heatDemandReleaseTarget();
+  heatDemandReleaseOutput(heatDemand.cfg.output);
+}
+
+void HeatCoreSystem::heatDemandReleaseTarget() {
   HeatDemand& hd = heatDemand;
-  if (!hd.cfg.payloadFallback.empty() && !hd.cfg.topic.empty()) heatDemandSend("fallback");
-  int n = hd.cfg.output;
+  if (hd.cfg.target == "emsesp" ? !ems.cfg.savedReduce.empty() || hd.sentOnce
+                                : !hd.cfg.payloadFallback.empty() && !hd.cfg.topic.empty())
+    heatDemandSend("fallback");
+}
+
+void HeatCoreSystem::heatDemandReleaseOutput(int n) {
   if (n >= 1 && n <= kNumOutputs && io.outCfg[static_cast<size_t>(n - 1)].function == OutputFunction::General)
     io.setRequest(n - 1, false, clock_.nowMs());
 }
@@ -1318,32 +1352,149 @@ std::string HeatCoreSystem::heatDemandFromJson(JsonObjectConst o) {
     return "Ausgang " + std::to_string(n) + " ist kein allgemeiner Ausgang (unter Ventile & Ausgaenge umstellen)";
   for (const char* r : o["rooms"].as<JsonArrayConst>())
     if (r && *r && !heating.room(r)) return std::string("Raum unbekannt: ") + r;
+  if ((o["enabled"] | false) && std::string(o["target"] | "mqtt") == "emsesp" && !ems.cfg.enabled)
+    return "Zuerst die EMS-ESP-Anbindung einschalten (Einrichtung -> EMS-ESP)";
   bool wasEnabled = heatDemand.cfg.enabled;
   HeatDemandConfig old = heatDemand.cfg;
   std::string err = heatDemand.fromJson(o);
   if (!err.empty()) return err;
   const HeatDemandConfig& nc = heatDemand.cfg;
-  // switched off, or another target (output, topic, messages - e.g. another
-  // heating circuit): give the old target back, then serve the new one now
-  bool targetChanged = old.output != nc.output || old.topic != nc.topic || old.payloadOn != nc.payloadOn ||
-                       old.payloadOff != nc.payloadOff || old.payloadFallback != nc.payloadFallback;
+  // switched off, or another target (EMS-ESP <-> MQTT, topic, messages - e.g.
+  // another heating circuit): give the old target back, then serve the new one
+  // now. Only the output changed: release the old output, the heating circuit
+  // stays taken over (giving it back and taking it over again at once could
+  // remember HeatCore's own settings as the original ones).
+  bool targetChanged = old.target != nc.target ||
+                       (nc.target == "mqtt" && (old.topic != nc.topic || old.payloadOn != nc.payloadOn ||
+                                                old.payloadOff != nc.payloadOff ||
+                                                old.payloadFallback != nc.payloadFallback));
   if (wasEnabled && (!nc.enabled || targetChanged)) {
     HeatDemandConfig cur = heatDemand.cfg;
     heatDemand.cfg = old;
-    heatDemandRelease();
+    heatDemandReleaseTarget();
     heatDemand.cfg = cur;
     heatDemand.sentOnce = false;  // the new target gets the current state right away
   }
+  if (wasEnabled && (!nc.enabled || old.output != nc.output)) heatDemandReleaseOutput(old.output);
   markDirty(ConfigSection::Heating);
   return std::string();
 }
 
 void HeatCoreSystem::heatDemandStatusJson(JsonObject o) const {
-  heatDemand.statusJson(o, clock_.nowMs());
+  Millis now = clock_.nowMs();
+  heatDemand.statusJson(o, now);
+  if (heatDemand.cfg.target == "emsesp") {
+    JsonObject e = o["ems"].to<JsonObject>();
+    e["hc"] = ems.cfg.hc;
+    e["fresh"] = ems.thermostatFresh(now);
+    if (ems.thermostatFresh(now)) {
+      e["mode"] = emsModeKey(ems.st.mode);
+      e["modeText"] = emsModeText(ems.st.mode);
+      e["reduceText"] = emsReduceText(ems.st.reduce);
+      if (heatDemand.cfg.enabled && heatDemand.sentOnce)
+        e["confirmed"] = ems.st.mode == (heatDemand.active ? EmsMode::Day : EmsMode::Night) &&
+                         ems.st.reduce == EmsReduce::NoFrost;
+    }
+    if (ems.mixerFresh(now) && ems.st.pump >= 0) e["pump"] = ems.st.pump == 1;
+    if (!std::isnan(ems.st.hcFlow) && ems.mixerFresh(now)) e["flow"] = std::round(ems.st.hcFlow * 10.f) / 10.f;
+    e["takenOver"] = !ems.cfg.savedReduce.empty();
+    if (!ems.cfg.enabled) o["warning"] = "EMS-ESP-Anbindung ist ausgeschaltet";
+    else if (!ems.thermostatFresh(now)) o["warning"] = "keine aktuellen Daten vom Thermostat (EMS-ESP)";
+  }
   int n = heatDemand.cfg.output;
   if (n >= 1 && n <= kNumOutputs && io.outCfg[static_cast<size_t>(n - 1)].function != OutputFunction::General)
     o["warning"] = "Ausgang " + std::to_string(n) + " ist kein allgemeiner Ausgang - wird nicht geschaltet";
-  if (!heatDemand.cfg.topic.empty() && !mqttCfg.enabled) o["warning"] = "MQTT ist ausgeschaltet - es wird nichts gesendet";
+  if ((!heatDemand.cfg.topic.empty() || heatDemand.cfg.target == "emsesp") && !mqttCfg.enabled) o["warning"] = "MQTT ist ausgeschaltet - es wird nichts gesendet";
 }
+
+// ------------------------------------------------ EMS-ESP
+
+std::string HeatCoreSystem::emsSend(const std::string& which) {
+  Millis now = clock_.nowMs();
+  if (!ems.cfg.enabled) return "EMS-ESP-Anbindung ist ausgeschaltet";
+  if (!mqttCfg.enabled) return "MQTT ist ausgeschaltet (System -> MQTT)";
+  if (!mqttPublishRaw) return "MQTT nicht verfuegbar";
+  auto pub = [&](const char* cmd, const std::string& value) { mqttPublishRaw(ems.commandTopic(cmd), value, false); };
+  if (which == "fallback") {
+    // give the heating circuit back to the thermostat as it was
+    pub("mode", ems.cfg.savedMode.empty() ? std::string("auto") : ems.cfg.savedMode);
+    if (!ems.cfg.savedReduce.empty() && ems.cfg.savedReduce != "nofrost") pub("reducemode", ems.cfg.savedReduce);
+    // the cached thermostat data still show HeatCore's own settings: a new
+    // take-over must wait for the next report, or it would remember those
+    ems.st.thermoMs = 0;
+    if (!ems.cfg.savedReduce.empty()) {
+      HC_LOGI(TAG, "EMS-ESP: heating circuit %u given back (mode %s, reduction %s)", ems.cfg.hc,
+              ems.cfg.savedMode.c_str(), ems.cfg.savedReduce.c_str());
+      ems.cfg.savedMode.clear();
+      ems.cfg.savedReduce.clear();
+      markDirty(ConfigSection::Heating);
+    }
+    return std::string();
+  }
+  if (which != "on" && which != "off") return "unbekannter Befehl: " + which;
+  bool fresh = ems.thermostatFresh(now);
+  if (ems.cfg.savedReduce.empty()) {
+    // take over: remember mode and reduction mode to give them back later
+    std::string hc = std::to_string(ems.cfg.hc);
+    if (!fresh) return "warte auf Daten vom Thermostat (EMS-ESP, Heizkreis " + hc + ")";
+    if (ems.st.mode == EmsMode::Unknown)
+      return "Betriebsart von Heizkreis " + hc + " nicht erkannt (unterstuetzt: RC30/RC35 mit Tag/Nacht/Auto)";
+    if (ems.st.reduce == EmsReduce::Unknown)
+      return "Absenkart von Heizkreis " + hc + " nicht erkannt: " + ems.st.reduceRaw;
+    ems.cfg.savedMode = emsModeKey(ems.st.mode);
+    ems.cfg.savedReduce = emsReduceKey(ems.st.reduce);
+    markDirty(ConfigSection::Heating);
+    HC_LOGI(TAG, "EMS-ESP: heating circuit %u taken over (mode %s, reduction %s)", ems.cfg.hc,
+            ems.cfg.savedMode.c_str(), ems.cfg.savedReduce.c_str());
+  }
+  // "night" must switch the circuit off: switch-off reduction (RC35 "Abschaltbetrieb")
+  if (!fresh || ems.st.reduce != EmsReduce::NoFrost) pub("reducemode", "nofrost");
+  pub("mode", which == "on" ? "day" : "night");
+  return std::string();
+}
+
+bool HeatCoreSystem::emsIngest(const std::string& topic, const std::string& payload) {
+  Millis now = clock_.nowMs();
+  if (!ems.ingest(topic, payload, now)) return false;
+  if (!ems.cfg.sensors) return true;
+  auto feed = [&](const char* id, float v) {
+    if (!std::isnan(v)) sensors.updateExtended(id, v, false, 0.f, -1, 100, now);
+  };
+  const std::string sub = topic.substr(ems.cfg.base.size() + 1);
+  if (sub == "boiler_data") {
+    feed("ems:outdoor", ems.st.outdoor);
+    feed("ems:boilerflow", ems.st.boilerFlow);
+    feed("ems:dhw", ems.st.dhwTemp);
+  } else if (sub == "mixer_data" && ems.st.mixerMs == now) {
+    feed("ems:hcflow", ems.st.hcFlow);
+  }
+  return true;
+}
+
+std::string HeatCoreSystem::emsFromJson(JsonObjectConst o) {
+  EmsEspConfig old = ems.cfg;
+  bool targetChange = (o["enabled"] | false) != old.enabled || std::string(o["base"] | "ems-esp") != old.base ||
+                      static_cast<uint8_t>(o["hc"] | 2) != old.hc;
+  bool used = heatDemand.cfg.enabled && heatDemand.cfg.target == "emsesp";
+  if (used && !(o["enabled"] | false))
+    return "Wird von der Waermeanforderung benutzt - dort zuerst ein anderes Ziel waehlen oder sie ausschalten";
+  {
+    EmsEsp probe;
+    probe.cfg = old;
+    std::string err = probe.fromJson(o, true);
+    if (!err.empty()) return err;
+  }
+  if (used && targetChange && !old.savedReduce.empty()) heatDemandRelease();  // old circuit back to the thermostat
+  ems.fromJson(o, true);
+  if (targetChange) {
+    ems.cfg.savedMode.clear();
+    ems.cfg.savedReduce.clear();
+    heatDemand.sentOnce = false;  // the new circuit is taken over with the next second
+  }
+  markDirty(ConfigSection::Heating);
+  return std::string();
+}
+
+void HeatCoreSystem::emsStatusJson(JsonObject o) const { ems.statusJson(o, clock_.nowMs()); }
 
 }  // namespace hc

@@ -1296,6 +1296,45 @@ ApiResponse ApiRouter::handle(const ApiRequest& req) {
         } else {
           c.fail(404, "?");
         }
+      } else if (head == "emsesp") {
+        // EMS-ESP gateway: values of boiler / thermostat / mixer, heating circuit for the heat demand
+        if (p.size() == 1 && c.is("GET")) {
+          JsonObject cfg = out["config"].to<JsonObject>();
+          sys.ems.toJson(cfg);
+          cfg.remove("savedMode");
+          cfg.remove("savedReduce");
+          sys.emsStatusJson(out["status"].to<JsonObject>());
+        } else if (p.size() == 1 && c.is("PUT")) {
+          std::vector<std::string> before = sys.ems.topics();
+          std::string err = sys.emsFromJson(c.body());
+          if (err.empty() && sys.ems.topics() != before && sys.platformCommand)
+            sys.platformCommand("apply_mqtt", JsonObjectConst());  // subscribe to the new topics
+          c.okOrFail(err);
+        } else if (p.size() == 2 && p[1] == "sensors" && c.is("POST")) {
+          // take the EMS values over as sensors (outdoor temperature for the statistics, ...)
+          struct S {
+            const char* id;
+            const char* name;
+            SensorRole role;
+          };
+          const S list[] = {{"ems:outdoor", "Aussentemperatur (Kessel)", SensorRole::Outdoor},
+                            {"ems:boilerflow", "Kessel Vorlauf", SensorRole::Other},
+                            {"ems:hcflow", "Heizkreis Vorlauf (Mischer)", SensorRole::Other},
+                            {"ems:dhw", "Warmwasser", SensorRole::Other}};
+          JsonArray added = out["added"].to<JsonArray>();
+          for (auto& x : list) {
+            if (sys.sensors.find(x.id)) continue;
+            bool seen = false;
+            for (auto& d : sys.sensors.discovered())
+              if (d.id == x.id) seen = true;
+            if (!seen) continue;  // no value received yet
+            if (sys.sensors.adopt(x.id, x.name, "", x.role).empty()) added.add(x.id);
+          }
+          if (added.size()) sys.markDirty(ConfigSection::Sensors);
+          out["ok"] = true;
+        } else {
+          c.fail(404, "?");
+        }
       } else if (head == "ble") {
         // Bluetooth LE thermometers
         if (p.size() == 1 && c.is("GET")) {

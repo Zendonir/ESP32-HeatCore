@@ -190,3 +190,25 @@ TEST(heat_demand_ignores_stale_pwm_duty) {
   CHECK(w->sensorFail);
   CHECK(!r.sys.heatDemand.active);
 }
+
+TEST(heat_demand_send_pending_until_mqtt_works) {
+  // repeat 0: a send that could not go out (MQTT off) is not lost
+  Rig r;
+  std::vector<Sent> sent;
+  r.basicRoom();
+  r.sys.mqttPublishRaw = [&sent](const std::string& t, const std::string& p, bool) { sent.push_back({t, p}); };
+  ApiRouter api(r.sys);
+  std::string cfg = kEms;
+  cfg.replace(cfg.find("\"repeatSec\":300"), 15, "\"repeatSec\":0  ");
+  cfg.replace(cfg.find("\"output\":9"), 10, "\"output\":0");
+  CHECK_EQ(call(api, "PUT", "/api/heatdemand", cfg.c_str()).status, 200);
+  feed(r, 19.f, 120);
+  CHECK(r.sys.heatDemand.active);
+  CHECK(sent.empty());
+  r.load(ConfigSection::Mqtt, R"({"enabled":true,"host":"10.0.0.2"})");
+  feed(r, 19.f, 5);
+  CHECK_EQ(sent.size(), 1u);
+  CHECK(!sent.empty() && sent.back().payload.find("day") != std::string::npos);
+  feed(r, 19.f, 600);
+  CHECK_EQ(sent.size(), 1u);  // and then only on change
+}

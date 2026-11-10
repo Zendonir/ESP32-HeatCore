@@ -11,7 +11,9 @@ constexpr const char* TAG = "mqtt";
 }
 
 MqttLink::MqttLink(hc::HeatCoreSystem& sys) : sys_(sys), bridge_(sys), client_(net_) {
-  client_.setBufferSize(4096);
+  // EMS-ESP publishes ~3 KB per device (thermostat_data with two circuits);
+  // the buffer is allocated once (PSRAM)
+  client_.setBufferSize(8192);
   client_.setKeepAlive(30);
   client_.setSocketTimeout(5);
   client_.setCallback([this](char* t, uint8_t* p, unsigned int l) { onMessage(t, p, l); });
@@ -99,10 +101,18 @@ void MqttLink::loop(bool online) {
   enabled_ = enabled;
   up_ = client_.connected();
   if (reconnect_ || !enabled || !online) {
-    if (client_.connected()) client_.disconnect();
+    if (client_.connected()) {
+      // queued messages first (e.g. a heating circuit given back before new subscriptions)
+      hc::MqttMsg m;
+      for (int i = 0; i < 50 && out_.pop(m); ++i)
+        client_.publish(m.topic.c_str(), reinterpret_cast<const uint8_t*>(m.payload.data()), m.payload.size(),
+                        m.retain);
+      client_.loop();
+      client_.disconnect();
+    }
     reconnect_ = false;
     cfg_.enabled = enabled;
-    out_.clear();
+    if (!enabled || !online) out_.clear();  // a reconnect keeps what is still queued
     wasConnected_ = false;
     if (!enabled || !online) return;
   }
