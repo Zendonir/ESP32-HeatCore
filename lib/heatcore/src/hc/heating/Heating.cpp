@@ -412,10 +412,14 @@ std::string HeatingManager::validateManual(const Circuit& c) {
 bool HeatingManager::shareWants(const Circuit& c, const Room& r, Millis now) {
   if (c.share >= 100) return true;
   if (c.share == 0) return false;
-  // PWM room in the regular on-part of its cycle: a shortened pulse from the cycle start
+  // PWM room: one timeline per cycle - a pulse from the cycle start, the share
+  // of the room's on-time; while an external heat request keeps the room on
+  // (updateDemand), the whole cycle is the room's on-time
   if (r.control == RoomControl::Pwm && r.pwmRunning) {
-    uint32_t inCycle = elapsed(now, r.pwmCycleStartMs);
-    if (inCycle < r.pwmOnMs) return inCycle < static_cast<uint32_t>(static_cast<uint64_t>(r.pwmOnMs) * c.share / 100u);
+    uint32_t cycleMs = static_cast<uint32_t>(r.pwmCycleMin ? r.pwmCycleMin : 20) * 60000u;
+    bool sustained = r.externalDemand && !r.windowOpen() && r.temperature < r.setpoint + 1.0f;
+    uint32_t base = sustained ? cycleMs : r.pwmOnMs;
+    return elapsed(now, r.pwmCycleStartMs) < static_cast<uint32_t>(static_cast<uint64_t>(base) * c.share / 100u);
   }
   // two-point room (or other demand): pulse within the room's cycle, starting
   // when the room began to heat

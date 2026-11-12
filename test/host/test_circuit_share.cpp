@@ -58,3 +58,30 @@ TEST(circuit_share_pwm_room_and_config) {
   cfg["circuits"][1]["share"] = 150;
   CHECK(!r.sys.sectionFromJson(ConfigSection::Heating, cfg.as<JsonObjectConst>()).empty());
 }
+
+TEST(circuit_share_pwm_with_external_demand) {
+  // an external heat request keeps a PWM room on for the whole cycle: the
+  // circuit gets its share of the whole cycle in one pulse per cycle
+  Rig r;
+  r.load(ConfigSection::Heating, R"({"rooms":[{"id":"wohnen","name":"Wohnen","comfort":21,"eco":18,"frost":7,"mode":"comfort",
+      "control":"pwm","pwmCycleMin":20,"pwmKp":40,"pwmTnMin":0}],
+      "circuits":[{"n":1,"room":"wohnen","minOnSec":60,"minOffSec":60},
+                  {"n":2,"room":"wohnen","minOnSec":60,"minOffSec":60,"share":50}]})");
+  r.load(ConfigSection::Sensors, R"({"sensors":[{"id":"ow1:01","name":"F","room":"wohnen","timeoutSec":300}]})");
+  openTime(r, 20.5f, 25 * 60);
+  Room* w = r.sys.heating.room("wohnen");
+  r.sys.heating.setExternalDemand(*w, "test", true, 4 * 3600, r.clock.ms);
+  openTime(r, 20.5f, 20 * 60);  // into the next full cycle
+  uint32_t open2 = 0, pulses = 0;
+  bool was = r.output(2);
+  for (uint32_t s = 0; s < 3 * 20 * 60; ++s) {
+    if (s % 30 == 0) r.sys.sensors.update("ow1:01", 20.5f, r.clock.ms);
+    r.run(1000, false);
+    bool on = r.output(2);
+    if (on) ++open2;
+    if (on && !was) ++pulses;
+    was = on;
+  }
+  CHECK(open2 > 3 * 10 * 60 - 120 && open2 < 3 * 10 * 60 + 120);  // half of 20 min per cycle
+  CHECK(pulses <= 3);  // one pulse per cycle, no second short one
+}
