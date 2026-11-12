@@ -113,6 +113,7 @@ Alle Antworten JSON, Fehler als `{"error": "..."}` mit HTTP-Status.
 | `GET /api/firmware`, `POST /api/firmware/rollback` | Firmware-Version, Speicherbereich, Probelauf, letztes Update-Ergebnis; Rückkehr zur vorherigen Firmware |
 | `POST /api/ota?size=&sha256=&source=` (multipart) | Firmware-Update; nur HeatCore-Images dieser Platine, optional mit Größe/SHA-256 aus dem Release |
 | `GET/PUT /api/io`, `POST/DELETE /api/outputs/<n>/manual`, `POST /api/outputs/<n>/request` | Ein-/Ausgänge |
+| `PUT /api/circuits/<n>/manual` `{"mode":"auto\|open\|closed\|percent","pct":30,"cycleMin":20}`, `DELETE …` (= auto) | Ventil dauerhaft von Hand (gespeichert; `percent`: Anteil je Zyklus, mit den Mindestlaufzeiten geprüft) |
 | `GET/PUT /api/heating`, `POST /api/rooms/<id>/{setpoint,adjust,mode}`, `POST /api/mode` | Räume, Heizkreise |
 | `GET /api/sensors`, `PUT/DELETE /api/sensors/<id>`, `POST /api/sensors/adopt` | Sensor-Manager |
 | `GET/PUT /api/ble`, `PUT /api/ble/key` | Bluetooth-Thermometer, siehe `docs/bluetooth-thermometer.md` |

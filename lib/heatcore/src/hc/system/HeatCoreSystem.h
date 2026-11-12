@@ -200,6 +200,9 @@ class HeatCoreSystem : public IAutomationContext {
   std::string checkAction(const Action& a, const ActionOrigin& origin) const;
   std::string manualOutput(int n, bool on, uint32_t durationSec, EventSource src);
   void clearManualOutput(int n);
+  // permanent manual control of heating circuit n (1..16): "auto", "open",
+  // "closed" or "percent" (pct of cycleMin); stored, survives restarts
+  std::string setCircuitManual(int n, const std::string& mode, int pct, int cycleMin);
   std::string requestOutput(int n, bool on, uint32_t durationSec, EventSource src);
   std::string runRule(uint16_t id, EventSource src);
 

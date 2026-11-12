@@ -359,10 +359,60 @@ void HeatingManager::updateDemand(Room& r, const ModelAdvice& adv, SensorFailMod
   }
 }
 
+const char* circuitManualName(CircuitManual m) {
+  switch (m) {
+    case CircuitManual::Open: return "open";
+    case CircuitManual::Closed: return "closed";
+    case CircuitManual::Percent: return "percent";
+    default: return "auto";
+  }
+}
+
+bool circuitManualFromName(const char* s, CircuitManual& out) {
+  if (!s) return false;
+  std::string v(s);
+  if (v == "auto") out = CircuitManual::Auto;
+  else if (v == "open") out = CircuitManual::Open;
+  else if (v == "closed") out = CircuitManual::Closed;
+  else if (v == "percent") out = CircuitManual::Percent;
+  else return false;
+  return true;
+}
+
+bool HeatingManager::manualWants(const Circuit& c, Millis now) {
+  switch (c.manual) {
+    case CircuitManual::Open: return true;
+    case CircuitManual::Closed: return false;
+    case CircuitManual::Percent: {
+      uint32_t cycle = static_cast<uint32_t>(c.manualCycleMin ? c.manualCycleMin : 20) * 60000u;
+      // circuits start their pulse at different times: not all actuators draw
+      // their starting current at once
+      uint32_t phase = (now + static_cast<uint32_t>(c.index - 1) * (cycle / kNumOutputs)) % cycle;
+      return phase < cycle / 100u * c.manualPct;
+    }
+    default: return false;
+  }
+}
+
+std::string HeatingManager::validateManual(const Circuit& c) {
+  if (c.manual != CircuitManual::Percent) return std::string();
+  if (c.manualPct > 100) return "Prozent 0..100";
+  if (c.manualCycleMin < 5 || c.manualCycleMin > 120) return "Zyklus 5..120 min";
+  uint32_t cycle = static_cast<uint32_t>(c.manualCycleMin) * 60u;
+  uint32_t on = cycle * c.manualPct / 100u, off = cycle - on;
+  if ((c.manualPct > 0 && on < c.minOnSec) || (c.manualPct < 100 && off < c.minOffSec)) {
+    uint32_t lo = (c.minOnSec * 100u + cycle - 1) / cycle, hi = 100u - (c.minOffSec * 100u + cycle - 1) / cycle;
+    return "Heizkreis " + std::to_string(c.index) + ": bei " + std::to_string(c.manualCycleMin) +
+           " min Zyklus und den Mindestlaufzeiten sind 0, 100 oder " + std::to_string(lo) + ".." + std::to_string(hi) +
+           " % moeglich (laengerer Zyklus erlaubt kleinere Werte)";
+  }
+  return std::string();
+}
+
 void HeatingManager::updateCircuits(Millis now) {
   for (auto& c : circuits) {
     const Room* r = c.room.empty() ? nullptr : room(c.room);
-    c.request = c.enabled && r && r->demand;
+    c.request = c.enabled && (c.manual != CircuitManual::Auto ? manualWants(c, now) : r && r->demand);
     if (c.request == c.open) continue;
     uint32_t minT = (c.open ? c.minOnSec : c.minOffSec) * 1000u;
     if (c.switched && elapsed(now, c.lastSwitchMs) < minT) continue;
@@ -457,6 +507,9 @@ void HeatingManager::toJson(JsonObject o, bool runtime) const {
     x["valveNormallyOpen"] = c.valveNormallyOpen;
     x["minOnSec"] = c.minOnSec;
     x["minOffSec"] = c.minOffSec;
+    x["manual"] = circuitManualName(c.manual);
+    x["manualPct"] = c.manualPct;
+    x["manualCycleMin"] = c.manualCycleMin;
     if (!runtime) continue;
     x["request"] = c.request;
     x["open"] = c.open;
@@ -563,6 +616,13 @@ std::string HeatingManager::fromJson(JsonObjectConst o) {
     c.minOnSec = x["minOnSec"] | 120;
     c.minOffSec = x["minOffSec"] | 120;
     if (c.minOnSec > 3600 || c.minOffSec > 3600) return "Mindestlaufzeiten max. 3600 s";
+    // permanent manual control: kept when the caller does not send it (older pages)
+    if (!x["manual"].isNull() && !circuitManualFromName(x["manual"] | "", c.manual))
+      return "Handbetrieb: auto, open, closed oder percent";
+    c.manualPct = static_cast<uint8_t>(x["manualPct"] | static_cast<int>(c.manualPct));
+    c.manualCycleMin = static_cast<uint16_t>(x["manualCycleMin"] | static_cast<int>(c.manualCycleMin));
+    std::string merr = validateManual(c);
+    if (!merr.empty()) return merr;
   }
   // a PWM cycle must hold one minimum pulse and one minimum pause
   for (auto& r : list) {
