@@ -401,7 +401,7 @@ routes['/emsesp']=async m=>{
    ...field('Aktiv',inp(c,'enabled','checkbox'),'Liest Kessel, Thermostat und Mischer über MQTT (gleicher Broker wie EMS-ESP, System → MQTT).'),
    ...field('Basisthema',inp(c,'base',null,{style:'font-family:monospace'}),'Wie in EMS-ESP unter Einstellungen → MQTT (Standard: ems-esp). MQTT-Format „verschachtelt“ (Standard).'),
    ...field('Heizkreis',sel([[1,'Heizkreis 1'],[2,'Heizkreis 2'],[3,'Heizkreis 3'],[4,'Heizkreis 4']],c.hc,v=>c.hc=+v),'Den HeatCore schalten darf (Wärmeanforderung) – z. B. die Fußbodenheizung. Die anderen bleiben unberührt.'),
-   ...field('Als Sensoren',inp(c,'sensors','checkbox'),'Außentemperatur, Vorläufe und Warmwasser erscheinen unter Temperatursensoren („ems:…“).'),
+   ...field('Als Sensoren',inp(c,'sensors','checkbox'),'Außentemperatur, Vorläufe, Warmwasser und die Raumtemperatur des Thermostats erscheinen unter Temperatursensoren („ems:…“).'),
    ...field('',h('div',{class:'row'},h('button',{class:'p',onclick:()=>act(()=>PUT('emsesp',c),'Gespeichert').then(refresh)},'Speichern'),
      h('button',{onclick:()=>act(()=>POST('emsesp/sensors',{}),'Sensoren übernommen').then(refresh)},'Werte als Sensoren übernehmen'))))),
   st);
@@ -415,7 +415,7 @@ routes['/emsesp']=async m=>{
    h('div',{class:'card'},h('div',{class:'row'},h('b',null,'EMS-ESP: '),x.online===false?chip('offline','bad'):x.online?chip('online','ok'):chip('Status unbekannt'),h('span',{class:'muted'},' '+x.messages+' Nachrichten'),x.takenOver?chip('Heizkreis '+t.hc+' von HeatCore übernommen','ok'):null),
     x.error?h('p',{class:'bad'},x.error):null),
    h('div',{class:'card'},h('h3',{style:'margin-top:0'},'Kessel ',age(b)),tbl([['Außentemperatur',v(b.outdoor,' °C')],['Vorlauf (Soll)',v(b.flow,' °C')+' ('+v(b.setFlow,' °C')+')'],['Rücklauf',v(b.return,' °C')],['Brenner',yn(b.burner)+(b.burnPower!=null?' · '+b.burnPower+' %':'')],['Heizbetrieb',yn(b.heatingActive)],['Warmwasser',v(b.dhw,' °C')+(b.dhwActive?' · wird bereitet':'')],['Anlagendruck',v(b.pressure,' bar')],['Statusmeldung',b.serviceCode||'–'],['Letzter Fehler',b.lastCode||'–']])),
-   h('div',{class:'card'},h('h3',{style:'margin-top:0'},'Thermostat, Heizkreis '+t.hc+' ',age(t)),t.modeText?tbl([['Betriebsart',t.modeText+(t.modeType?' (gerade '+t.modeType+')':'')],['Absenkart',t.reduceText],['Raumsoll',v(t.selTemp,' °C')],['Berechneter Vorlauf',v(t.targetFlow,' °C')],['Sommer/Winter',t.summerMode||'–'],['Heizsystem',t.heatingType||'–'],['Gedämpfte Außentemp.',v(t.dampedOutdoor,' °C')],['Letzter Fehler',t.lastCode||'–']]):h('p',{class:'muted'},'Noch keine Daten für diesen Heizkreis.')),
+   h('div',{class:'card'},h('h3',{style:'margin-top:0'},'Thermostat, Heizkreis '+t.hc+' ',age(t)),t.modeText?tbl([['Betriebsart',t.modeText+(t.modeType?' (gerade '+t.modeType+')':'')],['Absenkart',t.reduceText],['Raumtemperatur (Thermostat)',v(t.roomTemp,' °C')],['Raumsoll',v(t.selTemp,' °C')],['Berechneter Vorlauf',v(t.targetFlow,' °C')],['Sommer/Winter',t.summerMode||'–'],['Heizsystem',t.heatingType||'–'],['Gedämpfte Außentemp.',v(t.dampedOutdoor,' °C')],['Letzter Fehler',t.lastCode||'–']]):h('p',{class:'muted'},'Noch keine Daten für diesen Heizkreis.')),
    h('div',{class:'card'},h('h3',{style:'margin-top:0'},'Mischer, Heizkreis '+t.hc+' ',age(mx)),mx.ageSec<0?h('p',{class:'muted'},'Kein Mischermodul für diesen Heizkreis gemeldet.'):tbl([['Vorlauf',v(mx.flow,' °C')],['Mischer fährt',mx.valve==null?'–':mx.valve>0?'auf ('+mx.valve+' %)':mx.valve<0?'zu ('+(-mx.valve)+' %)':'steht'],['Pumpe',yn(mx.pump)]])))};
  every(5000,refresh);
 };

@@ -145,7 +145,8 @@ bool EmsEsp::ingest(const std::string& topic, const std::string& payload, Millis
       filter[k] = true;
     filter["dhw"]["curtemp"] = true;
   } else if (which == 1) {
-    for (const char* k : {"mode", "modetype", "reducemode", "seltemp", "targetflowtemp", "summermode", "heatingtype"})
+    for (const char* k : {"mode", "modetype", "reducemode", "seltemp", "currtemp", "targetflowtemp", "summermode",
+                          "heatingtype"})
       filter[hk][k] = true;
     filter["dampedoutdoortemp"] = true;
     filter["lastcode"] = true;
@@ -200,6 +201,7 @@ void EmsEsp::parseThermostat(JsonObjectConst o, Millis now) {
   st.reduce = emsReduceParse(h["reducemode"]);
   st.reduceRaw = text(h["reducemode"]);
   st.selTemp = num(h["seltemp"]);
+  st.roomTemp = num(h["currtemp"]);
   st.targetFlow = num(h["targetflowtemp"]);
   st.summerMode = text(h["summermode"]);
   st.heatingType = text(h["heatingtype"]);
@@ -284,6 +286,7 @@ void EmsEsp::statusJson(JsonObject o, Millis now) const {
     t["reduce"] = emsReduceKey(st.reduce);
     t["reduceText"] = st.reduce == EmsReduce::Unknown && !st.reduceRaw.empty() ? st.reduceRaw : emsReduceText(st.reduce);
     put(t, "selTemp", st.selTemp);
+    put(t, "roomTemp", st.roomTemp);
     put(t, "targetFlow", st.targetFlow);
     t["summerMode"] = st.summerMode;
     t["heatingType"] = st.heatingType;

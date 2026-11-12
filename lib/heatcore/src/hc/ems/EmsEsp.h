@@ -11,7 +11,8 @@
 // Texts may be German or English (EMS-ESP language setting), on/off values as
 // text ("an"/"aus", "on"/"off"), true/false or 1/0, enums as text or index.
 // Outdoor, boiler flow, circuit flow and hot water temperature become the
-// sensors "ems:outdoor", "ems:boilerflow", "ems:hcflow", "ems:dhw".
+// sensors "ems:outdoor", "ems:boilerflow", "ems:hcflow", "ems:dhw" and the room
+// temperature measured by the thermostat (RC35) "ems:room".
 //
 // Controlling (heat demand with target "emsesp", one heating circuit):
 //   * take over: the reduction mode of the circuit is set to "nofrost"
@@ -73,6 +74,7 @@ struct EmsEspState {
   EmsReduce reduce = EmsReduce::Unknown;
   std::string reduceRaw;  // as reported (when it could not be recognised)
   float selTemp = NAN, targetFlow = NAN, dampedOutdoor = NAN;
+  float roomTemp = NAN;  // measured by the thermostat (RC35: its own sensor or a remote)
   std::string summerMode, heatingType, thermoLastCode;
   bool hcSeen = false;
   // mixer, configured heating circuit

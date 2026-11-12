@@ -614,8 +614,9 @@ void MqttBridge::onEvent(const Event& e, std::vector<MqttMsg>& out) const {
 
 bool MqttBridge::handle(const std::string& topic, const std::string& payload, std::string* error) {
   // values and buttons of other devices (external sources)
-  if (sys_.emsIngest(topic, payload)) return true;  // EMS-ESP data
-  bool external = sys_.external.ingestMqtt(sys_, topic, payload, sys_.clock().nowMs());
+  // EMS-ESP data; an external source may use the same topic (e.g. another value)
+  bool ems = sys_.emsIngest(topic, payload);
+  bool external = sys_.external.ingestMqtt(sys_, topic, payload, sys_.clock().nowMs()) || ems;
   std::string b = base() + "/";
   if (topic.compare(0, b.size(), b) != 0) return external;
   std::vector<std::string> p = split(topic.substr(b.size()), '/');
