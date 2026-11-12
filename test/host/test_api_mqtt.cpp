@@ -208,6 +208,15 @@ TEST(mqtt_discovery_entities_and_permissions) {
   CHECK(!has("switch/heatcore_a1b2c3/output_1/config"));  // heating circuit never as switch
   CHECK(has("select/heatcore_a1b2c3/display_page/config"));
   CHECK(has("sensor/heatcore_a1b2c3/sensor_ow1_01/config"));
+  // dashboard values: heating power, setpoint, status, demand per room; system
+  CHECK(has("sensor/heatcore_a1b2c3/room_wohnen_power/config"));
+  CHECK(has("sensor/heatcore_a1b2c3/room_wohnen_setpoint/config"));
+  CHECK(has("sensor/heatcore_a1b2c3/room_wohnen_status/config"));
+  CHECK(has("binary_sensor/heatcore_a1b2c3/room_wohnen_demand/config"));
+  CHECK(has("sensor/heatcore_a1b2c3/sys_power/config"));
+  CHECK(has("sensor/heatcore_a1b2c3/sys_rooms_heating/config"));
+  CHECK(has("number/heatcore_a1b2c3/room_wohnen_comfort/config"));
+  CHECK(has("number/heatcore_a1b2c3/room_wohnen_eco/config"));
   // commands
   std::string base = r.sys.baseTopic();
   std::string err;
@@ -217,6 +226,26 @@ TEST(mqtt_discovery_entities_and_permissions) {
   CHECK_NEAR(r.sys.heating.room("wohnen")->manualSetpoint, 22.5, 0.01);
   CHECK(br.handle(base + "/room/wohnen/setpoint/set", "99", &err));  // clamped to max
   CHECK_NEAR(r.sys.heating.room("wohnen")->manualSetpoint, r.sys.safety.cfg.maxSetpoint, 0.01);
+  // stored comfort / eco temperatures: order frost <= eco <= comfort, safety limits
+  r.clock.advance(5000);
+  r.sys.takeDirty();
+  CHECK(br.handle(base + "/room/wohnen/comfort/set", "22.5", &err));
+  CHECK_STR(err, "");
+  CHECK_NEAR(r.sys.heating.room("wohnen")->comfort, 22.5, 0.01);
+  r.clock.advance(5000);
+  bool stored = false;
+  for (auto s : r.sys.takeDirty()) stored |= s == ConfigSection::Heating;
+  CHECK(stored);
+  CHECK(br.handle(base + "/room/wohnen/eco/set", "23", &err));
+  CHECK(!err.empty());  // above comfort
+  CHECK_NEAR(r.sys.heating.room("wohnen")->eco, 18, 0.01);
+  CHECK(br.handle(base + "/room/wohnen/eco/set", "17.5", &err));
+  CHECK_STR(err, "");
+  CHECK_NEAR(r.sys.heating.room("wohnen")->eco, 17.5, 0.01);
+  CHECK(br.handle(base + "/room/wohnen/comfort/set", "99", &err));  // clamped to max
+  CHECK_NEAR(r.sys.heating.room("wohnen")->comfort, r.sys.safety.cfg.maxSetpoint, 0.01);
+  CHECK(br.handle(base + "/room/nix/comfort/set", "21", &err));
+  CHECK(!err.empty());
   CHECK(br.handle(base + "/output/1/set", "ON", &err));
   CHECK(!err.empty());  // circuit output not switchable by HA
   CHECK(br.handle(base + "/rf/tx/1/2/send", "PRESS", &err));
@@ -240,10 +269,54 @@ TEST(mqtt_discovery_entities_and_permissions) {
   // state + events
   std::vector<MqttMsg> st;
   br.state(st);
-  bool roomState = false;
-  for (auto& m : st)
-    if (m.topic == base + "/room/wohnen/state") roomState = m.payload.find("\"setpoint\"") != std::string::npos;
+  bool roomState = false, sysState = false, circuitState = false;
+  for (auto& m : st) {
+    if (m.topic == base + "/circuit/1/state") {
+      JsonDocument d;
+      deserializeJson(d, m.payload);
+      circuitState = std::string(d["room"] | "") == "Wohnen" && d["share"] == 100 && d["open"].is<const char*>();
+    }
+    if (m.topic == base + "/room/wohnen/state")
+      roomState = m.payload.find("\"setpoint\"") != std::string::npos &&
+                  m.payload.find("\"power\":") != std::string::npos &&
+                  m.payload.find("\"mode_text\":") != std::string::npos;
+    if (m.topic == base + "/system/state") {
+      JsonDocument d;
+      deserializeJson(d, m.payload);
+      sysState = d["power"].is<int>() && d["rooms_heating"].is<int>() && d["rssi"].isNull();
+    }
+  }
   CHECK(roomState);
+  CHECK(sysState);
+  // a room switched off still heats against frost protection: reported as heating
+  {
+    Room* w = r.sys.heating.room("wohnen");
+    w->mode = RoomMode::Off;
+    w->control = RoomControl::Hysteresis;
+    w->demand = true;
+    std::vector<MqttMsg> fs;
+    br.state(fs);
+    int power = -1, heating = -1;
+    for (auto& m : fs) {
+      JsonDocument d;
+      deserializeJson(d, m.payload);
+      if (m.topic == base + "/room/wohnen/state") power = d["power"] | -1;
+      if (m.topic == base + "/system/state") heating = d["rooms_heating"] | -1;
+    }
+    CHECK_EQ(power, 100);
+    CHECK_EQ(heating, 1);
+    w->overTemp = true;  // forced closed
+    fs.clear();
+    br.state(fs);
+    for (auto& m : fs)
+      if (m.topic == base + "/room/wohnen/state") {
+        JsonDocument d;
+        deserializeJson(d, m.payload);
+        power = d["power"] | -1;
+      }
+    CHECK_EQ(power, 0);
+  }
+  CHECK(circuitState);
 }
 
 TEST(mqtt_generic_inbound_triggers_rule) {

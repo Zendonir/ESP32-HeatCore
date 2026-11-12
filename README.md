@@ -70,7 +70,9 @@ Webinterface.
   Sensoren an und schaltet einen RC35-Heizkreis direkt – mit Rückmeldung
   des Thermostats und Rückgabe der ursprünglichen Einstellungen.
 * **Home Assistant (optional):** MQTT-Discovery für alle Komponenten,
-  eingeschränkte Rechte.
+  eingeschränkte Rechte. Je Raum Heizleistung (%), Solltemperatur, Heizbedarf
+  und Betrieb als eigene Entitäten, dazu Heizleistung gesamt und
+  Gerätediagnose – für Verläufe und Statistiken im Dashboard.
 
 ## Status
 

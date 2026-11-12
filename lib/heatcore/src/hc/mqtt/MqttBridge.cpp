@@ -35,6 +35,31 @@ const char* haMode(const Room& r) {
   if (r.mode == RoomMode::Auto) return "auto";
   return "heat";
 }
+// heating power of a room in %, from the active control state (a room that is
+// off or has its window open still heats against its frost protection):
+// PWM duty (100 while an external request keeps the valve open), otherwise
+// 100 while the room heats
+int roomPower(const Room& r) {
+  if (r.overTemp) return 0;
+  if (r.control == RoomControl::Pwm && r.pwmRunning) {
+    bool sustained = r.externalDemand && !r.windowOpen() && r.temperature < r.setpoint + 1.0f;
+    return sustained ? 100 : static_cast<int>(std::lround(r.duty));
+  }
+  return r.demand ? 100 : 0;
+}
+
+// effective state as text (in auto mode the schedule decides between comfort and eco)
+const char* roomModeText(const Room& r) {
+  auto near = [&](float a) { return std::fabs(r.setpoint - a) < 0.05f; };
+  return r.mode == RoomMode::Off   ? "Aus"
+         : r.windowOpen()         ? "Fenster offen"
+         : r.manualActive         ? "Hand"
+         : near(r.comfort)        ? "Komfort"
+         : near(r.eco)            ? "Absenkung"
+         : near(r.frost)          ? "Frostschutz"
+                                  : "Auto";
+}
+
 const char* haPreset(const Room& r) {
   switch (r.mode) {
     case RoomMode::Comfort: return "comfort";
@@ -122,6 +147,10 @@ void MqttBridge::discovery(std::vector<MqttMsg>& out) {
       d["temp_step"] = 0.5;
       d["precision"] = 0.1;
       d["temperature_unit"] = "C";
+      d["json_attributes_topic"] = st;
+      d["json_attributes_template"] =
+          "{{ {'heizleistung': value_json.power, 'betrieb': value_json.mode_text, 'grund': value_json.reason, "
+          "'heizbedarf': value_json.demand} | tojson }}";
       addConfig(out, topics, "climate", "room_" + r.id, d);
     }
     {
@@ -131,6 +160,60 @@ void MqttBridge::discovery(std::vector<MqttMsg>& out) {
       d["value_template"] = "{{ 'ON' if value_json.window else 'OFF' }}";
       d["device_class"] = "window";
       addConfig(out, topics, "binary_sensor", "room_" + r.id + "_window", d);
+    }
+    {
+      JsonDocument d;
+      d["name"] = r.name + " Heizbedarf";
+      d["state_topic"] = st;
+      d["value_template"] = "{{ 'ON' if value_json.demand else 'OFF' }}";
+      d["device_class"] = "heat";
+      addConfig(out, topics, "binary_sensor", "room_" + r.id + "_demand", d);
+    }
+    {
+      JsonDocument d;
+      d["name"] = r.name + " Heizleistung";
+      d["state_topic"] = st;
+      d["value_template"] = "{{ value_json.power }}";
+      d["unit_of_measurement"] = "%";
+      d["state_class"] = "measurement";
+      d["icon"] = "mdi:radiator";
+      addConfig(out, topics, "sensor", "room_" + r.id + "_power", d);
+    }
+    {
+      JsonDocument d;
+      d["name"] = r.name + " Solltemperatur";
+      d["state_topic"] = st;
+      d["value_template"] = "{{ value_json.setpoint }}";
+      d["device_class"] = "temperature";
+      d["unit_of_measurement"] = "\xC2\xB0" "C";
+      d["state_class"] = "measurement";
+      addConfig(out, topics, "sensor", "room_" + r.id + "_setpoint", d);
+    }
+    {
+      JsonDocument d;
+      d["name"] = r.name + " Betrieb";
+      d["state_topic"] = st;
+      d["value_template"] = "{{ value_json.mode_text }}";
+      d["json_attributes_topic"] = st;
+      d["json_attributes_template"] = "{{ {'grund': value_json.reason, 'hand': value_json.manual} | tojson }}";
+      d["icon"] = "mdi:information-outline";
+      addConfig(out, topics, "sensor", "room_" + r.id + "_status", d);
+    }
+    for (auto which : {"comfort", "eco"}) {
+      bool comfort = std::strcmp(which, "comfort") == 0;
+      JsonDocument d;
+      d["name"] = r.name + (comfort ? " Komforttemperatur" : " Absenktemperatur");
+      d["state_topic"] = st;
+      d["value_template"] = std::string("{{ value_json.") + which + " }}";
+      d["command_topic"] = b + "/room/" + r.id + "/" + which + "/set";
+      d["min"] = sys_.safety.cfg.minSetpoint;
+      d["max"] = sys_.safety.cfg.maxSetpoint;
+      d["step"] = 0.5;
+      d["mode"] = "box";
+      d["device_class"] = "temperature";
+      d["unit_of_measurement"] = "\xC2\xB0" "C";
+      d["entity_category"] = "config";
+      addConfig(out, topics, "number", "room_" + r.id + "_" + which, d);
     }
     {
       JsonDocument d;
@@ -332,6 +415,9 @@ void MqttBridge::discovery(std::vector<MqttMsg>& out) {
       d["state_topic"] = b + "/circuit/" + n + "/state";
       d["value_template"] = "{{ value_json.open }}";
       d["device_class"] = "opening";
+      d["json_attributes_topic"] = b + "/circuit/" + n + "/state";
+      d["json_attributes_template"] =
+          "{{ {'raum': value_json.room, 'hand': value_json.manual, 'anteil': value_json.share} | tojson }}";
       addConfig(out, topics, "binary_sensor", "circuit_" + n, d);
       JsonDocument f;
       f["name"] = c.name + " Stoerung";
@@ -339,6 +425,37 @@ void MqttBridge::discovery(std::vector<MqttMsg>& out) {
       f["value_template"] = "{{ value_json.fault }}";
       f["device_class"] = "problem";
       addConfig(out, topics, "binary_sensor", "circuit_" + n + "_fault", f);
+    }
+  }
+  // ---- system: total heating power, rooms heating, network and device health
+  {
+    std::string st = b + "/system/state";
+    struct SysDef {
+      const char* key;
+      const char* name;
+      const char* unit;
+      const char* deviceClass;
+      const char* icon;
+      bool diagnostic;
+      bool measurement;
+    };
+    for (auto& sd : {SysDef{"power", "Heizleistung gesamt", "%", "", "mdi:radiator", false, true},
+                     SysDef{"rooms_heating", "Raeume heizen", "", "", "mdi:home-thermometer", false, true},
+                     SysDef{"uptime_h", "Laufzeit", "h", "duration", "", true, false},
+                     SysDef{"rssi", "WLAN Signal", "dBm", "signal_strength", "", true, true},
+                     SysDef{"heap_kb", "Freier Speicher", "kB", "", "mdi:memory", true, true},
+                     SysDef{"network", "Netzwerk", "", "", "mdi:lan", true, false},
+                     SysDef{"ip", "IP-Adresse", "", "", "mdi:ip-network", true, false}}) {
+      JsonDocument d;
+      d["name"] = sd.name;
+      d["state_topic"] = st;
+      d["value_template"] = std::string("{{ value_json.") + sd.key + " }}";
+      if (*sd.unit) d["unit_of_measurement"] = sd.unit;
+      if (*sd.deviceClass) d["device_class"] = sd.deviceClass;
+      if (*sd.icon) d["icon"] = sd.icon;
+      if (sd.measurement) d["state_class"] = "measurement";
+      if (sd.diagnostic) d["entity_category"] = "diagnostic";
+      addConfig(out, topics, "sensor", std::string("sys_") + sd.key, d);
     }
   }
   // ---- alarms, rules
@@ -404,6 +521,10 @@ void MqttBridge::roomState(const Room& r, std::vector<MqttMsg>& out) const {
   d["reason"] = r.reason;
   d["manual"] = r.manualActive;
   if (r.control == RoomControl::Pwm && r.pwmRunning) d["duty"] = std::round(r.duty);
+  d["power"] = roomPower(r);
+  d["mode_text"] = roomModeText(r);
+  d["comfort"] = r.comfort;
+  d["eco"] = r.eco;
   out.push_back({base() + "/room/" + r.id + "/state", toStr(d), true});
   if (!sys_.mqttCfg.roomValueTopics) return;
   // one plain value per topic for simple displays (Button+, ...)
@@ -422,16 +543,7 @@ void MqttBridge::roomState(const Room& r, std::vector<MqttMsg>& out) const {
   out.push_back({p + "setpoint", num(r.setpoint), true});
   out.push_back({p + "heating", r.demand ? "1" : "0", true});
   out.push_back({p + "window", r.windowOpen() ? "1" : "0", true});
-  // effective state (in auto mode the schedule decides between comfort and eco)
-  auto near = [&](float a) { return std::fabs(r.setpoint - a) < 0.05f; };
-  const char* modeText = r.mode == RoomMode::Off   ? "Aus"
-                         : r.windowOpen()         ? "Fenster offen"
-                         : r.manualActive         ? "Hand"
-                         : near(r.comfort)        ? "Komfort"
-                         : near(r.eco)            ? "Absenkung"
-                         : near(r.frost)          ? "Frostschutz"
-                                                  : "Auto";
-  out.push_back({p + "mode_text", modeText, true});
+  out.push_back({p + "mode_text", roomModeText(r), true});
   const Sensor* sen = r.tempSensor.empty() ? nullptr : sys_.sensors.find(r.tempSensor);
   if (sen && sen->hasHumidity) out.push_back({p + "humidity", num(sen->humidity), true});
   std::string text = (r.hasTemp ? de(r.temperature) : std::string("--")) + "° / " + de(r.setpoint) + "°" +
@@ -499,6 +611,42 @@ void MqttBridge::rfStats(std::vector<MqttMsg>& out) const {
   out.push_back({base() + "/rf/tx/state", toStr(t), true});
 }
 
+void MqttBridge::circuitState(int i, std::vector<MqttMsg>& out) const {
+  const Circuit& c = sys_.heating.circuits[static_cast<size_t>(i)];
+  JsonDocument d;
+  d["open"] = onOff(sys_.io.out[static_cast<size_t>(i)].level != sys_.heating.circuitSafeLevel(c));
+  d["fault"] = onOff(c.fault);
+  const Room* r = sys_.heating.room(c.room);
+  d["room"] = r ? r->name : c.room;
+  d["manual"] = c.manual == CircuitManual::Percent
+                    ? std::to_string(c.manualPct) + " %"
+                    : std::string(c.manual == CircuitManual::Auto ? "" : circuitManualName(c.manual));
+  d["share"] = c.share;
+  out.push_back({base() + "/circuit/" + std::to_string(i + 1) + "/state", toStr(d), true});
+}
+
+void MqttBridge::systemState(std::vector<MqttMsg>& out) const {
+  const PlatformStatus& p = sys_.platform;
+  JsonDocument d;
+  int rooms = 0, heating = 0, power = 0;
+  for (auto& r : sys_.heating.rooms) {
+    int pw = roomPower(r);
+    if (r.mode == RoomMode::Off && pw == 0) continue;  // switched off and not frost-heating
+    ++rooms;
+    power += pw;
+    if (pw > 0) ++heating;
+  }
+  d["power"] = rooms ? static_cast<int>(std::lround(static_cast<double>(power) / rooms)) : 0;
+  d["rooms_heating"] = heating;
+  d["uptime_h"] = std::round(p.uptimeSec / 360.0) / 10.0;
+  if (p.wifiConnected && p.network == "WLAN") d["rssi"] = p.wifiRssi;
+  else d["rssi"] = nullptr;
+  d["heap_kb"] = p.freeHeap / 1024u;
+  d["network"] = p.network.empty() ? "-" : p.network;
+  d["ip"] = p.ip.empty() ? "-" : p.ip;
+  out.push_back({base() + "/system/state", toStr(d), true});
+}
+
 void MqttBridge::alarmState(std::vector<MqttMsg>& out) const {
   JsonDocument d;
   d["count"] = static_cast<int>(sys_.alarms.count());
@@ -529,6 +677,7 @@ void MqttBridge::state(std::vector<MqttMsg>& out) const {
   rfStats(out);
   displayState(out);
   alarmState(out);
+  systemState(out);
   for (int i = 0; i < kNumOutputs; ++i) {
     std::string n = std::to_string(i + 1);
     const OutputConfig& oc = sys_.io.outCfg[static_cast<size_t>(i)];
@@ -536,10 +685,7 @@ void MqttBridge::state(std::vector<MqttMsg>& out) const {
       out.push_back({b + "/output/" + n + "/state", onOff(sys_.io.out[static_cast<size_t>(i)].level), true});
     const Circuit& c = sys_.heating.circuits[static_cast<size_t>(i)];
     if (oc.function == OutputFunction::Circuit && !c.room.empty()) {
-      JsonDocument d;
-      d["open"] = onOff(sys_.io.out[static_cast<size_t>(i)].level != sys_.heating.circuitSafeLevel(c));
-      d["fault"] = onOff(c.fault);
-      out.push_back({b + "/circuit/" + n + "/state", toStr(d), true});
+      circuitState(i, out);
     }
   }
 }
@@ -586,10 +732,7 @@ void MqttBridge::onEvent(const Event& e, std::vector<MqttMsg>& out) const {
         out.push_back({b + "/output/" + n + "/state", onOff(e.value != 0.f), true});
       const Circuit& c = sys_.heating.circuits[static_cast<size_t>(i)];
       if (oc.function == OutputFunction::Circuit && !c.room.empty()) {
-        JsonDocument d;
-        d["open"] = onOff(sys_.io.out[static_cast<size_t>(i)].level != sys_.heating.circuitSafeLevel(c));
-        d["fault"] = onOff(c.fault);
-        out.push_back({b + "/circuit/" + n + "/state", toStr(d), true});
+        circuitState(i, out);
       }
       break;
     }
@@ -623,7 +766,18 @@ bool MqttBridge::handle(const std::string& topic, const std::string& payload, st
   ActionOrigin origin{EventSource::Mqtt, 0, 0, false};
   std::string err;
   bool known = true;
-  if (p.size() == 4 && p[0] == "room" && p[3] == "set") {
+  if (p.size() == 4 && p[0] == "room" && (p[2] == "comfort" || p[2] == "eco") && p[3] == "set") {
+    // stored comfort / eco temperature (number entities in Home Assistant)
+    Room* r = sys_.heating.room(p[1]);
+    char* end = nullptr;
+    float v = std::strtof(payload.c_str(), &end);
+    if (!r) err = "Raum nicht gefunden";
+    else if (!end || end == payload.c_str() || !std::isfinite(v)) err = "Zahl erwartet";
+    else
+      err = sys_.heating.setPresetTemp(*r, p[2], v, sys_.safety.cfg.minSetpoint, sys_.safety.cfg.maxSetpoint,
+                                       sys_.clock().nowMs(), EventSource::Mqtt);
+    if (r && err.empty()) sys_.markDirty(ConfigSection::Heating);
+  } else if (p.size() == 4 && p[0] == "room" && p[3] == "set") {
     Action a;
     a.room = p[1];
     if (p[2] == "setpoint") {

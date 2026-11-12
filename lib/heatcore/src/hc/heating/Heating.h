@@ -149,6 +149,10 @@ class HeatingManager {
   bool adjustSetpoint(Room& r, float delta, float minSp, float maxSp, Millis now, uint8_t depth, uint16_t ruleId,
                       EventSource src);
   bool setRoomMode(Room& r, RoomMode m, uint8_t depth, uint16_t ruleId, EventSource src);
+  // Changes the stored comfort or eco temperature ("comfort" | "eco") within
+  // minSp..maxSp and frost <= eco <= comfort. Returns an error text or "".
+  std::string setPresetTemp(Room& r, const std::string& which, float v, float minSp, float maxSp, Millis now,
+                            EventSource src);
   void setGlobalMode(GlobalMode m, uint32_t durationSec, Millis now, uint8_t depth, uint16_t ruleId, EventSource src);
   void setWindow(Room& r, const std::string& source, bool open, Millis now, uint8_t depth, uint16_t ruleId,
                  EventSource src);
