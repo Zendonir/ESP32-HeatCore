@@ -8,7 +8,7 @@ Alles funktioniert ohne MQTT und Home Assistant. MQTT ist optional
 | Thema | Richtung | Inhalt |
 |---|---|---|
 | `<basis>/status` | aus | `online`/`offline` (LWT) |
-| `<basis>/room/<id>/state` | aus | JSON: temp, setpoint, ha_mode, preset, action, window, demand, reason, manual, duty (nur PWM-Regelung, %) |
+| `<basis>/room/<id>/state` | aus | JSON: temp, setpoint, ha_mode, preset, action, window, demand, reason, manual, duty (nur PWM-Regelung, %), power (Heizleistung %: PWM-Tastgrad, sonst 100 solange der Raum heizt), mode_text (Komfort/Absenkung/Hand/…) |
 | `<basis>/room/<id>/setpoint/set` | ein | Sollwert (auf Sicherheitsgrenzen begrenzt) |
 | `<basis>/room/<id>/mode/set` / `preset/set` | ein | `auto`/`heat`/`off` bzw. `comfort`/`eco`/`frost`/`none` |
 | `<basis>/mode/state`, `/mode/set` | aus/ein | `normal`/`eco`/`away`/`vacation` |
@@ -18,13 +18,18 @@ Alles funktioniert ohne MQTT und Home Assistant. MQTT ist optional
 | `<basis>/sensor/<id>/state`, `/avail` | aus | t, h, bat_low, bat (Batterie %), status |
 | `<basis>/display/state`, `/display/{enabled,contrast,page}/set` | aus/ein | Display |
 | `<basis>/output/<n>/state`, `/set` | aus/ein | nur freigegebene allgemeine Ausgänge, zeitlich begrenzt |
-| `<basis>/circuit/<n>/state` | aus | Ventil offen, Störung |
+| `<basis>/circuit/<n>/state` | aus | Ventil offen, Störung, Raum, Handbetrieb, Anteil % |
+| `<basis>/system/state` | aus | Heizleistung gesamt (Mittel der Räume, %), Räume heizen, Laufzeit (h), WLAN-Signal, freier Speicher, Netzwerk, IP |
 | `<basis>/alarm/state`, `<basis>/notify` | aus | Alarme, Benachrichtigungen |
 | `<basis>/rule/<id>/run` | ein | Regeln mit manuellem Trigger |
 | `<basis>/in/<thema>` / `<basis>/out/<thema>` | ein/aus | frei für Automationen |
 
-MQTT-Discovery legt an: Klima-Entität je Raum, Fenster-Sensor je Raum,
-Lernmodellstatus, Funkgeräte (binary_sensor + event + Qualität),
+MQTT-Discovery legt an: Klima-Entität je Raum (mit Heizleistung, Betrieb und
+Grund als Attribute), je Raum Fenster, Heizbedarf, Heizleistung (%),
+Solltemperatur und Betrieb (Text) – damit zeichnet Home Assistant den Verlauf
+von Soll-/Isttemperatur und Ventilansteuerung auf –, Lernmodellstatus,
+Heizleistung gesamt und Anzahl heizender Räume, Gerätediagnose (Laufzeit,
+WLAN-Signal, Speicher, Netzwerk, IP), Funkgeräte (binary_sensor + event + Qualität),
 Temperatur-/Feuchte-/Batteriesensoren (auch Bluetooth-Thermometer, Batterie in %), Funkstatistik, Senderstatus,
 Sende-Buttons, Display (Schalter, Kontrast, Seite, Störung), freigegebene
 Ausgänge, Ventile und Störungen je Heizkreis, Sammelstörung, Regel-Buttons.

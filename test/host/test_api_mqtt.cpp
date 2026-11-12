@@ -208,6 +208,13 @@ TEST(mqtt_discovery_entities_and_permissions) {
   CHECK(!has("switch/heatcore_a1b2c3/output_1/config"));  // heating circuit never as switch
   CHECK(has("select/heatcore_a1b2c3/display_page/config"));
   CHECK(has("sensor/heatcore_a1b2c3/sensor_ow1_01/config"));
+  // dashboard values: heating power, setpoint, status, demand per room; system
+  CHECK(has("sensor/heatcore_a1b2c3/room_wohnen_power/config"));
+  CHECK(has("sensor/heatcore_a1b2c3/room_wohnen_setpoint/config"));
+  CHECK(has("sensor/heatcore_a1b2c3/room_wohnen_status/config"));
+  CHECK(has("binary_sensor/heatcore_a1b2c3/room_wohnen_demand/config"));
+  CHECK(has("sensor/heatcore_a1b2c3/sys_power/config"));
+  CHECK(has("sensor/heatcore_a1b2c3/sys_rooms_heating/config"));
   // commands
   std::string base = r.sys.baseTopic();
   std::string err;
@@ -240,10 +247,26 @@ TEST(mqtt_discovery_entities_and_permissions) {
   // state + events
   std::vector<MqttMsg> st;
   br.state(st);
-  bool roomState = false;
-  for (auto& m : st)
-    if (m.topic == base + "/room/wohnen/state") roomState = m.payload.find("\"setpoint\"") != std::string::npos;
+  bool roomState = false, sysState = false, circuitState = false;
+  for (auto& m : st) {
+    if (m.topic == base + "/circuit/1/state") {
+      JsonDocument d;
+      deserializeJson(d, m.payload);
+      circuitState = std::string(d["room"] | "") == "Wohnen" && d["share"] == 100 && d["open"].is<const char*>();
+    }
+    if (m.topic == base + "/room/wohnen/state")
+      roomState = m.payload.find("\"setpoint\"") != std::string::npos &&
+                  m.payload.find("\"power\":") != std::string::npos &&
+                  m.payload.find("\"mode_text\":") != std::string::npos;
+    if (m.topic == base + "/system/state") {
+      JsonDocument d;
+      deserializeJson(d, m.payload);
+      sysState = d["power"].is<int>() && d["rooms_heating"].is<int>() && d["rssi"].isNull();
+    }
+  }
   CHECK(roomState);
+  CHECK(sysState);
+  CHECK(circuitState);
 }
 
 TEST(mqtt_generic_inbound_triggers_rule) {

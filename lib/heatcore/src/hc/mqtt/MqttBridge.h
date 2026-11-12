@@ -45,6 +45,8 @@ class MqttBridge {
   void displayState(std::vector<MqttMsg>& out) const;
   void rfStats(std::vector<MqttMsg>& out) const;
   void alarmState(std::vector<MqttMsg>& out) const;
+  void circuitState(int i, std::vector<MqttMsg>& out) const;  // i = output index 0..15
+  void systemState(std::vector<MqttMsg>& out) const;
   std::string uid(const std::string& obj) const;
   void addConfig(std::vector<MqttMsg>& out, std::vector<std::string>& topics, const char* component,
                  const std::string& object, JsonDocument& doc) const;
