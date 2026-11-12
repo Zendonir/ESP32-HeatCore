@@ -35,10 +35,16 @@ const char* haMode(const Room& r) {
   if (r.mode == RoomMode::Auto) return "auto";
   return "heat";
 }
-// heating power of a room in %: PWM duty, otherwise 100 while it heats
+// heating power of a room in %, from the active control state (a room that is
+// off or has its window open still heats against its frost protection):
+// PWM duty (100 while an external request keeps the valve open), otherwise
+// 100 while the room heats
 int roomPower(const Room& r) {
-  if (r.mode == RoomMode::Off || r.windowOpen()) return 0;
-  if (r.control == RoomControl::Pwm && r.pwmRunning) return static_cast<int>(std::lround(r.duty));
+  if (r.overTemp) return 0;
+  if (r.control == RoomControl::Pwm && r.pwmRunning) {
+    bool sustained = r.externalDemand && !r.windowOpen() && r.temperature < r.setpoint + 1.0f;
+    return sustained ? 100 : static_cast<int>(std::lround(r.duty));
+  }
   return r.demand ? 100 : 0;
 }
 
@@ -624,9 +630,9 @@ void MqttBridge::systemState(std::vector<MqttMsg>& out) const {
   JsonDocument d;
   int rooms = 0, heating = 0, power = 0;
   for (auto& r : sys_.heating.rooms) {
-    if (r.mode == RoomMode::Off) continue;
-    ++rooms;
     int pw = roomPower(r);
+    if (r.mode == RoomMode::Off && pw == 0) continue;  // switched off and not frost-heating
+    ++rooms;
     power += pw;
     if (pw > 0) ++heating;
   }

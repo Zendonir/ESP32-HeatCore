@@ -288,6 +288,34 @@ TEST(mqtt_discovery_entities_and_permissions) {
   }
   CHECK(roomState);
   CHECK(sysState);
+  // a room switched off still heats against frost protection: reported as heating
+  {
+    Room* w = r.sys.heating.room("wohnen");
+    w->mode = RoomMode::Off;
+    w->control = RoomControl::Hysteresis;
+    w->demand = true;
+    std::vector<MqttMsg> fs;
+    br.state(fs);
+    int power = -1, heating = -1;
+    for (auto& m : fs) {
+      JsonDocument d;
+      deserializeJson(d, m.payload);
+      if (m.topic == base + "/room/wohnen/state") power = d["power"] | -1;
+      if (m.topic == base + "/system/state") heating = d["rooms_heating"] | -1;
+    }
+    CHECK_EQ(power, 100);
+    CHECK_EQ(heating, 1);
+    w->overTemp = true;  // forced closed
+    fs.clear();
+    br.state(fs);
+    for (auto& m : fs)
+      if (m.topic == base + "/room/wohnen/state") {
+        JsonDocument d;
+        deserializeJson(d, m.payload);
+        power = d["power"] | -1;
+      }
+    CHECK_EQ(power, 0);
+  }
   CHECK(circuitState);
 }
 
