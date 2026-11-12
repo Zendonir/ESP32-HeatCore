@@ -102,6 +102,10 @@ struct Circuit {
   bool valveNormallyOpen = false;
   uint16_t minOnSec = 120;
   uint16_t minOffSec = 120;
+  // Share of the room's heat this circuit gets (rooms with several
+  // circuits): PWM rooms - this share of the room's on-time; two-point rooms -
+  // open for this share of each cycle while the room heats. 100 = like the room.
+  uint8_t share = 100;
   CircuitManual manual = CircuitManual::Auto;
   uint8_t manualPct = 50;         // Percent: open share 0..100 %
   uint16_t manualCycleMin = 20;   // Percent: cycle length 5..120 min
@@ -161,6 +165,8 @@ class HeatingManager {
   // Logical output level for a circuit (NO valves are inverted).
   // permanent manual control of a circuit: wanted valve state now, validation
   static bool manualWants(const Circuit& c, Millis now);
+  // automatic mode: does circuit c open now, given its room heats (share < 100)?
+  static bool shareWants(const Circuit& c, const Room& r, Millis now);
   static std::string validateManual(const Circuit& c);
   bool circuitOutputLevel(const Circuit& c) const { return c.valveNormallyOpen ? !c.open : c.open; }
   // Output level that closes the valve (used by safety and watchdog).

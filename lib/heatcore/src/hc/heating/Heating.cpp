@@ -409,10 +409,26 @@ std::string HeatingManager::validateManual(const Circuit& c) {
   return std::string();
 }
 
+bool HeatingManager::shareWants(const Circuit& c, const Room& r, Millis now) {
+  if (c.share >= 100) return true;
+  if (c.share == 0) return false;
+  // PWM room in the regular on-part of its cycle: a shortened pulse from the cycle start
+  if (r.control == RoomControl::Pwm && r.pwmRunning) {
+    uint32_t inCycle = elapsed(now, r.pwmCycleStartMs);
+    if (inCycle < r.pwmOnMs) return inCycle < static_cast<uint32_t>(static_cast<uint64_t>(r.pwmOnMs) * c.share / 100u);
+  }
+  // two-point room (or other demand): pulse within the room's cycle, starting
+  // when the room began to heat
+  uint32_t cycle = static_cast<uint32_t>(r.pwmCycleMin ? r.pwmCycleMin : 20) * 60000u;
+  uint32_t phase = elapsed(now, r.demandChangedMs) % cycle;
+  return phase < cycle / 100u * c.share;
+}
+
 void HeatingManager::updateCircuits(Millis now) {
   for (auto& c : circuits) {
     const Room* r = c.room.empty() ? nullptr : room(c.room);
-    c.request = c.enabled && (c.manual != CircuitManual::Auto ? manualWants(c, now) : r && r->demand);
+    c.request = c.enabled && (c.manual != CircuitManual::Auto ? manualWants(c, now)
+                                                              : r && r->demand && shareWants(c, *r, now));
     if (c.request == c.open) continue;
     uint32_t minT = (c.open ? c.minOnSec : c.minOffSec) * 1000u;
     if (c.switched && elapsed(now, c.lastSwitchMs) < minT) continue;
@@ -507,6 +523,7 @@ void HeatingManager::toJson(JsonObject o, bool runtime) const {
     x["valveNormallyOpen"] = c.valveNormallyOpen;
     x["minOnSec"] = c.minOnSec;
     x["minOffSec"] = c.minOffSec;
+    x["share"] = c.share;
     x["manual"] = circuitManualName(c.manual);
     x["manualPct"] = c.manualPct;
     x["manualCycleMin"] = c.manualCycleMin;
@@ -616,6 +633,9 @@ std::string HeatingManager::fromJson(JsonObjectConst o) {
     c.minOnSec = x["minOnSec"] | 120;
     c.minOffSec = x["minOffSec"] | 120;
     if (c.minOnSec > 3600 || c.minOffSec > 3600) return "Mindestlaufzeiten max. 3600 s";
+    int share = x["share"] | static_cast<int>(c.share);
+    if (share < 0 || share > 100) return "Heizkreis " + std::to_string(n) + ": Anteil 0..100 %";
+    c.share = static_cast<uint8_t>(share);
     // permanent manual control: kept when the caller does not send it (older pages)
     if (!x["manual"].isNull() && !circuitManualFromName(x["manual"] | "", c.manual))
       return "Handbetrieb: auto, open, closed oder percent";
