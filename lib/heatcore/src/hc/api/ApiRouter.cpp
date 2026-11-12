@@ -1334,6 +1334,7 @@ ApiResponse ApiRouter::handle(const ApiRequest& req) {
           const S list[] = {{"ems:outdoor", "Aussentemperatur (Kessel)", SensorRole::Outdoor},
                             {"ems:boilerflow", "Kessel Vorlauf", SensorRole::Other},
                             {"ems:hcflow", "Heizkreis Vorlauf (Mischer)", SensorRole::Other},
+                            {"ems:room", "Raumtemperatur RC35", SensorRole::Room},
                             {"ems:dhw", "Warmwasser", SensorRole::Other}};
           JsonArray added = out["added"].to<JsonArray>();
           for (auto& x : list) {

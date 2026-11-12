@@ -1536,6 +1536,8 @@ bool HeatCoreSystem::emsIngest(const std::string& topic, const std::string& payl
     feed("ems:dhw", ems.st.dhwTemp);
   } else if (sub == "mixer_data" && ems.st.mixerMs == now) {
     feed("ems:hcflow", ems.st.hcFlow);
+  } else if (sub == "thermostat_data" && ems.st.hcSeen && ems.st.thermoMs == now) {
+    feed("ems:room", ems.st.roomTemp);
   }
   return true;
 }

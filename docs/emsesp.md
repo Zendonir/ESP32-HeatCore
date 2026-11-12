@@ -28,7 +28,7 @@ schalten. Zu finden unter **Einrichtung → EMS-ESP (Kessel)**.
 | Thema | Werte |
 |---|---|
 | `<basis>/boiler_data` | Außentemperatur, Vorlauf (Ist/Soll), Rücklauf, Brenner, Leistung, Heizbetrieb, Warmwasser, Anlagendruck, Status- und Fehlercode |
-| `<basis>/thermostat_data` | für den gewählten Heizkreis: Betriebsart, Absenkart, Raumsoll, berechneter Vorlauf, Sommer/Winter, Heizsystem; gedämpfte Außentemperatur, Fehlercode |
+| `<basis>/thermostat_data` | für den gewählten Heizkreis: Betriebsart, Absenkart, Raumtemperatur, Raumsoll, berechneter Vorlauf, Sommer/Winter, Heizsystem; gedämpfte Außentemperatur, Fehlercode |
 | `<basis>/mixer_data` | für den gewählten Heizkreis: Vorlauf, Mischerstellung, Pumpe |
 | `<basis>/status` | online/offline |
 
@@ -45,9 +45,11 @@ Mit „Als Sensoren“ erscheinen unter Temperatursensoren → „Neu gefunden�
 | `ems:boilerflow` | Vorlauf am Kessel |
 | `ems:hcflow` | Vorlauf des Heizkreises (Mischer) |
 | `ems:dhw` | Warmwasser |
+| `ems:room` | Raumtemperatur, die das Thermostat (RC35) misst – eigener Fühler oder Fernbedienung |
 
-Der Knopf **„Werte als Sensoren übernehmen“** übernimmt alle vier auf einmal.
-Die Außentemperatur bekommt dabei die Rolle „Außen“ und fließt in Statistik
+Der Knopf **„Werte als Sensoren übernehmen“** übernimmt alle auf einmal.
+Die Raumtemperatur des RC35 bekommt die Rolle „Raum“ (Raum danach unter
+Temperatursensoren wählen), die Außentemperatur die Rolle „Außen“ und fließt in Statistik
 und Raummodell ein. Die Vorläufe bekommen bewusst **nicht** die Rolle
 „Vorlauf“: diese Rolle steuert die Sicherheitsabschaltung, und die soll
 nicht ohne eigene Entscheidung an einem Netzwerkwert hängen.
@@ -73,3 +75,7 @@ Heizkreis zuerst seine Einstellungen zurück.
 | `GET /api/emsesp` | Einstellungen und alle gelesenen Werte |
 | `PUT /api/emsesp` | `{"enabled":true,"base":"ems-esp","hc":2,"sensors":true}` |
 | `POST /api/emsesp/sensors` | Werte als Sensoren übernehmen |
+
+Externe Quellen (Einrichtung → Externe Quellen) können dieselben Themen
+zusätzlich abonnieren, z. B. `ems-esp/thermostat_data` mit dem Pfad
+`hc1.seltemp` für einen weiteren Wert.

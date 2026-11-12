@@ -1,5 +1,6 @@
 // EMS-ESP connection: reading boiler / thermostat / mixer data and switching
 // a heating circuit of an RC35 directly for the heat demand.
+#include <cmath>
 #include <vector>
 
 #include "SimRig.h"
@@ -123,7 +124,11 @@ TEST(emsesp_parses_boiler_thermostat_mixer) {
   CHECK(found);
   JsonDocument d;
   deserializeJson(d, call(api, "POST", "/api/emsesp/sensors").body);
-  CHECK_EQ(d["added"].size(), 4u);
+  CHECK_EQ(d["added"].size(), 5u);
+  // the room temperature measured by the RC35 (circuit 2) is a room sensor
+  const Sensor* room = r.sys.sensors.find("ems:room");
+  CHECK(room && room->role == SensorRole::Room);
+  CHECK(room && std::fabs(room->value - 19.8f) < 0.01f);
   const Sensor* out = r.sys.sensors.find("ems:outdoor");
   CHECK(out && out->role == SensorRole::Outdoor);
   CHECK(r.sys.sensors.find("ems:hcflow") && r.sys.sensors.find("ems:hcflow")->role == SensorRole::Other);
@@ -319,4 +324,23 @@ TEST(emsesp_output_change_keeps_circuit_and_retake_waits_for_report) {
   feed(r, 19.f, 90, &rc, &sent);  // the RC35 reports auto / outdoor again; taken over after a minute
   CHECK_STR(r.sys.ems.cfg.savedReduce, "outdoor");
   CHECK_STR(r.sys.ems.cfg.savedMode, "auto");
+}
+
+TEST(emsesp_topic_shared_with_external_source) {
+  // an external source may read another value from an EMS-ESP topic
+  Rig r;
+  std::vector<Sent> sent;
+  ApiRouter api(r.sys);
+  setup(r, sent, api);
+  CHECK_EQ(call(api, "PUT", "/api/external",
+                R"j({"sources":[{"name":"rc35_hk1","source":"mqtt","topic":"ems-esp/thermostat_data","kind":"temperature","path":"hc1.seltemp"}]})j")
+               .status,
+           200);
+  MqttBridge br(r.sys);
+  CHECK(br.handle("ems-esp/thermostat_data", thermostat("auto", "Außen")));
+  CHECK(r.sys.ems.st.mode == EmsMode::Auto);  // EMS-ESP still parsed
+  bool found = false;
+  for (auto& d : r.sys.sensors.discovered())
+    if (d.id == "ext:rc35_hk1" && std::fabs(d.lastValue - 19.5f) < 0.01f) found = true;
+  CHECK(found);
 }
