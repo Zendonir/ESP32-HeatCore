@@ -88,6 +88,12 @@ struct Room {
   float pwmCycleSetpoint = 0.f;
 };
 
+// Permanent manual control of a heating circuit (valve), kept across restarts.
+// Percent: open for that share of a cycle (time-proportional, like PWM rooms).
+enum class CircuitManual : uint8_t { Auto = 0, Open, Closed, Percent };
+const char* circuitManualName(CircuitManual m);
+bool circuitManualFromName(const char* s, CircuitManual& out);
+
 struct Circuit {
   int index = 0;  // 1..16, uses output with the same number
   std::string name;
@@ -96,6 +102,9 @@ struct Circuit {
   bool valveNormallyOpen = false;
   uint16_t minOnSec = 120;
   uint16_t minOffSec = 120;
+  CircuitManual manual = CircuitManual::Auto;
+  uint8_t manualPct = 50;         // Percent: open share 0..100 %
+  uint16_t manualCycleMin = 20;   // Percent: cycle length 5..120 min
   // runtime
   bool request = false;
   bool open = false;
@@ -150,6 +159,9 @@ class HeatingManager {
   // Applies room demand to circuits honouring minimum on/off times.
   void updateCircuits(Millis now);
   // Logical output level for a circuit (NO valves are inverted).
+  // permanent manual control of a circuit: wanted valve state now, validation
+  static bool manualWants(const Circuit& c, Millis now);
+  static std::string validateManual(const Circuit& c);
   bool circuitOutputLevel(const Circuit& c) const { return c.valveNormallyOpen ? !c.open : c.open; }
   // Output level that closes the valve (used by safety and watchdog).
   bool circuitSafeLevel(const Circuit& c) const { return c.valveNormallyOpen; }

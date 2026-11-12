@@ -97,6 +97,8 @@ void statusJson(HeatCoreSystem& sys, JsonObject o) {
     x["sensorFail"] = r.sensorFail;
     x["overTemp"] = r.overTemp;
     if (r.control == RoomControl::Pwm && r.pwmRunning) x["duty"] = std::round(r.duty);
+    for (auto& c : sys.heating.circuits)
+      if (c.enabled && c.room == r.id && c.manual != CircuitManual::Auto) x["valvesManual"] = true;
   }
   JsonObject rf = o["rf"].to<JsonObject>();
   rf["devices"] = static_cast<int>(sys.rfReg.rx.size());
@@ -1157,6 +1159,16 @@ ApiResponse ApiRouter::handle(const ApiRequest& req) {
           sys.io.toJson(out, true);
         } else if (c.is("PUT")) {
           c.okOrFail(sys.sectionFromJson(ConfigSection::Io, c.body()));
+        } else {
+          c.fail(405, "Methode nicht erlaubt");
+        }
+      } else if (head == "circuits" && p.size() == 3 && p[2] == "manual") {
+        // permanent manual control of a heating circuit (valve)
+        if (c.is("PUT")) {
+          JsonObjectConst b = c.body();
+          c.okOrFail(sys.setCircuitManual(toInt(p[1]), b["mode"] | "", b["pct"] | -1, b["cycleMin"] | 0));
+        } else if (c.is("DELETE")) {
+          c.okOrFail(sys.setCircuitManual(toInt(p[1]), "auto", -1, 0));
         } else {
           c.fail(405, "Methode nicht erlaubt");
         }

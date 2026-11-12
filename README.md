@@ -19,6 +19,9 @@ Webinterface.
   Raumgruppen, globale Betriebsarten (Absenkbetrieb, Abwesend, Urlaub mit
   Ablauf), 16 Heizkreise mit Mindestlaufzeiten, NC/NO-Ventile; je Raum
   Zweipunkt- oder PWM-Taktregelung (PI) für thermische Stellantriebe.
+* **Ventile von Hand:** jedes Ventil dauerhaft auf, zu oder mit festem
+  Öffnungsanteil (z. B. 30 % je 20-min-Zyklus) – unabhängig von Fühler und
+  Zeitplan, bleibt über Neustarts erhalten; Schutzfunktionen bleiben aktiv.
 * **Sicherheit:** Vorlauf- und Raum-Übertemperatur, Sollwertgrenzen, begrenzter
   Handbetrieb, Schaltratenbegrenzung, Fühlerausfall-Strategie, Task- und
   Ausgangs-Watchdog, sicherer Zustand bei Reset/OTA. Nicht durch Automationen,

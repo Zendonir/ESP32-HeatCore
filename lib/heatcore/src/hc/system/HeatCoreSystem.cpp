@@ -238,6 +238,14 @@ void HeatCoreSystem::controlCycle(Millis now) {
       r.sensorFail = false;
       r.demand = false;
     }
+    // say why the room does not control (instead of only "Komfort")
+    if (r.sensorFail && !r.overTemp) {
+      bool configured = false;
+      for (auto& s : sensors.sensors())
+        if (s.enabled && s.room == r.id && s.role == SensorRole::Room) configured = true;
+      r.reason = configured ? "Raumfuehler ausgefallen" : "kein Raumfuehler zugeordnet";
+      if (safety.cfg.sensorFailMode == SensorFailMode::Duty) r.reason += " - Notbetrieb";
+    }
   }
   heating.updateCircuits(now);
   checkCircuitFaults(now);
@@ -475,7 +483,7 @@ void HeatCoreSystem::minuteTasks(Millis now) {
     for (int i = 0; i < kNumOutputs; ++i) {
       const Circuit& c = heating.circuits[static_cast<size_t>(i)];
       if (c.room != r.id) continue;
-      if (io.out[static_cast<size_t>(i)].manualActive) in.manualOutput = true;
+      if (io.out[static_cast<size_t>(i)].manualActive || c.manual != CircuitManual::Auto) in.manualOutput = true;
       if (!io.out[static_cast<size_t>(i)].hwOk) circuitFault = true;
       if (c.open && !histCircuitOpen_[static_cast<size_t>(i)]) ++switches;
     }
@@ -913,6 +921,22 @@ void HeatCoreSystem::clearManualOutput(int n) {
   if (n >= 1 && n <= kNumOutputs) io.clearManual(n - 1);
 }
 
+std::string HeatCoreSystem::setCircuitManual(int n, const std::string& mode, int pct, int cycleMin) {
+  if (n < 1 || n > kNumOutputs) return "Heizkreis 1..16";
+  if (io.outCfg[static_cast<size_t>(n - 1)].function != OutputFunction::Circuit)
+    return "Ausgang " + std::to_string(n) + " ist kein Heizkreis (Ventile & Ausgaenge)";
+  Circuit c = heating.circuits[static_cast<size_t>(n - 1)];
+  if (!circuitManualFromName(mode.c_str(), c.manual)) return "Handbetrieb: auto, open, closed oder percent";
+  if (pct >= 0) c.manualPct = static_cast<uint8_t>(pct > 255 ? 255 : pct);
+  if (cycleMin > 0) c.manualCycleMin = static_cast<uint16_t>(cycleMin > 65535 ? 65535 : cycleMin);
+  std::string err = HeatingManager::validateManual(c);
+  if (!err.empty()) return err;
+  heating.circuits[static_cast<size_t>(n - 1)] = c;
+  HC_LOGI(TAG, "circuit %d manual: %s %u%%", n, circuitManualName(c.manual), c.manualPct);
+  markDirty(ConfigSection::Heating);
+  return std::string();
+}
+
 std::string HeatCoreSystem::requestOutput(int n, bool on, uint32_t durationSec, EventSource src) {
   if (!outputAllowedFor(n, src)) return "Ausgang nicht freigegeben";
   size_t k = static_cast<size_t>(n - 1);
@@ -1270,6 +1294,17 @@ void HeatCoreSystem::updateHeatDemand(Millis now) {
       any = true;
       req.push_back(r.id);
     }
+  }
+  // circuits opened by hand need heat too (whole cycle for percent, like PWM rooms)
+  for (int i = 0; i < kNumOutputs; ++i) {
+    const Circuit& c = heating.circuits[static_cast<size_t>(i)];
+    if (!c.enabled || io.outCfg[static_cast<size_t>(i)].function != OutputFunction::Circuit) continue;
+    bool wants = c.manual == CircuitManual::Open || (c.manual == CircuitManual::Percent && c.manualPct > 0);
+    if (!wants) continue;
+    if (!hd.cfg.rooms.empty() && std::find(hd.cfg.rooms.begin(), hd.cfg.rooms.end(), c.room) == hd.cfg.rooms.end())
+      continue;
+    any = true;
+    req.push_back("hk" + std::to_string(c.index));
   }
   HeatDemand::Step st = hd.update(any, std::move(req), now, begunMs_);
   if (!hd.cfg.enabled) return;
