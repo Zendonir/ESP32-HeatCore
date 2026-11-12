@@ -193,6 +193,22 @@ void MqttBridge::discovery(std::vector<MqttMsg>& out) {
       d["icon"] = "mdi:information-outline";
       addConfig(out, topics, "sensor", "room_" + r.id + "_status", d);
     }
+    for (auto which : {"comfort", "eco"}) {
+      bool comfort = std::strcmp(which, "comfort") == 0;
+      JsonDocument d;
+      d["name"] = r.name + (comfort ? " Komforttemperatur" : " Absenktemperatur");
+      d["state_topic"] = st;
+      d["value_template"] = std::string("{{ value_json.") + which + " }}";
+      d["command_topic"] = b + "/room/" + r.id + "/" + which + "/set";
+      d["min"] = sys_.safety.cfg.minSetpoint;
+      d["max"] = sys_.safety.cfg.maxSetpoint;
+      d["step"] = 0.5;
+      d["mode"] = "box";
+      d["device_class"] = "temperature";
+      d["unit_of_measurement"] = "\xC2\xB0" "C";
+      d["entity_category"] = "config";
+      addConfig(out, topics, "number", "room_" + r.id + "_" + which, d);
+    }
     {
       JsonDocument d;
       d["name"] = r.name + " Lernmodell";
@@ -501,6 +517,8 @@ void MqttBridge::roomState(const Room& r, std::vector<MqttMsg>& out) const {
   if (r.control == RoomControl::Pwm && r.pwmRunning) d["duty"] = std::round(r.duty);
   d["power"] = roomPower(r);
   d["mode_text"] = roomModeText(r);
+  d["comfort"] = r.comfort;
+  d["eco"] = r.eco;
   out.push_back({base() + "/room/" + r.id + "/state", toStr(d), true});
   if (!sys_.mqttCfg.roomValueTopics) return;
   // one plain value per topic for simple displays (Button+, ...)
@@ -742,7 +760,18 @@ bool MqttBridge::handle(const std::string& topic, const std::string& payload, st
   ActionOrigin origin{EventSource::Mqtt, 0, 0, false};
   std::string err;
   bool known = true;
-  if (p.size() == 4 && p[0] == "room" && p[3] == "set") {
+  if (p.size() == 4 && p[0] == "room" && (p[2] == "comfort" || p[2] == "eco") && p[3] == "set") {
+    // stored comfort / eco temperature (number entities in Home Assistant)
+    Room* r = sys_.heating.room(p[1]);
+    char* end = nullptr;
+    float v = std::strtof(payload.c_str(), &end);
+    if (!r) err = "Raum nicht gefunden";
+    else if (!end || end == payload.c_str() || !std::isfinite(v)) err = "Zahl erwartet";
+    else
+      err = sys_.heating.setPresetTemp(*r, p[2], v, sys_.safety.cfg.minSetpoint, sys_.safety.cfg.maxSetpoint,
+                                       sys_.clock().nowMs(), EventSource::Mqtt);
+    if (r && err.empty()) sys_.markDirty(ConfigSection::Heating);
+  } else if (p.size() == 4 && p[0] == "room" && p[3] == "set") {
     Action a;
     a.room = p[1];
     if (p[2] == "setpoint") {

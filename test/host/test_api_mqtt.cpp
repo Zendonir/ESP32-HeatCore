@@ -215,6 +215,8 @@ TEST(mqtt_discovery_entities_and_permissions) {
   CHECK(has("binary_sensor/heatcore_a1b2c3/room_wohnen_demand/config"));
   CHECK(has("sensor/heatcore_a1b2c3/sys_power/config"));
   CHECK(has("sensor/heatcore_a1b2c3/sys_rooms_heating/config"));
+  CHECK(has("number/heatcore_a1b2c3/room_wohnen_comfort/config"));
+  CHECK(has("number/heatcore_a1b2c3/room_wohnen_eco/config"));
   // commands
   std::string base = r.sys.baseTopic();
   std::string err;
@@ -224,6 +226,26 @@ TEST(mqtt_discovery_entities_and_permissions) {
   CHECK_NEAR(r.sys.heating.room("wohnen")->manualSetpoint, 22.5, 0.01);
   CHECK(br.handle(base + "/room/wohnen/setpoint/set", "99", &err));  // clamped to max
   CHECK_NEAR(r.sys.heating.room("wohnen")->manualSetpoint, r.sys.safety.cfg.maxSetpoint, 0.01);
+  // stored comfort / eco temperatures: order frost <= eco <= comfort, safety limits
+  r.clock.advance(5000);
+  r.sys.takeDirty();
+  CHECK(br.handle(base + "/room/wohnen/comfort/set", "22.5", &err));
+  CHECK_STR(err, "");
+  CHECK_NEAR(r.sys.heating.room("wohnen")->comfort, 22.5, 0.01);
+  r.clock.advance(5000);
+  bool stored = false;
+  for (auto s : r.sys.takeDirty()) stored |= s == ConfigSection::Heating;
+  CHECK(stored);
+  CHECK(br.handle(base + "/room/wohnen/eco/set", "23", &err));
+  CHECK(!err.empty());  // above comfort
+  CHECK_NEAR(r.sys.heating.room("wohnen")->eco, 18, 0.01);
+  CHECK(br.handle(base + "/room/wohnen/eco/set", "17.5", &err));
+  CHECK_STR(err, "");
+  CHECK_NEAR(r.sys.heating.room("wohnen")->eco, 17.5, 0.01);
+  CHECK(br.handle(base + "/room/wohnen/comfort/set", "99", &err));  // clamped to max
+  CHECK_NEAR(r.sys.heating.room("wohnen")->comfort, r.sys.safety.cfg.maxSetpoint, 0.01);
+  CHECK(br.handle(base + "/room/nix/comfort/set", "21", &err));
+  CHECK(!err.empty());
   CHECK(br.handle(base + "/output/1/set", "ON", &err));
   CHECK(!err.empty());  // circuit output not switchable by HA
   CHECK(br.handle(base + "/rf/tx/1/2/send", "PRESS", &err));

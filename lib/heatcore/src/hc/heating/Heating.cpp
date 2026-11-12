@@ -91,6 +91,25 @@ std::vector<std::string> HeatingManager::groups() const {
   return g;
 }
 
+std::string HeatingManager::setPresetTemp(Room& r, const std::string& which, float v, float minSp, float maxSp,
+                                          Millis now, EventSource src) {
+  if (!std::isfinite(v)) return "Zahl erwartet";
+  v = std::round(clampf(v, minSp, maxSp) * 10.f) / 10.f;
+  if (which == "comfort") {
+    if (v < r.eco) return "Komfort muss mindestens so hoch sein wie die Absenkung";
+    r.comfort = v;
+  } else if (which == "eco") {
+    if (v < r.frost) return "Absenkung muss mindestens so hoch sein wie der Frostschutz";
+    if (v > r.comfort) return "Absenkung darf nicht ueber Komfort liegen";
+    r.eco = v;
+  } else {
+    return "comfort oder eco erwartet";
+  }
+  // publishes the room again (the effective setpoint follows in the next control cycle)
+  emitRoom(EventType::RoomSetpointChanged, r, r.setpoint, now, 0, 0, src);
+  return "";
+}
+
 void HeatingManager::emitRoom(EventType t, const Room& r, float value, Millis now, uint8_t depth, uint16_t ruleId,
                               EventSource src) {
   Event e(t, src);

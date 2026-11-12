@@ -8,8 +8,9 @@ Alles funktioniert ohne MQTT und Home Assistant. MQTT ist optional
 | Thema | Richtung | Inhalt |
 |---|---|---|
 | `<basis>/status` | aus | `online`/`offline` (LWT) |
-| `<basis>/room/<id>/state` | aus | JSON: temp, setpoint, ha_mode, preset, action, window, demand, reason, manual, duty (nur PWM-Regelung, %), power (Heizleistung %: PWM-Tastgrad, sonst 100 solange der Raum heizt), mode_text (Komfort/Absenkung/Hand/…) |
+| `<basis>/room/<id>/state` | aus | JSON: temp, setpoint, ha_mode, preset, action, window, demand, reason, manual, duty (nur PWM-Regelung, %), power (Heizleistung %: PWM-Tastgrad, sonst 100 solange der Raum heizt), mode_text (Komfort/Absenkung/Hand/…), comfort, eco |
 | `<basis>/room/<id>/setpoint/set` | ein | Sollwert (auf Sicherheitsgrenzen begrenzt) |
+| `<basis>/room/<id>/comfort/set` / `eco/set` | ein | gespeicherte Komfort-/Absenktemperatur (Sicherheitsgrenzen, Frostschutz ≤ Absenkung ≤ Komfort) |
 | `<basis>/room/<id>/mode/set` / `preset/set` | ein | `auto`/`heat`/`off` bzw. `comfort`/`eco`/`frost`/`none` |
 | `<basis>/mode/state`, `/mode/set` | aus/ein | `normal`/`eco`/`away`/`vacation` |
 | `<basis>/rf/<id>/state`, `/avail`, `/event`, `/diag` | aus | Zustand, Funkverfügbarkeit, Tastenereignis, Empfangsqualität |
@@ -26,7 +27,9 @@ Alles funktioniert ohne MQTT und Home Assistant. MQTT ist optional
 
 MQTT-Discovery legt an: Klima-Entität je Raum (mit Heizleistung, Betrieb und
 Grund als Attribute), je Raum Fenster, Heizbedarf, Heizleistung (%),
-Solltemperatur und Betrieb (Text) – damit zeichnet Home Assistant den Verlauf
+Solltemperatur und Betrieb (Text), Komfort- und Absenktemperatur zum
+Einstellen (dauerhaft gespeichert, anders als der Sollwert der Klima-Entität,
+der nur bis zum nächsten Zeitplanwechsel gilt) – damit zeichnet Home Assistant den Verlauf
 von Soll-/Isttemperatur und Ventilansteuerung auf –, Lernmodellstatus,
 Heizleistung gesamt und Anzahl heizender Räume, Gerätediagnose (Laufzeit,
 WLAN-Signal, Speicher, Netzwerk, IP), Funkgeräte (binary_sensor + event + Qualität),
