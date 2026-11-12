@@ -124,3 +124,36 @@ TEST(room_without_sensor_says_so) {
   CHECK(f->hasTemp);
   CHECK(f->reason.find("Raumfuehler") == std::string::npos);
 }
+
+TEST(circuit_manual_review_cases) {
+  // a circuit without a room is switched by hand too
+  Rig r;
+  r.basicRoom();  // circuit 1 -> wohnen; circuit 2 has no room
+  ApiRouter api(r.sys);
+  CHECK_EQ(call(api, "PUT", "/api/circuits/2/manual", R"({"mode":"open"})").status, 200);
+  feed(r, 22.f, 30);
+  CHECK(r.output(2));
+  CHECK_EQ(call(api, "PUT", "/api/circuits/2/manual", R"({"mode":"auto"})").status, 200);
+  feed(r, 22.f, 150);
+  CHECK(!r.output(2));
+
+  // heat demand: a cold room with all valves closed by hand is no consumer,
+  // a manually opened valve in an over-temperature room neither
+  r.load(ConfigSection::Mqtt, R"({"enabled":true,"host":"10.0.0.2"})");
+  r.sys.mqttPublishRaw = [](const std::string&, const std::string&, bool) {};
+  CHECK_EQ(call(api, "PUT", "/api/heatdemand",
+                R"({"enabled":true,"topic":"x/y","payloadOn":"on","payloadOff":"off","runOnSec":60,"minOnSec":60,"minOffSec":60})")
+               .status,
+           200);
+  feed(r, 17.f, 120);
+  CHECK(r.sys.heatDemand.active);  // cold room, automatic valve
+  CHECK_EQ(call(api, "PUT", "/api/circuits/1/manual", R"({"mode":"closed"})").status, 200);
+  feed(r, 17.f, 200);
+  CHECK(!r.sys.heatDemand.active);
+  CHECK_EQ(call(api, "PUT", "/api/circuits/1/manual", R"({"mode":"open"})").status, 200);
+  feed(r, 22.f, 130);
+  CHECK(r.sys.heatDemand.active);
+  feed(r, r.sys.safety.cfg.maxRoomTemp + 1.f, 200);
+  CHECK(!r.output(1));
+  CHECK(!r.sys.heatDemand.active);
+}

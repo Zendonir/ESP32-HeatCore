@@ -342,7 +342,8 @@ void HeatCoreSystem::computeOutputs(Millis now) {
         isCircuit = true;
         safeLevel = heating.circuitSafeLevel(c);
         const Room* r = c.room.empty() ? nullptr : heating.room(c.room);
-        requested = r ? heating.circuitOutputLevel(c) : safeLevel;
+        // a circuit without a room follows only its permanent manual control
+        requested = r || c.manual != CircuitManual::Auto ? heating.circuitOutputLevel(c) : safeLevel;
         roomOT = r && r->overTemp;
         break;
       }
@@ -1290,6 +1291,16 @@ void HeatCoreSystem::updateHeatDemand(Millis now) {
   for (auto& r : heating.rooms) {
     if (!hd.cfg.rooms.empty() && std::find(hd.cfg.rooms.begin(), hd.cfg.rooms.end(), r.id) == hd.cfg.rooms.end())
       continue;
+    // a room whose valves are all under manual control does not request heat
+    // itself (closed by hand = no consumer; opened by hand counts below)
+    int circuitsOfRoom = 0, automatic = 0;
+    for (int i = 0; i < kNumOutputs; ++i) {
+      const Circuit& c = heating.circuits[static_cast<size_t>(i)];
+      if (!c.enabled || c.room != r.id || io.outCfg[static_cast<size_t>(i)].function != OutputFunction::Circuit) continue;
+      ++circuitsOfRoom;
+      if (c.manual == CircuitManual::Auto) ++automatic;
+    }
+    if (circuitsOfRoom && !automatic) continue;
     if (roomNeedsHeat(r)) {
       any = true;
       req.push_back(r.id);
@@ -1301,6 +1312,9 @@ void HeatCoreSystem::updateHeatDemand(Millis now) {
     if (!c.enabled || io.outCfg[static_cast<size_t>(i)].function != OutputFunction::Circuit) continue;
     bool wants = c.manual == CircuitManual::Open || (c.manual == CircuitManual::Percent && c.manualPct > 0);
     if (!wants) continue;
+    // closed by the safety functions: no consumer
+    const Room* cr = c.room.empty() ? nullptr : heating.room(c.room);
+    if (safety.flowTripped() || (cr && cr->overTemp)) continue;
     if (!hd.cfg.rooms.empty() && std::find(hd.cfg.rooms.begin(), hd.cfg.rooms.end(), c.room) == hd.cfg.rooms.end())
       continue;
     any = true;
