@@ -18,7 +18,9 @@ Webinterface.
 * **Heizung:** Räume mit Zeitplänen, Komfort/Absenkung/Frostschutz,
   Raumgruppen, globale Betriebsarten (Absenkbetrieb, Abwesend, Urlaub mit
   Ablauf), 16 Heizkreise mit Mindestlaufzeiten, NC/NO-Ventile; je Raum
-  Zweipunkt- oder PWM-Taktregelung (PI) für thermische Stellantriebe.
+  Zweipunkt- oder PWM-Taktregelung (PI) für thermische Stellantriebe;
+  Räume mit mehreren Heizkreisen teilen die Wärme über einen Anteil je Kreis
+  auf (z. B. 100 % am Fenster, 60 % an der Innenwand).
 * **Ventile von Hand:** jedes Ventil dauerhaft auf, zu oder mit festem
   Öffnungsanteil (z. B. 30 % je 20-min-Zyklus) – unabhängig von Fühler und
   Zeitplan, bleibt über Neustarts erhalten; Schutzfunktionen bleiben aktiv.
