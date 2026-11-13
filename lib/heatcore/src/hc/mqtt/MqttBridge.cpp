@@ -219,7 +219,7 @@ void MqttBridge::discovery(std::vector<MqttMsg>& out) {
       JsonDocument d;
       d["name"] = r.name + " Lernmodell";
       d["state_topic"] = b + "/model/" + r.id + "/state";
-      d["value_template"] = "{{ value_json.status }}";
+      d["value_template"] = "{{ {'ready': 'bereit', 'learning': 'lernt', 'degraded': 'eingeschr\xC3\xA4nkt', 'disabled': 'aus'}.get(value_json.status, value_json.status) }}";
       d["json_attributes_topic"] = b + "/model/" + r.id + "/state";
       d["entity_category"] = "diagnostic";
       addConfig(out, topics, "sensor", "model_" + r.id, d);
@@ -262,7 +262,7 @@ void MqttBridge::discovery(std::vector<MqttMsg>& out) {
       addConfig(out, topics, "event", "rf_" + id + "_event", d);
     }
     JsonDocument d;
-    d["name"] = dev.name + " Empfangsqualitaet";
+    d["name"] = dev.name + " Empfangsqualit\xC3\xA4t";
     d["state_topic"] = b + "/rf/" + id + "/diag";
     d["value_template"] = "{{ value_json.reliability }}";
     d["unit_of_measurement"] = "%";
@@ -329,8 +329,8 @@ void MqttBridge::discovery(std::vector<MqttMsg>& out) {
     const char* unit;
   };
   for (auto& sd : {StatDef{"frames", "Funk Telegramme", ""}, StatDef{"unknown", "Funk unbekannte Codes", ""},
-                   StatDef{"rejected", "Funk verworfen", ""}, StatDef{"quality", "Funk Signalqualitaet", "%"},
-                   StatDef{"noise", "Funk Stoerpegel", "Flanken/s"}}) {
+                   StatDef{"rejected", "Funk verworfen", ""}, StatDef{"quality", "Funk Signalqualit\xC3\xA4t", "%"},
+                   StatDef{"noise", "Funk St\xC3\xB6rpegel", "Flanken/s"}}) {
     JsonDocument d;
     d["name"] = sd.name;
     d["state_topic"] = b + "/rf/stats";
@@ -343,7 +343,7 @@ void MqttBridge::discovery(std::vector<MqttMsg>& out) {
     JsonDocument d;
     d["name"] = "Funksender Status";
     d["state_topic"] = b + "/rf/tx/state";
-    d["value_template"] = "{{ value_json.status }}";
+    d["value_template"] = "{{ {'idle': 'bereit', 'busy': 'sendet', 'disabled': 'aus', 'no_hw': 'keine Hardware'}.get(value_json.status, value_json.status) }}";
     d["json_attributes_topic"] = b + "/rf/tx/state";
     d["entity_category"] = "diagnostic";
     addConfig(out, topics, "sensor", "rf_tx", d);
@@ -390,7 +390,7 @@ void MqttBridge::discovery(std::vector<MqttMsg>& out) {
   }
   {
     JsonDocument d;
-    d["name"] = "Display Stoerung";
+    d["name"] = "Display St\xC3\xB6rung";
     d["state_topic"] = b + "/display/state";
     d["value_template"] = "{{ value_json.problem }}";
     d["device_class"] = "problem";
@@ -420,7 +420,7 @@ void MqttBridge::discovery(std::vector<MqttMsg>& out) {
           "{{ {'raum': value_json.room, 'hand': value_json.manual, 'anteil': value_json.share} | tojson }}";
       addConfig(out, topics, "binary_sensor", "circuit_" + n, d);
       JsonDocument f;
-      f["name"] = c.name + " Stoerung";
+      f["name"] = c.name + " St\xC3\xB6rung";
       f["state_topic"] = b + "/circuit/" + n + "/state";
       f["value_template"] = "{{ value_json.fault }}";
       f["device_class"] = "problem";
@@ -440,7 +440,7 @@ void MqttBridge::discovery(std::vector<MqttMsg>& out) {
       bool measurement;
     };
     for (auto& sd : {SysDef{"power", "Heizleistung gesamt", "%", "", "mdi:radiator", false, true},
-                     SysDef{"rooms_heating", "Raeume heizen", "", "", "mdi:home-thermometer", false, true},
+                     SysDef{"rooms_heating", "R\xC3\xA4ume heizen", "", "", "mdi:home-thermometer", false, true},
                      SysDef{"uptime_h", "Laufzeit", "h", "duration", "", true, false},
                      SysDef{"rssi", "WLAN Signal", "dBm", "signal_strength", "", true, true},
                      SysDef{"heap_kb", "Freier Speicher", "kB", "", "mdi:memory", true, true},
@@ -461,7 +461,7 @@ void MqttBridge::discovery(std::vector<MqttMsg>& out) {
   // ---- alarms, rules
   {
     JsonDocument d;
-    d["name"] = "Stoerung";
+    d["name"] = "St\xC3\xB6rung";
     d["state_topic"] = b + "/alarm/state";
     d["value_template"] = "{{ value_json.problem }}";
     d["json_attributes_topic"] = b + "/alarm/state";
@@ -495,7 +495,7 @@ void MqttBridge::discovery(std::vector<MqttMsg>& out) {
   // ---- heat demand (boiler / heating circuit)
   if (sys_.heatDemand.cfg.supply != "off") {
     JsonDocument d;
-    d["name"] = "Waermeangebot";
+    d["name"] = "W\xC3\xA4rmeangebot";
     d["state_topic"] = b + "/system/state";
     d["value_template"] = "{{ value_json.supply }}";
     d["json_attributes_topic"] = b + "/system/state";
@@ -505,7 +505,7 @@ void MqttBridge::discovery(std::vector<MqttMsg>& out) {
   }
   if (sys_.heatDemand.cfg.enabled) {
     JsonDocument d;
-    d["name"] = "Waermeanforderung";
+    d["name"] = "W\xC3\xA4rmeanforderung";
     d["state_topic"] = b + "/heatdemand/state";
     d["device_class"] = "heat";
     addConfig(out, topics, "binary_sensor", "heatdemand", d);
