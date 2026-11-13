@@ -346,6 +346,8 @@ routes['/sensors']=async m=>{
 routes['/heatdemand']=async m=>{
  const [d,heat,io,ems,sens]=await Promise.all([GET('heatdemand'),GET('heating'),GET('io'),GET('emsesp'),GET('sensors')]);const c=d.config;
  c.supply=c.supply||'off';const sup={min:c.supplyMinTemp??25,delay:Math.round((c.supplyDelaySec??300)/60*10)/10};
+ // one body for both save buttons: always the values currently shown
+ const body=()=>{const b={...c};for(const k in mins)b[k]=Math.round((+mins[k]||0)*60);b.supplyMinTemp=+sup.min;b.supplyDelaySec=Math.round((+sup.delay||0)*60);return b};
  const sensOpts=[['','– Fühler wählen –']].concat((sens.sensors||[]).map(x=>[x.id,(x.name||x.id)+' ('+x.id+')']));
  const supSensor=h('span',null,sel(sensOpts,c.supplySensor||'',v=>c.supplySensor=v));
  const supHint=h('div',{class:'hint'});
@@ -376,13 +378,13 @@ routes['/heatdemand']=async m=>{
    mq,
    h('div',{class:'form'},
    ...field('',h('div',{class:'row'},
-    h('button',{class:'p',onclick:()=>{const b={...c};for(const k in mins)b[k]=Math.round((+mins[k]||0)*60);act(()=>PUT('heatdemand',b),'Gespeichert').then(refresh)}},'Speichern'))),
+    h('button',{class:'p',onclick:()=>act(()=>PUT('heatdemand',body()),'Gespeichert').then(refresh)},'Speichern'))),
    ...field('Testen',h('div',{class:'row'},['on','off','fallback'].map(w=>h('button',{onclick:()=>act(()=>POST('heatdemand/test',{send:w}),'Gesendet').then(refresh)},{on:'„Wärme an“ senden',off:'„Wärme aus“ senden',fallback:'„Rückgabe“ senden'}[w]))),'Sendet sofort (gespeicherte Einstellungen). Am Thermostat bzw. unten im Zustand prüfen, ob der Heizkreis umschaltet.'))),
   h('div',{class:'card'},h('h3',{style:'margin-top:0'},'Wärmeangebot – Ventile zu, wenn die Heizung keine Wärme liefert'),h('div',{class:'form'},
    ...field('Prüfen über',h('div',null,sel([['off','aus'],['emsesp','Heizkreis '+hc+' über EMS-ESP (berechneter Vorlauf, Pumpe)'],['sensor','Temperaturfühler']],c.supply,v=>{c.supply=v;showSupply()}),' ',supSensor,supHint)),
    ...field('Mindest-Vorlauf °C',inp(sup,'min','number',{class:'n',step:1}),'Darunter liefert die Heizung keine nutzbare Wärme (Fußbodenheizung: etwa 25 °C).'),
    ...field('Verzögerung min',inp(sup,'delay','number',{class:'n',step:1}),'So lange muss die Wärme fehlen, bevor die Ventile schließen. Kommt Wärme, öffnen sie sofort wieder.'),
-   ...field('',h('div',{class:'row'},h('button',{class:'p',onclick:()=>{const b={...c};for(const k in mins)b[k]=Math.round((+mins[k]||0)*60);b.supplyMinTemp=+sup.min;b.supplyDelaySec=Math.round((+sup.delay||0)*60);act(()=>PUT('heatdemand',b),'Gespeichert').then(refresh)}},'Speichern')),'Räume behalten ihren Wärmebedarf – sie heizen weiter, sobald wieder Wärme da ist. Ventile von Hand sind nicht betroffen. Fordert HeatCore selbst Wärme an, bleiben die Ventile 15 min lang offen, damit der Kessel anlaufen kann.'))),
+   ...field('',h('div',{class:'row'},h('button',{class:'p',onclick:()=>act(()=>PUT('heatdemand',body()),'Gespeichert').then(refresh)},'Speichern')),'Räume behalten ihren Wärmebedarf – sie heizen weiter, sobald wieder Wärme da ist. Ventile von Hand sind nicht betroffen. Fordert HeatCore selbst Wärme an, bleiben die Ventile 15 min lang offen, damit der Kessel anlaufen kann.'))),
   h('details',{class:'card adv'},h('summary',null,'So funktioniert es mit RC35 und EMS-ESP'),
    h('ul',null,
     h('li',null,'Braucht einer der Räume Wärme, schaltet HeatCore den Heizkreis am RC35 auf „Tag“, ist kein Bedarf mehr da, nach dem Nachlauf auf „Nacht“. Die anderen Heizkreise (z. B. Heizkörper) und der Kessel bleiben beim RC35.'),
