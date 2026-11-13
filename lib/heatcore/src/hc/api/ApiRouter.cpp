@@ -574,6 +574,7 @@ int rfRoutes(Ctx& c) {
     JsonArray d = out["discovered"].to<JsonArray>();
     for (auto& x : sys.sensors.discovered()) {
       if (x.kind != SensorKind::Rf && x.kind != SensorKind::External) continue;
+      if (x.id.rfind("ems:", 0) == 0 || x.id.rfind("ext:", 0) == 0) continue;  // EMS-ESP / MQTT sources, not radio
       JsonObject o = d.add<JsonObject>();
       o["id"] = x.id;
       o["value"] = x.lastValue;
@@ -587,7 +588,9 @@ int rfRoutes(Ctx& c) {
     sys.sensors.toJson(all.to<JsonArray>(), true);
     for (JsonObject x : all.as<JsonArray>()) {
       const char* kind = x["kind"] | "";
-      if (!std::strcmp(kind, "rf") || !std::strcmp(kind, "external")) s.add(x);
+      const char* id = x["id"] | "";
+      bool other = !std::strncmp(id, "ems:", 4) || !std::strncmp(id, "ext:", 4);
+      if (!other && (!std::strcmp(kind, "rf") || !std::strcmp(kind, "external"))) s.add(x);
     }
     return 200;
   }

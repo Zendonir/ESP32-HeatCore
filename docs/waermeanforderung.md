@@ -119,7 +119,7 @@ geregelten Heizkreise dann zu.
 * Ventile von Hand (Heizkreis dauerhaft offen/zu/Prozent) sind nicht
   betroffen.
 * Bei stromlos offenen Ventilen heißt „zu“: Der Stellantrieb wird bestromt.
-* Home Assistant: Binärsensor „Waermeangebot“ (Grund als Attribut); die
+* Home Assistant: Binärsensor „Wärmeangebot“ (Grund als Attribut); die
   Heizleistung der Räume ist dann 0 %.
 
 ## REST-API

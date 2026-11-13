@@ -1505,6 +1505,7 @@ void HeatCoreSystem::heatDemandStatusJson(JsonObject o) const {
       e["mode"] = emsModeKey(ems.st.mode);
       e["modeText"] = emsModeText(ems.st.mode);
       e["reduceText"] = emsReduceText(ems.st.reduce);
+      e["reduce"] = emsReduceKey(ems.st.reduce);
       if (heatDemand.cfg.enabled && heatDemand.sentOnce)
         e["confirmed"] = ems.st.mode == (heatDemand.active ? EmsMode::Day : EmsMode::Night) &&
                          ems.st.reduce == EmsReduce::NoFrost;
