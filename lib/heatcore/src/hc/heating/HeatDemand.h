@@ -34,6 +34,18 @@ struct HeatDemandConfig {
   std::string payloadOn, payloadOff;
   std::string payloadFallback;     // sent when HeatCore gives control back (disabled, restart)
   bool retain = false;
+  // Heat supply check (independent of the heat demand above): while the heat
+  // source delivers no heat, the valves of automatic circuits stay closed -
+  // opening them would heat nothing (and mislead the thermal model).
+  //   "off"    no check
+  //   "emsesp" calculated flow temperature and pump of the EMS-ESP heating
+  //            circuit (works with all valves closed)
+  //   "sensor" a temperature sensor (e.g. boiler flow); it must see the supply
+  //            temperature without flow through the floor circuits
+  std::string supply = "off";
+  std::string supplySensor;        // sensor id for "sensor"
+  float supplyMinTemp = 25.f;      // heat available from this flow temperature on
+  uint16_t supplyDelaySec = 300;   // below it this long before the valves close
 };
 
 class HeatDemand {
@@ -51,6 +63,12 @@ class HeatDemand {
   uint32_t sends = 0;
   std::string lastSent;  // "on" / "off" / "fallback" / error text
   std::vector<std::string> requesting;  // rooms that currently need heat
+  // heat supply (runtime)
+  bool supplyOk = true;     // false: valves of automatic circuits closed
+  Millis supplyLowMs = 0;   // below the threshold since (0 = not below)
+  float supplyValue = 0.f;  // last flow temperature used
+  bool supplyKnown = false;
+  std::string supplyText;   // explanation for the web UI
 
   struct Step {
     bool changed = false;

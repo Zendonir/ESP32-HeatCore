@@ -133,6 +133,9 @@ class HeatingManager {
 
   std::vector<Room> rooms;
   std::array<Circuit, kNumOutputs> circuits;
+  // false while the heat source delivers no heat: automatic circuits stay
+  // closed (manual control is not affected)
+  bool supplyOk = true;
   GlobalMode globalMode = GlobalMode::Normal;
   int64_t globalModeUntilEpoch = 0;  // 0 = open ended
   Millis globalModeUntilMs = 0;

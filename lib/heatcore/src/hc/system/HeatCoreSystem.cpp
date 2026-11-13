@@ -84,6 +84,7 @@ void HeatCoreSystem::loop() {
     sensors.tick(now);
     ble.tick(now);
     updateHeatDemand(now);
+    updateHeatSupply(now);
     display.setRoomCount(static_cast<int>(displayRooms().size()));
     display.tick(now, alarms.highest(), alarms.count());
     updateLoopback(now);
@@ -246,6 +247,7 @@ void HeatCoreSystem::controlCycle(Millis now) {
       r.reason = configured ? "Raumfuehler ausgefallen" : "kein Raumfuehler zugeordnet";
       if (safety.cfg.sensorFailMode == SensorFailMode::Duty) r.reason += " - Notbetrieb";
     }
+    if (r.demand && !heating.supplyOk) r.reason += " - kein Waermeangebot, Ventile zu";
   }
   heating.updateCircuits(now);
   checkCircuitFaults(now);
@@ -1283,6 +1285,69 @@ bool roomNeedsHeat(const Room& r) {
          !r.windowOpen() && r.duty > 0.5f;
 }
 }  // namespace
+
+void HeatCoreSystem::updateHeatSupply(Millis now) {
+  HeatDemand& hd = heatDemand;
+  const HeatDemandConfig& c = hd.cfg;
+  char b[120];
+  bool known = false, low = false;
+  float v = 0.f;
+  std::string why;
+  if (c.supply == "emsesp") {
+    if (!ems.cfg.enabled) {
+      why = "EMS-ESP-Anbindung ist aus";
+    } else if (!ems.thermostatFresh(now) || std::isnan(ems.st.targetFlow)) {
+      why = "keine aktuellen Thermostatdaten";
+    } else {
+      known = true;
+      v = ems.st.targetFlow;
+      bool pumpOff = ems.mixerFresh(now) && ems.st.pump == 0;
+      low = pumpOff || v < c.supplyMinTemp;
+      if (pumpOff)
+        std::snprintf(b, sizeof(b), "Heizkreispumpe aus (berechneter Vorlauf %.0f \xC2\xB0" "C)", static_cast<double>(v));
+      else
+        std::snprintf(b, sizeof(b), "berechneter Vorlauf %.0f \xC2\xB0" "C (Mindestwert %.0f \xC2\xB0" "C)", static_cast<double>(v),
+                      static_cast<double>(c.supplyMinTemp));
+      why = b;
+    }
+  } else if (c.supply == "sensor") {
+    const Sensor* s = sensors.find(c.supplySensor);
+    if (!s) {
+      why = "Fuehler " + c.supplySensor + " nicht gefunden";
+    } else if (!s->available()) {
+      why = "Fuehler " + s->name + " liefert keinen Wert";
+    } else {
+      known = true;
+      v = s->value;
+      low = v < c.supplyMinTemp;
+      std::snprintf(b, sizeof(b), "%s %.1f \xC2\xB0" "C (Mindestwert %.0f \xC2\xB0" "C)", s->name.c_str(), static_cast<double>(v),
+                    static_cast<double>(c.supplyMinTemp));
+      why = b;
+    }
+  }
+  // a heat request of HeatCore itself gets time to start the heat source
+  // (the supply sensor may only warm up once water flows)
+  if (low && hd.cfg.enabled && hd.active && elapsed(now, hd.changedMs) < kSupplyStartMs) {
+    low = false;
+    why += " - Waermeanforderung laeuft an";
+  }
+  if (!known && c.supply != "off") why += " - Ventile arbeiten normal";
+  if (!low) {
+    hd.supplyLowMs = 0;
+    hd.supplyOk = true;
+  } else {
+    if (!hd.supplyLowMs) hd.supplyLowMs = now ? now : 1;
+    if (elapsed(now, hd.supplyLowMs) >= c.supplyDelaySec * 1000u) hd.supplyOk = false;
+  }
+  hd.supplyKnown = known;
+  hd.supplyValue = v;
+  hd.supplyText = why;
+  if (heating.supplyOk != hd.supplyOk) {
+    heating.supplyOk = hd.supplyOk;
+    for (auto& r : heating.rooms)
+      model.noteContext(r.id, hd.supplyOk ? "Waermeangebot wieder da" : "kein Waermeangebot - Ventile zu");
+  }
+}
 
 void HeatCoreSystem::updateHeatDemand(Millis now) {
   HeatDemand& hd = heatDemand;

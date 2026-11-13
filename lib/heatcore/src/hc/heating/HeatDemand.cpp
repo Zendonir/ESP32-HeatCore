@@ -1,5 +1,7 @@
 #include "hc/heating/HeatDemand.h"
 
+#include <cmath>
+
 namespace hc {
 
 void HeatDemand::reset() {
@@ -44,6 +46,10 @@ void HeatDemand::toJson(JsonObject o) const {
   o["payloadOff"] = cfg.payloadOff;
   o["payloadFallback"] = cfg.payloadFallback;
   o["retain"] = cfg.retain;
+  o["supply"] = cfg.supply;
+  o["supplySensor"] = cfg.supplySensor;
+  o["supplyMinTemp"] = cfg.supplyMinTemp;
+  o["supplyDelaySec"] = cfg.supplyDelaySec;
 }
 
 std::string HeatDemand::fromJson(JsonObjectConst o) {
@@ -62,6 +68,11 @@ std::string HeatDemand::fromJson(JsonObjectConst o) {
   n.payloadOff = o["payloadOff"] | "";
   n.payloadFallback = o["payloadFallback"] | "";
   n.retain = o["retain"] | false;
+  // heat supply: kept when a caller does not send it
+  n.supply = o["supply"] | cfg.supply.c_str();
+  n.supplySensor = o["supplySensor"] | cfg.supplySensor.c_str();
+  n.supplyMinTemp = o["supplyMinTemp"] | cfg.supplyMinTemp;
+  n.supplyDelaySec = o["supplyDelaySec"] | cfg.supplyDelaySec;
   if (n.runOnSec > 7200) return "Nachlauf max. 120 min";
   if (n.minOnSec > 7200 || n.minOffSec > 7200) return "Mindestlauf-/pausenzeit max. 120 min";
   if (n.repeatSec != 0 && (n.repeatSec < 30 || n.repeatSec > 3600)) return "Wiederholen 0 oder 30..3600 s";
@@ -76,6 +87,14 @@ std::string HeatDemand::fromJson(JsonObjectConst o) {
   if (n.payloadOn.size() > 200 || n.payloadOff.size() > 200 || n.payloadFallback.size() > 200)
     return "Nachrichten max. 200 Zeichen";
   if (n.enabled && mqtt && n.topic.empty() && n.output == 0) return "MQTT-Thema oder Ausgang angeben";
+  if (n.supply != "off" && n.supply != "emsesp" && n.supply != "sensor") return "Waermeangebot: off, emsesp oder sensor";
+  if (n.supply == "sensor" && n.supplySensor.empty()) return "Fuehler fuer das Waermeangebot waehlen";
+  if (!(n.supplyMinTemp >= 15.f && n.supplyMinTemp <= 70.f)) return "Mindest-Vorlauf 15..70 C";
+  if (n.supplyDelaySec > 3600) return "Verzoegerung max. 60 min";
+  if (n.supply != cfg.supply || n.supplySensor != cfg.supplySensor) {
+    supplyOk = true;  // new source: decide again from scratch
+    supplyLowMs = 0;
+  }
   bool wasEnabled = cfg.enabled;
   cfg = std::move(n);
   ++revision;
@@ -96,6 +115,12 @@ void HeatDemand::statusJson(JsonObject o, Millis now) const {
   o["sends"] = sends;
   o["lastSent"] = lastSent;
   o["lastSentAgoSec"] = lastSendMs ? elapsed(now, lastSendMs) / 1000u : 0u;
+  JsonObject s = o["supply"].to<JsonObject>();
+  s["mode"] = cfg.supply;
+  s["ok"] = supplyOk;
+  if (supplyKnown) s["value"] = std::round(supplyValue * 10.f) / 10.f;
+  s["text"] = supplyText;
+  if (supplyLowMs) s["lowSec"] = elapsed(now, supplyLowMs) / 1000u;
 }
 
 }  // namespace hc

@@ -263,6 +263,7 @@ class HeatCoreSystem : public IAutomationContext {
   void runBindings(const std::vector<InputBinding>& bindings, const Event& e);
   void controlCycle(Millis now);
   void updateHeatDemand(Millis now);
+  void updateHeatSupply(Millis now);
   std::string emsSend(const std::string& which);  // heat demand target "emsesp"
   void heatDemandReleaseTarget();                 // fallback to the MQTT / EMS-ESP target
   void heatDemandReleaseOutput(int output);
@@ -282,6 +283,7 @@ class HeatCoreSystem : public IAutomationContext {
   bool begun_ = false;
   Millis begunMs_ = 0;
   static constexpr uint32_t kSensorStartupGraceMs = 120000;
+  static constexpr uint32_t kSupplyStartMs = 15u * 60u * 1000u;  // own heat request: time for the heat source
   bool outputWriteOk_ = true;
   uint32_t consecutiveWriteErrors_ = 0;
   // per room duty accumulation for the thermal model

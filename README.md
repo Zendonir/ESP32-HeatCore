@@ -73,6 +73,9 @@ Webinterface.
   eingeschränkte Rechte. Je Raum Heizleistung (%), Solltemperatur, Heizbedarf
   und Betrieb als eigene Entitäten, dazu Heizleistung gesamt und
   Gerätediagnose – für Verläufe und Statistiken im Dashboard.
+* **Wärmeangebot:** Liefert die Heizung keine Wärme (Nachtabsenkung,
+  Pumpe aus – erkannt über EMS-ESP oder einen Vorlauffühler), bleiben die
+  Ventile zu und öffnen sofort, wenn wieder Wärme kommt.
 
 ## Status
 
