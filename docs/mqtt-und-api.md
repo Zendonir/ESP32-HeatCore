@@ -20,7 +20,7 @@ Alles funktioniert ohne MQTT und Home Assistant. MQTT ist optional
 | `<basis>/display/state`, `/display/{enabled,contrast,page}/set` | aus/ein | Display |
 | `<basis>/output/<n>/state`, `/set` | aus/ein | nur freigegebene allgemeine Ausgänge, zeitlich begrenzt |
 | `<basis>/circuit/<n>/state` | aus | Ventil offen, Störung, Raum, Handbetrieb, Anteil % |
-| `<basis>/system/state` | aus | Heizleistung gesamt (Mittel der Räume, %), Räume heizen, Laufzeit (h), WLAN-Signal, freier Speicher, Netzwerk, IP |
+| `<basis>/system/state` | aus | Heizleistung gesamt (Mittel der Räume, %), Räume heizen, Laufzeit (h), WLAN-Signal, freier Speicher, Netzwerk, IP, Wärmeangebot (`supply` ON/OFF, `supply_text`, nur wenn die Prüfung an ist) |
 | `<basis>/alarm/state`, `<basis>/notify` | aus | Alarme, Benachrichtigungen |
 | `<basis>/rule/<id>/run` | ein | Regeln mit manuellem Trigger |
 | `<basis>/in/<thema>` / `<basis>/out/<thema>` | ein/aus | frei für Automationen |
@@ -31,7 +31,7 @@ Solltemperatur und Betrieb (Text), Komfort- und Absenktemperatur zum
 Einstellen (dauerhaft gespeichert, anders als der Sollwert der Klima-Entität,
 der nur bis zum nächsten Zeitplanwechsel gilt) – damit zeichnet Home Assistant den Verlauf
 von Soll-/Isttemperatur und Ventilansteuerung auf –, Lernmodellstatus,
-Heizleistung gesamt und Anzahl heizender Räume, Gerätediagnose (Laufzeit,
+Heizleistung gesamt und Anzahl heizender Räume, Wärmeangebot (wenn geprüft), Gerätediagnose (Laufzeit,
 WLAN-Signal, Speicher, Netzwerk, IP), Funkgeräte (binary_sensor + event + Qualität),
 Temperatur-/Feuchte-/Batteriesensoren (auch Bluetooth-Thermometer, Batterie in %), Funkstatistik, Senderstatus,
 Sende-Buttons, Display (Schalter, Kontrast, Seite, Störung), freigegebene

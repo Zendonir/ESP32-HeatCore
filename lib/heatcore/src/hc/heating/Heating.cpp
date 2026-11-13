@@ -451,7 +451,7 @@ void HeatingManager::updateCircuits(Millis now) {
   for (auto& c : circuits) {
     const Room* r = c.room.empty() ? nullptr : room(c.room);
     c.request = c.enabled && (c.manual != CircuitManual::Auto ? manualWants(c, now)
-                                                              : r && r->demand && shareWants(c, *r, now));
+                                                              : r && r->demand && supplyOk && shareWants(c, *r, now));
     if (c.request == c.open) continue;
     uint32_t minT = (c.open ? c.minOnSec : c.minOffSec) * 1000u;
     if (c.switched && elapsed(now, c.lastSwitchMs) < minT) continue;

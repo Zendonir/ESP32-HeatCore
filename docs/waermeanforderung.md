@@ -93,6 +93,35 @@ Der Ausgang ist optional. In Frage kommt nur ein Ausgang mit der Funktion
 mit oder ohne MQTT nutzen, etwa für eine Pumpe oder einen potentialfreien
 Kesselkontakt über ein Koppelrelais.
 
+## Wärmeangebot: Ventile zu, wenn die Heizung keine Wärme liefert
+
+Liefert der Kessel bzw. Heizkreis gerade keine Wärme (Nachtabsenkung am RC35,
+Sommerbetrieb, Pumpe aus), bringt ein offenes Ventil nichts: Die Stellantriebe
+ziehen Strom, und das Lernmodell sieht „Ventil offen, Raum wird nicht warm“.
+Mit der Prüfung des Wärmeangebots bleiben die Ventile der automatisch
+geregelten Heizkreise dann zu.
+
+| Prüfen über | Wärme vorhanden, wenn … |
+|---|---|
+| `emsesp` | der vom Thermostat **berechnete Vorlauf** des EMS-ESP-Heizkreises mindestens den Mindest-Vorlauf erreicht **und** die Heizkreispumpe läuft. Funktioniert auch, wenn alle Ventile zu sind. |
+| `sensor` | ein Temperaturfühler (z. B. Kesselvorlauf, `ems:boilerflow`, ein Fühler aus Home Assistant) mindestens den Mindest-Vorlauf misst. Der Fühler muss die Temperatur auch ohne Durchfluss durch die Fußbodenkreise sehen – also nicht am Verteiler. |
+
+* Fehlt die Wärme länger als die **Verzögerung** (Standard 5 min), schließen
+  die Ventile. Kommt Wärme zurück, öffnen sie sofort wieder (Mindest-Pausenzeit
+  des Heizkreises beachtet).
+* Die Räume behalten ihren Wärmebedarf; der Grund zeigt
+  „kein Waermeangebot, Ventile zu“. Die Wärmeanforderung an den Kessel läuft
+  normal weiter – sie holt die Wärme ja gerade.
+* Fordert HeatCore selbst Wärme an, bleiben die Ventile die ersten 15 min
+  offen, damit der Kessel anlaufen und der Fühler warm werden kann.
+* Liegen keine aktuellen Daten vor (EMS-ESP aus, Fühler ausgefallen),
+  arbeiten die Ventile normal – kein Aussperren durch einen Fehler.
+* Ventile von Hand (Heizkreis dauerhaft offen/zu/Prozent) sind nicht
+  betroffen.
+* Bei stromlos offenen Ventilen heißt „zu“: Der Stellantrieb wird bestromt.
+* Home Assistant: Binärsensor „Waermeangebot“ (Grund als Attribut); die
+  Heizleistung der Räume ist dann 0 %.
+
 ## REST-API
 
 | Methode und Pfad | Zweck |
@@ -104,3 +133,7 @@ Kesselkontakt über ein Koppelrelais.
 Einstellungen: `enabled`, `target` (`emsesp` oder `mqtt`), `rooms`,
 `runOnSec`, `minOnSec`, `minOffSec`, `repeatSec`, `output`, bei `mqtt`
 zusätzlich `topic`, `payloadOn`, `payloadOff`, `payloadFallback`, `retain`.
+Wärmeangebot (unabhängig von `enabled`): `supply` (`off`, `emsesp`,
+`sensor`), `supplySensor`, `supplyMinTemp` (15..70 °C, Standard 25),
+`supplyDelaySec` (0..3600, Standard 300). Der Zustand steht unter
+`status.supply` (`ok`, `value`, `text`, `lowSec`).

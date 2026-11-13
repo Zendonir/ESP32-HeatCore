@@ -38,9 +38,9 @@ const char* haMode(const Room& r) {
 // heating power of a room in %, from the active control state (a room that is
 // off or has its window open still heats against its frost protection):
 // PWM duty (100 while an external request keeps the valve open), otherwise
-// 100 while the room heats
-int roomPower(const Room& r) {
-  if (r.overTemp) return 0;
+// 100 while the room heats; 0 while the heat source delivers no heat
+int roomPower(const Room& r, bool supply) {
+  if (r.overTemp || !supply) return 0;
   if (r.control == RoomControl::Pwm && r.pwmRunning) {
     bool sustained = r.externalDemand && !r.windowOpen() && r.temperature < r.setpoint + 1.0f;
     return sustained ? 100 : static_cast<int>(std::lround(r.duty));
@@ -493,6 +493,16 @@ void MqttBridge::discovery(std::vector<MqttMsg>& out) {
     }
   }
   // ---- heat demand (boiler / heating circuit)
+  if (sys_.heatDemand.cfg.supply != "off") {
+    JsonDocument d;
+    d["name"] = "Waermeangebot";
+    d["state_topic"] = b + "/system/state";
+    d["value_template"] = "{{ value_json.supply }}";
+    d["json_attributes_topic"] = b + "/system/state";
+    d["json_attributes_template"] = "{{ {'grund': value_json.supply_text} | tojson }}";
+    d["device_class"] = "heat";
+    addConfig(out, topics, "binary_sensor", "heatsupply", d);
+  }
   if (sys_.heatDemand.cfg.enabled) {
     JsonDocument d;
     d["name"] = "Waermeanforderung";
@@ -521,7 +531,7 @@ void MqttBridge::roomState(const Room& r, std::vector<MqttMsg>& out) const {
   d["reason"] = r.reason;
   d["manual"] = r.manualActive;
   if (r.control == RoomControl::Pwm && r.pwmRunning) d["duty"] = std::round(r.duty);
-  d["power"] = roomPower(r);
+  d["power"] = roomPower(r, sys_.heating.supplyOk);
   d["mode_text"] = roomModeText(r);
   d["comfort"] = r.comfort;
   d["eco"] = r.eco;
@@ -630,7 +640,7 @@ void MqttBridge::systemState(std::vector<MqttMsg>& out) const {
   JsonDocument d;
   int rooms = 0, heating = 0, power = 0;
   for (auto& r : sys_.heating.rooms) {
-    int pw = roomPower(r);
+    int pw = roomPower(r, sys_.heating.supplyOk);
     if (r.mode == RoomMode::Off && pw == 0) continue;  // switched off and not frost-heating
     ++rooms;
     power += pw;
@@ -644,6 +654,10 @@ void MqttBridge::systemState(std::vector<MqttMsg>& out) const {
   d["heap_kb"] = p.freeHeap / 1024u;
   d["network"] = p.network.empty() ? "-" : p.network;
   d["ip"] = p.ip.empty() ? "-" : p.ip;
+  if (sys_.heatDemand.cfg.supply != "off") {
+    d["supply"] = onOff(sys_.heating.supplyOk);
+    d["supply_text"] = sys_.heatDemand.supplyText;
+  }
   out.push_back({base() + "/system/state", toStr(d), true});
 }
 
