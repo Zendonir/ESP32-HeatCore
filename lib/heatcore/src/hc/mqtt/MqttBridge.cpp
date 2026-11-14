@@ -54,6 +54,7 @@ const char* roomModeText(const Room& r) {
   return r.mode == RoomMode::Off   ? "Aus"
          : r.windowOpen()         ? "Fenster offen"
          : r.manualActive         ? "Hand"
+         : r.preheatFor >= 0      ? "Vorheizen"
          : near(r.comfort)        ? "Komfort"
          : near(r.eco)            ? "Absenkung"
          : near(r.frost)          ? "Frostschutz"

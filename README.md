@@ -73,6 +73,10 @@ Webinterface.
   eingeschränkte Rechte. Je Raum Heizleistung (%), Solltemperatur, Heizbedarf
   und Betrieb als eigene Entitäten, dazu Heizleistung gesamt und
   Gerätediagnose – für Verläufe und Statistiken im Dashboard.
+* **Vorheizen:** Für träge Fußbodenheizung beginnt HeatCore vor der
+  Komfortzeit rechtzeitig mit dem Heizen – die Vorlaufzeit kommt aus der
+  gelernten Aufheizgeschwindigkeit des Raums. Dazu eine Zeitplan-Vorlage
+  „Fußbodenheizung“.
 * **Wärmeangebot:** Liefert die Heizung keine Wärme (Nachtabsenkung,
   Pumpe aus – erkannt über EMS-ESP oder einen Vorlauffühler), bleiben die
   Ventile zu und öffnen sofort, wenn wieder Wärme kommt.
