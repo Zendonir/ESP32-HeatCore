@@ -227,7 +227,22 @@ void HeatCoreSystem::controlCycle(Millis now) {
   }
   safety.evaluate(heating, sensors, now);
   LocalTime lt = clock_.local();
+  float outdoor = 0.f;
+  bool haveOutdoor = sysCfg.outdoorFromSensor && sensors.firstOfRole(SensorRole::Outdoor, outdoor);
   for (auto& r : heating.rooms) {
+    // pre-heating: net warming rate at full power and dead time from the
+    // thermal model - only once it is trustworthy (otherwise the full lead time)
+    r.preheatRateKh = 0.f;
+    const ThermalModel* m = model.find(r.id);
+    if (m && m->status() == ModelStatus::Ready && r.hasTemp) {
+      // same terms as the model's prediction: loss to the outdoor temperature,
+      // or the learned constant drift without an outdoor sensor
+      float rate = haveOutdoor ? m->heatingGain() + m->lossCoeff() * (outdoor - r.temperature)
+                               : m->heatingGain() + m->offset();
+      if (rate > 0.03f) r.preheatRateKh = rate;
+      float d = m->delayMin();
+      r.preheatDelayMin = d < 0.f ? 0.f : (d > 240.f ? 240.f : d);
+    }
     heating.computeSetpoint(r, lt, safety.cfg.minSetpoint, safety.cfg.maxSetpoint, now);
     ModelAdvice adv;
     if (r.hasTemp && !r.tempFallback) adv = model.advice(r.id, r.demand, r.temperature);

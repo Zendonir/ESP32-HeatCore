@@ -228,6 +228,21 @@ int HeatingManager::scheduleSlot(const Room& r, const LocalTime& lt, bool* comfo
   return day * 16 + 8 + gap;
 }
 
+int HeatingManager::minutesToNextComfort(const Room& r, const LocalTime& lt, int* startMinuteOfWeek) {
+  if (!lt.valid) return -1;
+  const int now = lt.minuteOfDay();
+  for (int dd = 0; dd <= 2; ++dd) {
+    int day = (lt.weekday + dd) % 7;
+    for (auto& p : r.schedule[static_cast<size_t>(day)]) {
+      int until = dd * 1440 + p.start - now;
+      if (until <= 0) continue;  // already started (or running)
+      if (startMinuteOfWeek) *startMinuteOfWeek = day * 1440 + p.start;
+      return until;
+    }
+  }
+  return -1;
+}
+
 float HeatingManager::computeSetpoint(Room& r, const LocalTime& lt, float minSp, float maxSp, Millis now) {
   bool comfort = false;
   int slot = scheduleSlot(r, lt, &comfort);
@@ -277,7 +292,30 @@ float HeatingManager::computeSetpoint(Room& r, const LocalTime& lt, float minSp,
   } else {
     sp = comfort ? r.comfort : r.eco;
     r.reason = comfort ? "Zeitplan Komfort" : "Zeitplan Absenkung";
+    if (!comfort && r.preheatMaxMin > 0 && r.comfort > r.eco) {
+      int startMow = -1;
+      int until = minutesToNextComfort(r, lt, &startMow);
+      if (until > 0 && until <= r.preheatMaxMin) {
+        bool on = r.preheatFor == startMow;  // started: keep going until the period begins
+        if (!on) {
+          int need = r.preheatMaxMin;  // no learned rate yet: the full lead time
+          if (r.hasTemp && r.preheatRateKh > 0.f) {
+            float dT = r.comfort - r.temperature;
+            need = dT <= 0.f ? 0 : static_cast<int>(r.preheatDelayMin + dT / r.preheatRateKh * 60.f + 0.5f);
+            if (need > r.preheatMaxMin) need = r.preheatMaxMin;
+          }
+          r.preheatLeadMin = static_cast<uint16_t>(need);
+          on = need > 0 && until <= need;
+        }
+        if (on) {
+          r.preheatFor = startMow;
+          sp = r.comfort;
+          r.reason = "Vorheizen fuer Komfort ab " + formatHHMM(static_cast<uint16_t>(startMow % 1440));
+        }
+      }
+    }
   }
+  if (r.reason.rfind("Vorheizen", 0) != 0) r.preheatFor = -1;
   // Frost protection may lie below the user range but never below 5 C.
   float lo = sp == r.frost ? 5.f : minSp;
   r.setpoint = clampf(sp, lo, maxSp);
@@ -506,7 +544,13 @@ void HeatingManager::toJson(JsonObject o, bool runtime) const {
     x["pwmCycleMin"] = r.pwmCycleMin;
     x["pwmKp"] = r.pwmKp;
     x["pwmTnMin"] = r.pwmTnMin;
+    x["preheatMaxMin"] = r.preheatMaxMin;
     if (!runtime) continue;
+    if (r.preheatMaxMin) {
+      x["preheatRateKh"] = std::round(r.preheatRateKh * 100.f) / 100.f;
+      x["preheatLeadMin"] = r.preheatLeadMin;
+      x["preheating"] = r.preheatFor >= 0;
+    }
     x["windowOpen"] = r.windowOpen();
     JsonArray ws = x["windowSources"].to<JsonArray>();
     for (auto& s : r.windowSources) ws.add(s);
@@ -610,6 +654,11 @@ std::string HeatingManager::fromJson(JsonObjectConst o) {
     r.pwmCycleMin = x["pwmCycleMin"] | 20u;
     r.pwmKp = x["pwmKp"] | 40.f;
     r.pwmTnMin = x["pwmTnMin"] | 90u;
+    {
+      const Room* prev = room(r.id);  // kept when a caller does not send it
+      r.preheatMaxMin = x["preheatMaxMin"] | (prev ? prev->preheatMaxMin : 0u);
+    }
+    if (r.preheatMaxMin > 720) return "Vorheizen max. 720 min";
     if (r.pwmCycleMin < 5 || r.pwmCycleMin > 60) return "PWM-Zyklus 5..60 min";
     if (!(r.pwmKp >= 5.f && r.pwmKp <= 200.f)) return "PWM-Verstaerkung 5..200 %/K";
     if (r.pwmTnMin > 600) return "PWM-Nachstellzeit 0..600 min";
@@ -629,6 +678,10 @@ std::string HeatingManager::fromJson(JsonObjectConst o) {
       r.hasTemp = old->hasTemp;
       r.temperature = old->temperature;
       r.setpoint = old->setpoint;
+      r.preheatRateKh = old->preheatRateKh;
+      r.preheatDelayMin = old->preheatDelayMin;
+      r.preheatFor = old->preheatFor;
+      r.preheatLeadMin = old->preheatLeadMin;
       if (old->control == r.control) {
         r.duty = old->duty;
         r.pwmI = old->pwmI;

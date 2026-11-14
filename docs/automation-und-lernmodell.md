@@ -110,6 +110,32 @@ Zwischenstellung gibt es nicht. Je Raum wählbar (Räume & Heizkreise →
 Sicherheit, Mindestlaufzeiten, Fühlerausfall-Strategie und Übertemperatur
 gelten für beide Regelarten unverändert.
 
+## Vorheizen (Fußbodenheizung)
+
+Ein Estrich braucht Stunden, um wärmer zu werden (gemessen z. B. 0,1–0,3 K/h).
+Kurze Komfortzeiten wie „06:00–08:00, 16:00–22:00“ mit 3 K Absenkung
+erreichen die Komforttemperatur deshalb nie. Empfehlung für
+Fußbodenheizung: **ein Komfortblock pro Tag** und eine **kleine Absenkung
+(1–2 K)**. Die Schaltfläche „Vorlage Fußbodenheizung“ im Raum trägt
+Mo–Fr 06:00–22:00, Sa–So 07:00–22:00 und 240 min Vorheizen ein.
+
+**Vorheizen** (je Raum, „Vorheizen bis zu (min)“, 0 = aus): Im
+Zeitplanbetrieb beginnt HeatCore vor einer Komfortzeit so früh mit der
+Komforttemperatur, dass der Raum zu ihrem Beginn warm ist:
+
+```
+Vorlauf = Totzeit + (Komfort − Ist) / Aufheizrate × 60 min   (höchstens der eingestellte Wert)
+```
+
+Aufheizrate und Totzeit kommen aus dem Lernmodell, sobald es „bereit“ ist:
+Heizleistung abzüglich Wärmeverlust bei der aktuellen Außentemperatur, ohne
+Außenfühler mit der gelernten Drift. Solange das Modell noch lernt oder
+eingeschränkt ist, wird die volle eingestellte Zeit verwendet. Hat das
+Vorheizen begonnen, läuft es bis zum Beginn der Komfortzeit weiter; ist der
+Raum schon warm genug, entfällt es. Handbetrieb, Fenster, Urlaub, Abwesend
+und feste Betriebsarten haben Vorrang. Grund und Display zeigen
+„Vorheizen fuer Komfort ab HH:MM“, Home Assistant den Betrieb „Vorheizen“.
+
 ## Lernmodell
 
 `dT/dt = a·u(t − Totzeit) + b·(T_außen − T)` (mit Außenfühler) bzw.

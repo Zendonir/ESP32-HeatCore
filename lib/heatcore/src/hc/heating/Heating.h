@@ -54,6 +54,11 @@ struct Room {
   uint16_t pwmCycleMin = 20;  // PWM cycle length (5..60 min)
   float pwmKp = 40.f;         // proportional gain in % duty per K below setpoint (5..200)
   uint16_t pwmTnMin = 90;     // integral (reset) time in min, 0 = P only (0..600)
+  // Pre-heating (optimum start): heat up to comfort early enough that the room
+  // is warm when a comfort period of the schedule begins. Lead time from the
+  // learned heating rate, at most this many minutes (0 = off). Slow rooms
+  // (underfloor heating) need hours.
+  uint16_t preheatMaxMin = 0;
 
   // runtime
   std::vector<std::string> windowSources;  // refs of currently open contacts
@@ -86,6 +91,11 @@ struct Room {
   Millis pwmCycleStartMs = 0;
   uint32_t pwmOnMs = 0;  // on-time latched for the running cycle
   float pwmCycleSetpoint = 0.f;
+  // pre-heating state
+  float preheatRateKh = 0.f;   // heating rate at full power from the thermal model (0 = unknown)
+  float preheatDelayMin = 0.f;  // learned dead time
+  int preheatFor = -1;          // minute of the week of the comfort start being pre-heated for
+  uint16_t preheatLeadMin = 0;  // last computed lead time
 };
 
 // Permanent manual control of a heating circuit (valve), kept across restarts.
@@ -165,6 +175,9 @@ class HeatingManager {
 
   // Control cycle
   float computeSetpoint(Room& r, const LocalTime& lt, float minSp, float maxSp, Millis now);
+  // Minutes until the next comfort period starts (searching up to 2 days),
+  // -1 if none; `startMinuteOfWeek` identifies that period.
+  static int minutesToNextComfort(const Room& r, const LocalTime& lt, int* startMinuteOfWeek);
   void updateDemand(Room& r, const ModelAdvice& adv, SensorFailMode failMode, uint8_t dutyPct, uint16_t cycleMin,
                     Millis now);
   // Applies room demand to circuits honouring minimum on/off times.
