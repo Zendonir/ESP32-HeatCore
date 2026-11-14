@@ -230,13 +230,16 @@ void HeatCoreSystem::controlCycle(Millis now) {
   float outdoor = 0.f;
   bool haveOutdoor = sysCfg.outdoorFromSensor && sensors.firstOfRole(SensorRole::Outdoor, outdoor);
   for (auto& r : heating.rooms) {
-    // pre-heating: heating rate at full power and dead time from the thermal model
+    // pre-heating: net warming rate at full power and dead time from the
+    // thermal model - only once it is trustworthy (otherwise the full lead time)
     r.preheatRateKh = 0.f;
-    if (const ThermalModel* m = model.find(r.id)) {
-      float a = m->heatingGain(), b = m->lossCoeff();
-      float rate = a;
-      if (haveOutdoor && r.hasTemp && b > 0.f && b < 0.5f && r.temperature > outdoor) rate -= b * (r.temperature - outdoor);
-      if (a > 0.03f && rate > 0.03f) r.preheatRateKh = rate;
+    const ThermalModel* m = model.find(r.id);
+    if (m && m->status() == ModelStatus::Ready && r.hasTemp) {
+      // same terms as the model's prediction: loss to the outdoor temperature,
+      // or the learned constant drift without an outdoor sensor
+      float rate = haveOutdoor ? m->heatingGain() + m->lossCoeff() * (outdoor - r.temperature)
+                               : m->heatingGain() + m->offset();
+      if (rate > 0.03f) r.preheatRateKh = rate;
       float d = m->delayMin();
       r.preheatDelayMin = d < 0.f ? 0.f : (d > 240.f ? 240.f : d);
     }

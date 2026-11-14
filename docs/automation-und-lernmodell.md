@@ -127,9 +127,10 @@ Komforttemperatur, dass der Raum zu ihrem Beginn warm ist:
 Vorlauf = Totzeit + (Komfort − Ist) / Aufheizrate × 60 min   (höchstens der eingestellte Wert)
 ```
 
-Aufheizrate und Totzeit kommen aus dem Lernmodell (Heizleistung abzüglich
-Wärmeverlust bei der aktuellen Außentemperatur). Solange noch keine
-Aufheizrate gelernt ist, wird die volle eingestellte Zeit verwendet. Hat das
+Aufheizrate und Totzeit kommen aus dem Lernmodell, sobald es „bereit“ ist:
+Heizleistung abzüglich Wärmeverlust bei der aktuellen Außentemperatur, ohne
+Außenfühler mit der gelernten Drift. Solange das Modell noch lernt oder
+eingeschränkt ist, wird die volle eingestellte Zeit verwendet. Hat das
 Vorheizen begonnen, läuft es bis zum Beginn der Komfortzeit weiter; ist der
 Raum schon warm genug, entfällt es. Handbetrieb, Fenster, Urlaub, Abwesend
 und feste Betriebsarten haben Vorrang. Grund und Display zeigen

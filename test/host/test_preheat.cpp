@@ -103,8 +103,10 @@ TEST(preheat_off_and_config) {
   q.body = R"({"rooms":[{"id":"wohnen","name":"Wohnen","comfort":21,"eco":19,"frost":7,"preheatMaxMin":900}],
               "circuits":[{"n":1,"room":"wohnen"}]})";
   CHECK_EQ(api.handle(q).status, 400);
-  // the system feeds the learned rate from the thermal model
+  // a model that has not learned yet gives no rate: the full lead time is used
   r.sys.sensors.update("ow1:01", 19.f, r.clock.ms);
   r.run(5000, false);
-  CHECK(r.sys.heating.room("wohnen")->preheatRateKh >= 0.f);
+  const ThermalModel* m = r.sys.model.find("wohnen");
+  CHECK(!m || m->status() != ModelStatus::Ready);
+  CHECK_NEAR(r.sys.heating.room("wohnen")->preheatRateKh, 0.0, 0.0001);
 }
