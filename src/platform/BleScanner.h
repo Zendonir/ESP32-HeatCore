@@ -28,12 +28,18 @@ class BleScanner {
   void setScanning(bool on, bool activeScan = false);
   bool scanning() const;
   bool pop(BleAdvert& a);
+  // Stops scanning and shuts the Bluetooth host and controller down,
+  // releasing their RAM (firmware update). Bluetooth cannot start again
+  // before the next restart.
+  void end();
+  bool released() const { return released_; }
   uint32_t dropped() const;
   const std::string& error() const { return error_; }
 
  private:
   bool started_ = false;
   bool activeMode_ = false;
+  bool released_ = false;
   std::string error_;
 };
 

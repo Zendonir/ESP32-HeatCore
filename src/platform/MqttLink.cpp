@@ -111,11 +111,20 @@ void MqttLink::publishAll(bool withDiscovery) {
 }
 
 void MqttLink::loop(bool online) {
-  bool enabled;
+  bool enabled, updateMode;
   {
     std::lock_guard<std::recursive_mutex> lk(sys_.mutex());
-    enabled = sys_.mqttCfg.enabled;
+    updateMode = sys_.updateMode;
+    enabled = sys_.mqttCfg.enabled && !updateMode;  // firmware update: off, RAM released
   }
+  // the 8 KB receive buffer is released during a firmware update
+  if (updateMode && !smallBuffer_ && !client_.connected()) {
+    client_.setBufferSize(128);
+    smallBuffer_ = true;
+  } else if (!updateMode && smallBuffer_) {
+    smallBuffer_ = !client_.setBufferSize(8192);
+  }
+  if (smallBuffer_) enabled = false;  // not connected with the small buffer
   enabled_ = enabled;
   up_ = client_.connected();
   if (reconnect_ || !enabled || !online) {

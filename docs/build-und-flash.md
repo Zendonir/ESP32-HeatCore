@@ -123,6 +123,15 @@ Beide Workflows müssen dafür auf dem Standard-Branch (`main`) liegen.
 
 ## Updates im Webinterface (OTA)
 
+Vor der Übertragung schaltet HeatCore in den **Update-Modus**: Bluetooth wird
+beendet und gibt seinen Arbeitsspeicher frei (es startet erst nach dem
+Neustart wieder), MQTT wird getrennt und sein Empfangspuffer verkleinert. Die
+Heizungsregelung läuft weiter. Die Weboberfläche wartet, bis beides gestoppt
+ist, und überträgt dann. Schlägt das Update fehl, wird der Modus beendet
+(MQTT verbindet sich wieder); ohne Übertragung endet er spätestens nach
+15 Minuten. API: `POST /api/firmware/prepare` / `resume`, Zustand in
+`GET /api/firmware` (`updateMode`, `servicesStopped`, `freeInternalKb`).
+
 System → **Firmware-Update**:
 
 * **Online-Update von GitHub:** „Nach Updates suchen“ liest

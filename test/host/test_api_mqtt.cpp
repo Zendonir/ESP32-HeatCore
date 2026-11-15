@@ -329,3 +329,33 @@ TEST(mqtt_generic_inbound_triggers_rule) {
   r.run(200, false);
   CHECK(r.sys.heating.globalMode == GlobalMode::Eco);
 }
+
+TEST(firmware_update_mode_prepare_resume_and_timeout) {
+  Rig r;
+  r.basicRoom();
+  ApiRouter api(r.sys);
+  CHECK(!r.sys.updateMode);
+  JsonDocument d = parse(call(api, "POST", "/api/firmware/prepare"));
+  CHECK(r.sys.updateMode);
+  CHECK(d["updateMode"] == true);
+  CHECK(d["servicesStopped"] == false);  // until the platform reports it
+  r.sys.platform.firmware.servicesStopped = true;
+  d = parse(call(api, "GET", "/api/firmware"));
+  CHECK(d["servicesStopped"] == true);
+  // heating control keeps running in update mode
+  r.run(120000);
+  CHECK(r.sys.heating.room("wohnen")->setpoint > 0.f);
+  call(api, "POST", "/api/firmware/resume");
+  CHECK(!r.sys.updateMode);
+  // an update mode without a transfer ends by itself
+  call(api, "POST", "/api/firmware/prepare");
+  r.run(HeatCoreSystem::kUpdateModeMs - 60000, false);
+  CHECK(r.sys.updateMode);
+  r.run(120000, false);
+  CHECK(!r.sys.updateMode);
+  // ... but not while an image is being written
+  call(api, "POST", "/api/firmware/prepare");
+  r.sys.platform.firmware.busy = true;
+  r.run(HeatCoreSystem::kUpdateModeMs + 60000, false);
+  CHECK(r.sys.updateMode);
+}

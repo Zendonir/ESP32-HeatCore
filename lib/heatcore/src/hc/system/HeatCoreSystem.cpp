@@ -85,6 +85,8 @@ void HeatCoreSystem::loop() {
     ble.tick(now);
     updateHeatDemand(now);
     updateHeatSupply(now);
+    // an update mode without an update ends by itself (no transfer running)
+    if (updateMode && !platform.firmware.busy && elapsed(now, updateModeSince) > kUpdateModeMs) setUpdateMode(false);
     display.setRoomCount(static_cast<int>(displayRooms().size()));
     display.tick(now, alarms.highest(), alarms.count());
     updateLoopback(now);
@@ -1300,6 +1302,16 @@ bool roomNeedsHeat(const Room& r) {
          !r.windowOpen() && r.duty > 0.5f;
 }
 }  // namespace
+
+void HeatCoreSystem::setUpdateMode(bool on) {
+  if (on == updateMode) {
+    if (on) updateModeSince = clock_.nowMs();  // renewed
+    return;
+  }
+  updateMode = on;
+  updateModeSince = on ? clock_.nowMs() : 0;
+  HC_LOGI(TAG, "firmware update mode %s", on ? "on: stopping Bluetooth and MQTT" : "off");
+}
 
 void HeatCoreSystem::updateHeatSupply(Millis now) {
   HeatDemand& hd = heatDemand;

@@ -197,6 +197,9 @@ void simLoop() {
   while (g_run) {
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
     std::lock_guard<std::recursive_mutex> lk(g_sys->mutex());
+    // firmware update mode: the simulator has no radio or broker to stop
+    g_sys->platform.firmware.servicesStopped = g_sys->updateMode;
+    if (g_sys->updateMode) g_sys->platform.firmware.freeInternalKb = 180;
     for (int k = 0; k < g_speed; ++k) {
       g_clock.advance(50);
       if (elapsed(g_clock.ms, lastMinute) >= 60000) {

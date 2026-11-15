@@ -51,6 +51,8 @@ struct FirmwareStatus {
   std::string previousVersion;    // version before the last update
   std::string lastResult;         // result of the last update / rollback
   bool busy = false;              // an update is being written
+  bool servicesStopped = false;   // update mode: Bluetooth and MQTT are down, RAM released
+  uint32_t freeInternalKb = 0;    // largest free internal RAM block (update mode)
 };
 
 struct WifiNetwork {
@@ -148,6 +150,13 @@ class HeatCoreSystem : public IAutomationContext {
   NetworkConfig netCfg;
   MqttConfig mqttCfg;
   PlatformStatus platform;
+  // Firmware update mode: the platform stops Bluetooth (releases its RAM until
+  // the next restart) and MQTT so the transfer has memory; heating control
+  // keeps running. Ends with the restart, on request or after kUpdateModeMs.
+  bool updateMode = false;
+  Millis updateModeSince = 0;
+  static constexpr uint32_t kUpdateModeMs = 15u * 60u * 1000u;
+  void setUpdateMode(bool on);
   std::vector<SelfTestItem> selfTest;
   Millis selfTestMs = 0;  // when the self test finished (0 = not yet)
 
