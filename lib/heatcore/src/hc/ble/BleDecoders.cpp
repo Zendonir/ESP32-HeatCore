@@ -317,6 +317,45 @@ bool decodeSwitchBot(const uint8_t* d, size_t n, Reading& r) {
 
 }  // namespace
 
+bool localName(const uint8_t* adv, size_t len, std::string& out) {
+  out.clear();
+  forEachAd(adv, len, [&](uint8_t type, const uint8_t* d, size_t n) {
+    if (type != 0x08 && type != 0x09) return true;
+    for (size_t k = 0; k < n && k < 24; ++k) out += std::isprint(d[k]) ? static_cast<char>(d[k]) : '?';
+    return false;
+  });
+  return !out.empty();
+}
+
+std::string modelName(Format f, const std::string& name) {
+  struct Prefix {
+    const char* prefix;
+    const char* model;
+  };
+  static const Prefix kKnown[] = {
+      {"SBHT", "Shelly BLU H&T"},          {"SBBT", "Shelly BLU Button"},
+      {"SBDW", "Shelly BLU Door/Window"},  {"SBMO", "Shelly BLU Motion"},
+      {"SBTR", "Shelly BLU TRV"},          {"SBRC", "Shelly BLU RC Button"},
+      {"ATC_", "Xiaomi-Thermometer (ATC/pvvx)"}, {"LYWSD03MMC", "Xiaomi LYWSD03MMC"},
+      {"LYWSDCGQ", "Xiaomi LYWSDCGQ"},     {"MHO-C401", "Xiaomi MHO-C401"},
+      {"CGG1", "Qingping CGG1"},           {"GVH5075", "Govee H5075"},
+      {"GVH5072", "Govee H5072"},          {"GVH5074", "Govee H5074"},
+      {"Govee_H5074", "Govee H5074"},      {"GVH5051", "Govee H5051"},
+  };
+  for (auto& k : kKnown)
+    if (name.compare(0, std::strlen(k.prefix), k.prefix) == 0) return k.model;
+  switch (f) {
+    case Format::BtHome: return "BTHome-Ger\xC3\xA4t";
+    case Format::Pvvx:
+    case Format::Atc: return "Xiaomi-Thermometer (ATC/pvvx)";
+    case Format::MiBeacon: return "Xiaomi-Thermometer";
+    case Format::Govee: return "Govee-Thermometer";
+    case Format::SwitchBot: return "SwitchBot Meter";
+    case Format::None: break;
+  }
+  return "Bluetooth-Ger\xC3\xA4t";
+}
+
 const char* formatName(Format f) {
   switch (f) {
     case Format::BtHome: return "BTHome";
