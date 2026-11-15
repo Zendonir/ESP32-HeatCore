@@ -46,7 +46,14 @@ void BleHub::ingest(const Mac& advMac, int rssi, const uint8_t* adv, size_t len,
   ++stats.adverts;
   Reading r;
   KeyLookup keys = [this](const Mac& m) { return keyFor(m); };
-  if (!decode(advMac, adv, len, keys, r)) return;
+  if (!decode(advMac, adv, len, keys, r)) {
+    // scan response of a known thermometer: only its name
+    std::string name;
+    if (localName(adv, len, name))
+      for (auto& d : devices_)
+        if (d.mac == advMac) d.name = name;
+    return;
+  }
   const Mac mac = r.hasDeviceMac ? r.deviceMac : advMac;  // Xiaomi names itself in the frame
   BleDevice& d = device(mac, now);
   ++d.adverts;
@@ -118,6 +125,7 @@ std::string BleHub::setKey(const std::string& macStr, const std::string& keyStr)
 
 void BleHub::toJson(JsonObject o, bool includeSecrets) const {
   o["enabled"] = cfg.enabled;
+  o["activeScan"] = cfg.activeScan;
   JsonArray a = o["keys"].to<JsonArray>();
   for (auto& k : cfg.keys) {
     JsonObject x = a.add<JsonObject>();
@@ -135,6 +143,7 @@ void BleHub::toJson(JsonObject o, bool includeSecrets) const {
 std::string BleHub::fromJson(JsonObjectConst o) {
   BleConfig n;
   n.enabled = o["enabled"] | false;
+  n.activeScan = o["activeScan"] | cfg.activeScan;  // kept when a caller does not send it
   for (JsonObjectConst x : o["keys"].as<JsonArrayConst>()) {
     Mac m;
     if (!parseMac(x["mac"] | "", m)) return "Bluetooth: MAC-Adresse ungueltig";
@@ -156,6 +165,7 @@ std::string BleHub::fromJson(JsonObjectConst o) {
 
 void BleHub::statusJson(JsonObject o, Millis now) const {
   o["enabled"] = cfg.enabled;
+  o["activeScan"] = cfg.activeScan;
   o["available"] = radioAvailable;
   o["running"] = running;
   if (!radioError.empty()) o["error"] = radioError;
@@ -172,6 +182,7 @@ void BleHub::statusJson(JsonObject o, Millis now) const {
     x["id"] = id;
     x["format"] = formatName(d.format);
     if (!d.name.empty()) x["name"] = d.name;
+    x["model"] = modelName(d.format, d.name);
     x["rssi"] = d.rssi;
     x["ageSec"] = elapsed(now, d.lastMs) / 1000u;
     if (d.hasTemp) x["temp"] = std::round(d.temp * 100.f) / 100.f;

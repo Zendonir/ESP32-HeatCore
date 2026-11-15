@@ -21,11 +21,17 @@ mit Temperatur, Luftfeuchte und Batteriestand.
 
 Zum Entkoppeln den Fühler unter „Temperatursensoren“ entfernen.
 
-„Koppeln“ heißt hier nicht Bluetooth-Pairing. HeatCore hört passiv zu,
-verbindet sich nicht und sendet nichts an das Thermometer. Die Batterie wird
-dadurch nicht zusätzlich belastet, und Apps können das Thermometer weiter
-nutzen. Thermometer der Nachbarn tauchen deshalb auch in der Liste auf.
-Verwendet werden nur die gekoppelten.
+„Koppeln“ heißt hier nicht Bluetooth-Pairing. HeatCore verbindet sich nicht
+mit dem Thermometer; Apps können es weiter nutzen. Thermometer der Nachbarn
+tauchen deshalb auch in der Liste auf (sehr schwacher Empfang, z. B. −95 dBm,
+deutet darauf hin). Verwendet werden nur die gekoppelten.
+
+**Gerätenamen abfragen** (Standard: an): HeatCore stellt eine kurze
+Scan-Anfrage, auf die das Thermometer mit seinem Namen antwortet, z. B.
+„SBHT-003C“. Daraus zeigt die Liste den Gerätetyp („Shelly BLU H&T“,
+„Xiaomi-Thermometer (ATC/pvvx)“, „Govee H5075“ …) und die letzten Stellen der
+MAC-Adresse an. Die Batterie wird dadurch praktisch nicht belastet;
+ausgeschaltet hört HeatCore nur zu und zeigt das Funkformat („BTHome-Gerät“).
 
 ## Unterstützte Thermometer
 

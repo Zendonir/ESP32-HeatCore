@@ -21,6 +21,7 @@ namespace ble {
 
 struct BleConfig {
   bool enabled = false;
+  bool activeScan = true;  // ask for the device name (scan request): "SBHT-003C" -> Shelly BLU H&T
   std::vector<std::pair<Mac, Key>> keys;  // bind keys of encrypted devices
 };
 

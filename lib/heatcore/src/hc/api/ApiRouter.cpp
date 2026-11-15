@@ -1359,6 +1359,7 @@ ApiResponse ApiRouter::handle(const ApiRequest& req) {
           sys.ble.statusJson(out, sys.clock().nowMs());
         } else if (p.size() == 1 && c.is("PUT")) {
           if (!c.body()["enabled"].isNull()) sys.ble.cfg.enabled = c.body()["enabled"] | false;
+          if (!c.body()["activeScan"].isNull()) sys.ble.cfg.activeScan = c.body()["activeScan"] | true;
           sys.markDirty(ConfigSection::Sensors);
           out["ok"] = true;
         } else if (p.size() == 2 && p[1] == "key" && c.is("PUT")) {

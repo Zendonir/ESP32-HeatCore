@@ -1,6 +1,7 @@
 #pragma once
-// Passive Bluetooth LE scanner for thermometer advertisements (NimBLE host of
-// the Arduino core). Nothing is sent, no connection is made. The radio
+// Bluetooth LE scanner for thermometer advertisements (NimBLE host of the
+// Arduino core). No connection is made; in active mode a scan request asks
+// for the scan response with the device name. The radio
 // callback only pre-filters and copies candidate advertisements into a queue;
 // decoding happens in the HeatCore core (hc::ble::BleHub).
 #include <cstdint>
@@ -22,8 +23,9 @@ class BleScanner {
   // that is not supervised by the watchdog yet.
   bool begin();
   bool started() const { return started_; }
-  // Starts or stops the passive scan; restarts it after a host reset.
-  void setScanning(bool on);
+  // Starts or stops the scan; restarts it after a host reset or when the mode
+  // changes. Active: scan requests ask thermometers for their name.
+  void setScanning(bool on, bool activeScan = false);
   bool scanning() const;
   bool pop(BleAdvert& a);
   uint32_t dropped() const;
@@ -31,6 +33,7 @@ class BleScanner {
 
  private:
   bool started_ = false;
+  bool activeMode_ = false;
   std::string error_;
 };
 

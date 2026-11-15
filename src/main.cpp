@@ -696,10 +696,11 @@ void bleTask(void*) {
   bool supervised = false;
   BleAdvert batch[16];
   for (;;) {
-    bool want;
+    bool want, activeScan;
     {
       Lock lk(g_sys->mutex());
       want = g_sys->ble.cfg.enabled;
+      activeScan = g_sys->ble.cfg.activeScan;
     }
     uint32_t now = millis();
     // the loop task owns the scanner while it starts it (g_bleInit == 1):
@@ -756,7 +757,7 @@ void bleTask(void*) {
       supervised = true;
     }
     if (supervised) beat(kBeatBle);
-    if (ready) g_ble.setScanning(want);
+    if (ready) g_ble.setScanning(want, activeScan);
     size_t n = 0;
     while (ready && n < 16 && g_ble.pop(batch[n])) ++n;
     if (n || now - lastStatus > 1000) {

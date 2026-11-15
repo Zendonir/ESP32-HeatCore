@@ -227,3 +227,42 @@ TEST(ble_hub_home_assistant_entities) {
       ok = x.payload.find("\"bat\":64") != std::string::npos && x.payload.find("\"h\":55.5") != std::string::npos;
   CHECK(ok);
 }
+
+TEST(ble_hub_device_names_from_scan_response) {
+  // readable device types from local names and formats
+  CHECK_STR(ble::modelName(ble::Format::BtHome, "SBHT-003C"), "Shelly BLU H&T");
+  CHECK_STR(ble::modelName(ble::Format::Pvvx, "ATC_1A2B3C"), "Xiaomi-Thermometer (ATC/pvvx)");
+  CHECK_STR(ble::modelName(ble::Format::Govee, "GVH5075_ABCD"), "Govee H5075");
+  CHECK_STR(ble::modelName(ble::Format::BtHome, ""), "BTHome-Ger\xC3\xA4t");
+  CHECK_STR(ble::modelName(ble::Format::SwitchBot, ""), "SwitchBot Meter");
+  const uint8_t rsp[] = {0x0A, 0x09, 'S', 'B', 'H', 'T', '-', '0', '0', '3', 'C'};
+  std::string n;
+  CHECK(ble::localName(rsp, sizeof(rsp), n));
+  CHECK_STR(n, "SBHT-003C");
+  const uint8_t none[] = {0x02, 0x01, 0x06};
+  CHECK(!ble::localName(none, sizeof(none), n));
+
+  Rig r;
+  ApiRouter api(r.sys);
+  CHECK(r.sys.ble.cfg.activeScan);  // default: ask for names
+  CHECK_EQ(call(api, "PUT", "/api/ble", R"({"enabled":true})").status, 200);
+  CHECK(r.sys.ble.cfg.activeScan);  // kept when not sent
+  ble::Mac m = mac("A4:C1:38:11:22:33");
+  send(r, m, pvvx(m, 21.5f, 45.f, 90, 1));
+  // the scan response carries only the name: kept for the known thermometer
+  r.sys.ble.ingest(m, -70, rsp, sizeof(rsp), r.clock.ms);
+  // a name from an unknown device (phone, TV) creates no entry
+  ble::Mac other = mac("11:22:33:44:55:66");
+  r.sys.ble.ingest(other, -60, rsp, sizeof(rsp), r.clock.ms);
+  JsonDocument d = parse(call(api, "GET", "/api/ble"));
+  CHECK_EQ(d["devices"].size(), 1u);
+  CHECK_STR(std::string(d["devices"][0]["name"] | ""), "SBHT-003C");
+  CHECK_STR(std::string(d["devices"][0]["model"] | ""), "Shelly BLU H&T");
+  CHECK(d["activeScan"] == true);
+  // switched off and stored with the sensors
+  CHECK_EQ(call(api, "PUT", "/api/ble", R"({"activeScan":false})").status, 200);
+  CHECK(!r.sys.ble.cfg.activeScan);
+  JsonDocument cfg;
+  r.sys.ble.toJson(cfg.to<JsonObject>(), false);
+  CHECK(cfg["activeScan"] == false);
+}

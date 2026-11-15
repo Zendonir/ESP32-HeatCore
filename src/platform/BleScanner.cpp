@@ -16,6 +16,10 @@
 
 #include "hc/ble/BleDecoders.h"
 
+#ifndef BLE_HCI_ADV_RPT_EVTYPE_SCAN_RSP
+#define BLE_HCI_ADV_RPT_EVTYPE_SCAN_RSP 4  // advertising report: scan response
+#endif
+
 namespace platform {
 
 namespace {
@@ -23,9 +27,22 @@ namespace {
 QueueHandle_t g_queue = nullptr;
 std::atomic<uint32_t> g_dropped{0};
 
-void push(const ble_addr_t& addr, int8_t rssi, const uint8_t* data, uint8_t len) {
+bool hasName(const uint8_t* d, uint8_t len) {
+  for (uint8_t i = 0; i + 1 < len;) {
+    uint8_t l = d[i];
+    if (l == 0 || i + 1 + l > len) return false;
+    if (d[i + 1] == 0x08 || d[i + 1] == 0x09) return true;
+    i += static_cast<uint8_t>(l + 1);
+  }
+  return false;
+}
+
+// scanResponse: answer to our scan request - passed on when it carries a
+// name (the hub keeps it only for thermometers it already knows)
+void push(const ble_addr_t& addr, int8_t rssi, const uint8_t* data, uint8_t len, bool scanResponse = false) {
   if (!g_queue || !data || len == 0 || len > sizeof(BleAdvert::data)) return;
-  if (!hc::ble::isCandidate(data, len)) return;  // phones, beacons, ... are ignored right here
+  // phones, beacons, ... are ignored right here
+  if (!hc::ble::isCandidate(data, len) && !(scanResponse && hasName(data, len))) return;
   BleAdvert a;
   std::memcpy(a.mac, addr.val, 6);
   a.rssi = rssi;
@@ -37,7 +54,10 @@ void push(const ble_addr_t& addr, int8_t rssi, const uint8_t* data, uint8_t len)
 // runs in the NimBLE host task: keep it short
 int onGap(struct ble_gap_event* ev, void*) {
   switch (ev->type) {
-    case BLE_GAP_EVENT_DISC: push(ev->disc.addr, ev->disc.rssi, ev->disc.data, ev->disc.length_data); break;
+    case BLE_GAP_EVENT_DISC:
+      push(ev->disc.addr, ev->disc.rssi, ev->disc.data, ev->disc.length_data,
+           ev->disc.event_type == BLE_HCI_ADV_RPT_EVTYPE_SCAN_RSP);
+      break;
 #if MYNEWT_VAL(BLE_EXT_ADV)
     case BLE_GAP_EVENT_EXT_DISC:
       push(ev->ext_disc.addr, ev->ext_disc.rssi, ev->ext_disc.data, ev->ext_disc.length_data);
@@ -70,9 +90,13 @@ bool BleScanner::begin() {
 
 bool BleScanner::scanning() const { return started_ && ble_gap_disc_active(); }
 
-void BleScanner::setScanning(bool on) {
+void BleScanner::setScanning(bool on, bool activeScan) {
   if (!started_) return;
   bool active = ble_gap_disc_active();
+  if (active && on && activeScan != activeMode_) {  // mode changed: restart
+    ble_gap_disc_cancel();
+    active = false;
+  }
   if (on && !active) {
     if (!ble_hs_synced()) return;  // host reset in progress: retried on the next call
     struct ble_gap_disc_params p;
@@ -81,7 +105,10 @@ void BleScanner::setScanning(bool on) {
     p.window = 48;   // 30 ms listening: leaves the shared antenna mostly to Wi-Fi
     p.filter_policy = 0;  // accept all
     p.limited = 0;
-    p.passive = 1;
+    // active: a scan request asks for the scan response with the device
+    // name; still no connection, nothing else is sent
+    p.passive = activeScan ? 0 : 1;
+    activeMode_ = activeScan;
     p.filter_duplicates = 0;  // thermometers repeat the same address with new values
     int rc = ble_gap_disc(BLE_OWN_ADDR_PUBLIC, BLE_HS_FOREVER, &p, onGap, nullptr);
     if (rc != 0 && rc != BLE_HS_EALREADY) {
@@ -111,7 +138,7 @@ bool BleScanner::begin() {
   return false;
 }
 bool BleScanner::scanning() const { return false; }
-void BleScanner::setScanning(bool) {}
+void BleScanner::setScanning(bool, bool) {}
 bool BleScanner::pop(BleAdvert&) { return false; }
 uint32_t BleScanner::dropped() const { return 0; }
 }  // namespace platform

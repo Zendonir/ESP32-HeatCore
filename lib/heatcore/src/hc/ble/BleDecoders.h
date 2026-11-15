@@ -52,6 +52,11 @@ using KeyLookup = std::function<const Key*(const Mac&)>;
 // Quick check whether an advertisement can carry thermometer data (used in
 // the radio callback before anything is copied).
 bool isCandidate(const uint8_t* adv, size_t len);
+// Local name (AD type 0x08/0x09) of an advertisement or scan response; false if none.
+bool localName(const uint8_t* adv, size_t len, std::string& out);
+// Readable device type from the local name and the format, e.g.
+// "SBHT-003C" -> "Shelly BLU H&T", "ATC_1A2B3C" -> "Xiaomi-Thermometer (ATC/pvvx)".
+std::string modelName(Format f, const std::string& name);
 
 // Decodes one advertisement (AD structures as received). Returns true if a
 // supported format was recognised (also when encrypted without key).
