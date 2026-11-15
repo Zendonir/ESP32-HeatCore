@@ -19,6 +19,9 @@
 #ifndef BLE_HCI_ADV_RPT_EVTYPE_SCAN_RSP
 #define BLE_HCI_ADV_RPT_EVTYPE_SCAN_RSP 4  // advertising report: scan response
 #endif
+#ifndef BLE_HCI_ADV_SCAN_RSP_MASK
+#define BLE_HCI_ADV_SCAN_RSP_MASK 0x08  // extended advertising report: scan response
+#endif
 
 namespace platform {
 
@@ -60,7 +63,8 @@ int onGap(struct ble_gap_event* ev, void*) {
       break;
 #if MYNEWT_VAL(BLE_EXT_ADV)
     case BLE_GAP_EVENT_EXT_DISC:
-      push(ev->ext_disc.addr, ev->ext_disc.rssi, ev->ext_disc.data, ev->ext_disc.length_data);
+      push(ev->ext_disc.addr, ev->ext_disc.rssi, ev->ext_disc.data, ev->ext_disc.length_data,
+           (ev->ext_disc.props & BLE_HCI_ADV_SCAN_RSP_MASK) != 0);
       break;
 #endif
     default: break;
