@@ -41,6 +41,7 @@ class MqttLink {
   std::string host_, clientId_, willTopic_, lastError_;
   uint32_t lastAttempt_ = 0;
   uint32_t backoffMs_ = 2000;
+  bool smallBuffer_ = false;  // buffer shrunk for a firmware update
   uint32_t lastState_ = 0;
   uint32_t lastSignatureCheck_ = 0;
   uint32_t signature_ = 0;

@@ -4,6 +4,7 @@
 // for the scan response with the device name. The radio
 // callback only pre-filters and copies candidate advertisements into a queue;
 // decoding happens in the HeatCore core (hc::ble::BleHub).
+#include <atomic>
 #include <cstdint>
 #include <string>
 
@@ -22,18 +23,24 @@ class BleScanner {
   // Starts the Bluetooth host (blocks until it is ready). Call from a task
   // that is not supervised by the watchdog yet.
   bool begin();
-  bool started() const { return started_; }
+  bool started() const { return started_.load(); }
   // Starts or stops the scan; restarts it after a host reset or when the mode
   // changes. Active: scan requests ask thermometers for their name.
   void setScanning(bool on, bool activeScan = false);
   bool scanning() const;
   bool pop(BleAdvert& a);
+  // Stops scanning and shuts the Bluetooth host and controller down,
+  // releasing their RAM (firmware update). Bluetooth cannot start again
+  // before the next restart.
+  void end();
+  bool released() const { return released_.load(); }
   uint32_t dropped() const;
   const std::string& error() const { return error_; }
 
  private:
-  bool started_ = false;
+  std::atomic<bool> started_{false};  // read by other tasks
   bool activeMode_ = false;
+  std::atomic<bool> released_{false};
   std::string error_;
 };
 

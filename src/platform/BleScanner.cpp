@@ -129,6 +129,15 @@ void BleScanner::setScanning(bool on, bool activeScan) {
 
 bool BleScanner::pop(BleAdvert& a) { return g_queue && xQueueReceive(g_queue, &a, 0) == pdTRUE; }
 
+void BleScanner::end() {
+  if (!started_) return;
+  if (ble_gap_disc_active()) ble_gap_disc_cancel();
+  BLEDevice::deinit(true);  // true: release the controller memory (until restart)
+  started_ = false;
+  released_ = true;
+  error_ = "bis zum Neustart aus (Firmware-Update)";
+}
+
 uint32_t BleScanner::dropped() const { return g_dropped.load(); }
 
 }  // namespace platform
@@ -143,6 +152,7 @@ bool BleScanner::begin() {
 }
 bool BleScanner::scanning() const { return false; }
 void BleScanner::setScanning(bool, bool) {}
+void BleScanner::end() {}
 bool BleScanner::pop(BleAdvert&) { return false; }
 uint32_t BleScanner::dropped() const { return 0; }
 }  // namespace platform

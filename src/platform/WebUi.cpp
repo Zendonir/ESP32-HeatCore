@@ -208,6 +208,11 @@ void WebUi::setupOta() {
           std::string sha = r->hasParam("sha256") ? r->getParam("sha256")->value().c_str() : "";
           std::string src = r->hasParam("source") ? r->getParam("source")->value().c_str() : "Upload";
           if (src.size() > 24) src.resize(24);
+          {
+            // also without a preceding /api/firmware/prepare: stop Bluetooth and MQTT
+            std::lock_guard<std::recursive_mutex> lk(sys_.mutex());
+            sys_.setUpdateMode(true);
+          }
           std::string err = ota_.start(size, sha, src.c_str());
           if (!err.empty()) return setError(u, err);
           u->started = true;

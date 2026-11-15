@@ -156,6 +156,9 @@ void firmwareJson(HeatCoreSystem& sys, JsonObject o) {
   o["lastResult"] = f.lastResult;
   o["busy"] = f.busy;
   o["updateUrl"] = sys.sysCfg.updateUrl;
+  o["updateMode"] = sys.updateMode;
+  o["servicesStopped"] = sys.updateMode && f.servicesStopped;
+  if (f.freeInternalKb) o["freeInternalKb"] = f.freeInternalKb;
 }
 
 void hardwareJson(HeatCoreSystem& sys, JsonObject o) {
@@ -1150,6 +1153,13 @@ ApiResponse ApiRouter::handle(const ApiRequest& req) {
         }
       } else if (head == "firmware") {
         if (p.size() == 1 && c.is("GET")) {
+          firmwareJson(sys, out);
+        } else if (p.size() == 2 && p[1] == "prepare" && c.is("POST")) {
+          // before a transfer: stop Bluetooth and MQTT to free RAM
+          sys.setUpdateMode(true);
+          firmwareJson(sys, out);
+        } else if (p.size() == 2 && p[1] == "resume" && c.is("POST")) {
+          sys.setUpdateMode(false);
           firmwareJson(sys, out);
         } else if (p.size() == 2 && p[1] == "rollback" && c.is("POST")) {
           if (!sys.platformCommand) c.fail(501, "nicht verfuegbar");

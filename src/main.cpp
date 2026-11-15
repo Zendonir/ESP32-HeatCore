@@ -74,6 +74,8 @@ bool g_bleCrashed = false;  // the device crashed during/after the Bluetooth sta
 // Bluetooth host start runs in the loop task (16 KB stack, idle otherwise):
 // 0 idle, 1 requested, 2 started, 3 failed
 std::atomic<int> g_bleInit{0};
+// firmware update: 1 = the loop task shuts Bluetooth down, 2 = done
+std::atomic<int> g_bleStop{0};
 BoundedQueue<std::string> g_sdLog(64);
 
 std::atomic<bool> g_selfTestRunning{false};
@@ -643,6 +645,13 @@ void netTask(void*) {
         p.mqtt = g_mqtt->stateText();
         p.mqttConnected = g_mqtt->connected();
         p.mqttError = g_mqtt->lastError();
+        if (g_sys->updateMode) {
+          // ready for the transfer once Bluetooth is down and MQTT disconnected
+          p.firmware.servicesStopped = !g_ble.started() && g_bleStop.load() == 0 && g_bleInit.load() == 0 &&
+                                       !g_mqtt->connected();
+          p.firmware.freeInternalKb = static_cast<uint32_t>(
+              heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024);
+        }
         p.timeSynced = g_net.timeSynced();
       }
     }
@@ -696,16 +705,31 @@ void bleTask(void*) {
   bool supervised = false;
   BleAdvert batch[16];
   for (;;) {
-    bool want, activeScan;
+    bool want, activeScan, updateMode;
     {
       Lock lk(g_sys->mutex());
-      want = g_sys->ble.cfg.enabled;
+      updateMode = g_sys->updateMode;
+      want = g_sys->ble.cfg.enabled && !updateMode && !g_ble.released();
       activeScan = g_sys->ble.cfg.activeScan;
     }
     uint32_t now = millis();
-    // the loop task owns the scanner while it starts it (g_bleInit == 1):
-    // touch it only when idle; observing 2/3 below synchronizes with begin()
-    bool initBusy = g_bleInit.load() == 1;
+    // firmware update: Bluetooth down, its RAM released (back after the restart)
+    if (updateMode && g_ble.started() && g_bleInit.load() == 0 && g_bleStop.load() == 0) {
+      g_ble.setScanning(false);
+      g_bleStop = 1;  // the loop task shuts the host down (same task that started it)
+    }
+    if (g_bleStop.load() == 2) {
+      g_bleStop = 0;
+      HC_LOGI("ble", "Bluetooth released for the update, %u bytes internal RAM free",
+              static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
+      Lock lk(g_sys->mutex());
+      g_sys->ble.running = false;
+      g_sys->ble.radioError = g_ble.error();
+    }
+    // the loop task owns the scanner while it starts it (g_bleInit == 1) or
+    // shuts it down (g_bleStop == 1): touch it only when idle; observing 2/3
+    // (start) or 2 (stop) synchronizes with begin() / end()
+    bool initBusy = g_bleInit.load() == 1 || g_bleStop.load() == 1;
     bool ready = !initBusy && g_ble.started();
     // Start only after a new firmware has been confirmed: a problem in the
     // Bluetooth start can then never prevent an update from being accepted.
@@ -1268,6 +1292,11 @@ void loop() {
   }
   // Bluetooth host start requested by the ble task (needs a large stack once)
   if (g_bleInit == 1) g_bleInit = g_ble.begin() ? 2 : 3;
+  // and its shutdown for a firmware update
+  if (g_bleStop == 1) {
+    g_ble.end();
+    g_bleStop = 2;
+  }
   // Reboot (OTA, user request): close all valves first, then restart.
   if (g_web && g_web->rebootRequested()) {
     if (!g_trace.reason[0]) setRestartReason("Neustart ueber Webinterface oder Update");
