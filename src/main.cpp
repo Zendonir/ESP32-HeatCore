@@ -726,9 +726,10 @@ void bleTask(void*) {
       g_sys->ble.running = false;
       g_sys->ble.radioError = g_ble.error();
     }
-    // the loop task owns the scanner while it starts it (g_bleInit == 1):
-    // touch it only when idle; observing 2/3 below synchronizes with begin()
-    bool initBusy = g_bleInit.load() == 1;
+    // the loop task owns the scanner while it starts it (g_bleInit == 1) or
+    // shuts it down (g_bleStop == 1): touch it only when idle; observing 2/3
+    // (start) or 2 (stop) synchronizes with begin() / end()
+    bool initBusy = g_bleInit.load() == 1 || g_bleStop.load() == 1;
     bool ready = !initBusy && g_ble.started();
     // Start only after a new firmware has been confirmed: a problem in the
     // Bluetooth start can then never prevent an update from being accepted.
