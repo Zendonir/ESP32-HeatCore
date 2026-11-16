@@ -63,6 +63,7 @@ REST: `GET /api/stats?days=7`, `GET /api/stats/<raum>?hours=48&res=15`.
 | `get_statistics` | Kennzahlen je Raum und Tag (1–14 Tage) |
 | `get_room_history` | Zeitreihe eines Raums, automatisch auf ≤ ca. 600 Punkte verdichtet |
 | `get_model` | Lernmodell: Heizleistung, Verluste, Totzeit, Unsicherheit, Periodenklassen |
+| `get_balance` | hydraulischer Abgleich: Ventilzeit und Abweichung je Raum, Empfehlung, Änderungsprotokoll |
 | `get_events` | letzte Ereignisse |
 | `get_change_log` | KI-Journal |
 | `change_settings` | Änderungen (mit `dry_run`), nur bei „Vorschläge“/„direkt“ |

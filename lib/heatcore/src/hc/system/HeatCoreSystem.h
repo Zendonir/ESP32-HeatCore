@@ -25,6 +25,7 @@
 #include "hc/heating/Safety.h"
 #include "hc/io/IoManager.h"
 #include "hc/model/ThermalModel.h"
+#include "hc/stats/Balance.h"
 #include "hc/stats/History.h"
 #include "hc/sensors/ExternalSources.h"
 #include "hc/ai/AiChanges.h"
@@ -120,6 +121,12 @@ class HeatCoreSystem : public IAutomationContext {
   // Recorded statistics (REST and MCP). historyJson returns an error text.
   std::string historyJson(const std::string& series, uint32_t hours, uint16_t resolutionMin, JsonObject o) const;
   void statsSummaryJson(uint16_t days, JsonObject o) const;
+  // Hydraulic balance assistant: analysis of the recorded valve times (cached
+  // until the next history bucket or a change of the settings / notes).
+  const BalanceResult& balance() const;
+  void balanceJson(JsonObject o) const;
+  std::string balanceAddNote(const std::string& room, const std::string& text);
+  bool balanceRemoveNote(uint32_t tMin);
 
   std::recursive_mutex& mutex() { return mtx_; }
   const IClock& clock() const { return clock_; }
@@ -138,6 +145,7 @@ class HeatCoreSystem : public IAutomationContext {
   rf::NexusThDecoder nexusDecoder;
   ThermalModelManager model;
   History history;  // recorded operating data (statistics, AI analysis)
+  BalanceConfig balanceCfg;  // hydraulic balance: analysis window and manifold change log (Heating section)
   AiState ai;       // MCP access level, token and change journal
   ExternalSources external;  // MQTT subscriptions / HTTP polls of other devices
   ble::BleHub ble{sensors};  // Bluetooth LE thermometers (passive scanning)
@@ -303,6 +311,9 @@ class HeatCoreSystem : public IAutomationContext {
   };
   std::vector<DutyAcc> duty_;
   std::array<bool, kNumOutputs> histCircuitOpen_{};  // for counting valve switch-ons
+  // balance analysis cache
+  mutable BalanceResult balanceCache_;
+  mutable std::string balanceKey_;
   // automation/HA timed output requests
   std::array<Millis, kNumOutputs> requestUntil_{};
   std::array<bool, kNumOutputs> requestTimed_{};

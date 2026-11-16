@@ -55,6 +55,10 @@ Webinterface.
   14 Tage mit Kennzahlen (Aufheizdauer, Überschwingen, Komfortabweichung,
   Heizstunden), MCP-Server für KI-Assistenten wie Claude – Vorschläge mit
   Freigabe im Webinterface, enge Grenzen, Journal mit Rücknahme.
+* **Hydraulischer Abgleich:** wertet die Ventilzeiten in ruhigen
+  Komfortzeiten aus und schlägt je Heizkreis vor, den Durchfluss zu erhöhen
+  oder zu reduzieren. Erkennt eine zu niedrige Vorlauftemperatur und führt
+  ein Änderungsprotokoll mit Einschwingzeit.
 * **Firmware:** Flashen direkt im Browser über GitHub (Web-Flasher), Updates
   im Webinterface – online aus den GitHub-Releases oder per Datei – mit
   Prüfsumme, Probelauf und automatischer Rückkehr zur vorherigen Version.
@@ -101,6 +105,7 @@ Webinterface.
 * [EMS-ESP: Kessel, Thermostat und Mischer lesen](docs/emsesp.md)
 * [OLED-Display](docs/display.md)
 * [Automationen, Sicherheit, Lernmodell](docs/automation-und-lernmodell.md)
+* [Hydraulischer Abgleich](docs/hydraulischer-abgleich.md)
 * [MQTT / Home Assistant und REST-API](docs/mqtt-und-api.md)
 * [Statistik und KI-Optimierung (MCP)](docs/ki-und-mcp.md)
 * [Build-, Flash- und Simulator-Anleitung](docs/build-und-flash.md)

@@ -1151,6 +1151,31 @@ ApiResponse ApiRouter::handle(const ApiRequest& req) {
         } else {
           c.fail(404, "?");
         }
+      } else if (head == "balance") {
+        // hydraulic balance assistant: analysis, analysis window, manifold change log
+        if (p.size() == 1 && c.is("GET")) {
+          sys.balanceJson(out);
+        } else if (p.size() == 1 && c.is("PUT")) {
+          JsonObjectConst b = c.body();
+          if (!b["notes"].isNull()) {
+            c.fail(400, "Notizen ueber /api/balance/notes aendern");
+          } else {
+            std::string err = sys.balanceCfg.fromJson(b);
+            if (err.empty()) sys.markDirty(ConfigSection::Heating);
+            c.okOrFail(err);
+          }
+        } else if (p.size() == 2 && p[1] == "notes" && c.is("POST")) {
+          std::string err = sys.balanceAddNote(c.body()["room"] | "", c.body()["text"] | "");
+          if (err.rfind("Uhrzeit", 0) == 0) c.fail(409, err);
+          else c.okOrFail(err);
+        } else if (p.size() == 3 && p[1] == "notes" && c.is("DELETE")) {
+          if (!sys.balanceRemoveNote(static_cast<uint32_t>(std::strtoul(p[2].c_str(), nullptr, 10))))
+            c.fail(404, "Notiz nicht gefunden");
+          else
+            out["ok"] = true;
+        } else {
+          c.fail(404, "?");
+        }
       } else if (head == "firmware") {
         if (p.size() == 1 && c.is("GET")) {
           firmwareJson(sys, out);

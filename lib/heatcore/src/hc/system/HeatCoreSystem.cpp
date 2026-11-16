@@ -470,6 +470,130 @@ void HeatCoreSystem::statsSummaryJson(uint16_t days, JsonObject o) const {
   if (minutes > 0.f) sys["meanCircuitsOpenPct"] = std::round(dutyMin / minutes * 10.f) / 10.f;
 }
 
+// ------------------------------------------------------------ hydraulic balance
+
+namespace {
+bool roomHasCircuit(const HeatCoreSystem& s, const std::string& room, std::vector<int>* list = nullptr) {
+  bool any = false;
+  for (int i = 0; i < kNumOutputs; ++i) {
+    const Circuit& c = s.heating.circuits[static_cast<size_t>(i)];
+    if (c.room != room || !c.enabled || s.io.outCfg[static_cast<size_t>(i)].function != OutputFunction::Circuit) continue;
+    any = true;
+    if (list) list->push_back(i);
+  }
+  return any;
+}
+float r1(float v) { return std::round(v * 10.f) / 10.f; }
+}  // namespace
+
+const BalanceResult& HeatCoreSystem::balance() const {
+  int64_t ep = clock_.epoch();
+  uint32_t nowMin = ep > 0 ? static_cast<uint32_t>(ep / 60) : 0;
+  // recompute when a history bucket completed or the settings changed
+  std::string key = std::to_string(history.revision()) + "/" + std::to_string(balanceCfg.days) + "/" +
+                    std::to_string(nowMin ? 1 : 0);
+  for (const BalanceNote& n : balanceCfg.notes) key += "/" + std::to_string(n.tMin) + n.room;
+  for (const Room& r : heating.rooms) key += "/" + r.id + (roomHasCircuit(*this, r.id) ? "+" : "-");
+  if (key == balanceKey_) return balanceCache_;
+  balanceKey_ = key;
+  BalanceResult res;
+  uint32_t window = static_cast<uint32_t>(balanceCfg.days) * 24u * 60u;
+  uint32_t start = nowMin > window ? nowMin - window : 0;
+  for (const Room& r : heating.rooms) {
+    if (!roomHasCircuit(*this, r.id)) continue;
+    uint32_t since = start;
+    bool afterNote = false;
+    for (const BalanceNote& n : balanceCfg.notes)
+      if ((n.room.empty() || n.room == r.id) && n.tMin + BalanceAnalyzer::kSettleMin > since) {
+        since = n.tMin + BalanceAnalyzer::kSettleMin;
+        afterNote = true;
+      }
+    std::vector<HistPoint> pts = nowMin ? history.query(r.id, static_cast<uint32_t>(balanceCfg.days) * 24u)
+                                        : std::vector<HistPoint>();
+    RoomBalance rb = BalanceAnalyzer::analyzeRoom(r.id, pts, since);
+    rb.afterNote = afterNote;
+    res.rooms.push_back(rb);
+  }
+  BalanceAnalyzer::classify(res);
+  balanceCache_ = std::move(res);
+  return balanceCache_;
+}
+
+void HeatCoreSystem::balanceJson(JsonObject o) const {
+  const BalanceResult& b = balance();
+  int32_t off = utcOffsetSec(clock_);
+  o["timeValid"] = clock_.epoch() > 0;
+  o["days"] = balanceCfg.days;
+  o["minHours"] = BalanceAnalyzer::kMinHours;
+  o["settleHours"] = BalanceAnalyzer::kSettleMin / 60u;
+  o["system"] = balanceSystemName(b.system);
+  o["systemText"] = BalanceAnalyzer::systemAdvice(b.system);
+  o["assessed"] = b.assessed;
+  if (!std::isnan(b.medianDuty)) o["medianDuty"] = r1(b.medianDuty);
+  JsonArray rooms = o["rooms"].to<JsonArray>();
+  for (const RoomBalance& rb : b.rooms) {
+    const Room* r = heating.room(rb.room);
+    if (!r) continue;
+    JsonObject x = rooms.add<JsonObject>();
+    x["id"] = rb.room;
+    x["name"] = r->name;
+    std::vector<int> list;
+    roomHasCircuit(*this, rb.room, &list);
+    JsonArray cs = x["circuits"].to<JsonArray>();
+    for (int i : list) {
+      const Circuit& c = heating.circuits[static_cast<size_t>(i)];
+      JsonObject y = cs.add<JsonObject>();
+      y["n"] = i + 1;
+      y["name"] = c.name;
+      y["share"] = c.share;
+    }
+    x["verdict"] = balanceVerdictName(rb.verdict);
+    x["label"] = balanceVerdictLabel(rb.verdict);
+    x["advice"] = BalanceAnalyzer::advice(rb, b.system, list.size() > 1);
+    x["hours"] = r1(rb.hours);
+    if (!std::isnan(rb.duty)) x["duty"] = r1(rb.duty);
+    if (!std::isnan(rb.dev)) x["dev"] = std::round(rb.dev * 100.f) / 100.f;
+    if (rb.hours > 0.f) {
+      x["belowPct"] = r1(rb.belowPct);
+      x["abovePct"] = r1(rb.abovePct);
+    }
+    if (!std::isnan(rb.outdoor)) x["outdoor"] = r1(rb.outdoor);
+    if (rb.sinceMin) x["since"] = formatLocalMinute(rb.sinceMin, off);
+    x["afterNote"] = rb.afterNote;
+    x["externalHeat"] = rb.externalHeat;
+  }
+  JsonArray notes = o["notes"].to<JsonArray>();
+  for (auto it = balanceCfg.notes.rbegin(); it != balanceCfg.notes.rend(); ++it) {
+    JsonObject x = notes.add<JsonObject>();
+    x["t"] = it->tMin;
+    x["local"] = formatLocalMinute(it->tMin, off);
+    x["room"] = it->room;
+    const Room* r = it->room.empty() ? nullptr : heating.room(it->room);
+    x["roomName"] = r ? r->name : (it->room.empty() ? "alle Räume" : it->room);
+    x["text"] = it->text;
+  }
+}
+
+std::string HeatCoreSystem::balanceAddNote(const std::string& room, const std::string& text) {
+  int64_t ep = clock_.epoch();
+  if (ep <= 0) return "Uhrzeit unbekannt - Notiz erst nach der Zeitsynchronisation moeglich";
+  if (!room.empty() && !heating.room(room)) return "Raum unbekannt: " + room;
+  if (text.empty()) return "Text fehlt";
+  balanceCfg.addNote(static_cast<uint32_t>(ep / 60), room, text);
+  markDirty(ConfigSection::Heating);
+  return "";
+}
+
+bool HeatCoreSystem::balanceRemoveNote(uint32_t tMin) {
+  for (auto it = balanceCfg.notes.begin(); it != balanceCfg.notes.end(); ++it)
+    if (it->tMin == tMin) {
+      balanceCfg.notes.erase(it);
+      markDirty(ConfigSection::Heating);
+      return true;
+    }
+  return false;
+}
+
 void HeatCoreSystem::minuteTasks(Millis now) {
   float outdoor = 0.f;
   bool haveOutdoor = sysCfg.outdoorFromSensor && sensors.firstOfRole(SensorRole::Outdoor, outdoor);
@@ -524,7 +648,8 @@ void HeatCoreSystem::minuteTasks(Millis now) {
     hs.flags = static_cast<uint8_t>((in.manualSetpoint ? kHistManualSetpoint : 0) |
                                     (in.manualOutput ? kHistManualOutput : 0) | (in.fault ? kHistFault : 0) |
                                     (r.tempFallback ? kHistSensorFallback : 0) | (comfort ? kHistComfortSlot : 0) |
-                                    (r.assistOnShift != 0.f || r.assistOffShift != 0.f ? kHistModelAssist : 0));
+                                    (r.assistOnShift != 0.f || r.assistOffShift != 0.f ? kHistModelAssist : 0) |
+                                    (!heating.supplyOk ? kHistNoSupply : 0));
     history.record(r.id, hs, epochMin);
 
     if (hasDuty) model.observe(r.id, in, now);  // room without circuits: nothing to learn
@@ -1132,6 +1257,7 @@ void HeatCoreSystem::sectionToJson(ConfigSection s, JsonObject o, bool includeSe
       heating.toJson(o, false);
       heatDemand.toJson(o["heatDemand"].to<JsonObject>());
       ems.toJson(o["emsesp"].to<JsonObject>());
+      balanceCfg.toJson(o["balance"].to<JsonObject>());
       break;
     case ConfigSection::Sensors:
       o["autoAdoptOneWire"] = sensors.autoAdoptOneWire;
@@ -1202,6 +1328,7 @@ std::string HeatCoreSystem::sectionFromJson(ConfigSection s, JsonObjectConst o) 
       err = heating.fromJson(o);
       if (err.empty() && !o["emsesp"].isNull()) err = ems.fromJson(o["emsesp"].as<JsonObjectConst>(), false);
       if (err.empty() && !o["heatDemand"].isNull()) err = heatDemand.fromJson(o["heatDemand"].as<JsonObjectConst>());
+      if (err.empty() && !o["balance"].isNull()) err = balanceCfg.fromJson(o["balance"].as<JsonObjectConst>());
       if (err.empty()) {
         model.removeMissing(heating.rooms);
         std::vector<std::string> ids;

@@ -39,6 +39,7 @@ class MqttBridge {
   static std::string slug(const std::string& s);
 
  private:
+  const RoomBalance* balanceOf(const std::string& room) const;
   void roomState(const Room& r, std::vector<MqttMsg>& out) const;
   void rfDeviceState(const rf::RxDevice& d, std::vector<MqttMsg>& out) const;
   void sensorState(const Sensor& s, std::vector<MqttMsg>& out) const;

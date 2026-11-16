@@ -138,7 +138,7 @@ const DAYS=['Mo','Di','Mi','Do','Fr','Sa','So'];
 // Navigation by task. Pages marked 1 are specialist/diagnostic pages: they
 // are shown in the expert view (or while open) - nothing is removed.
 const NAV=[
- ['Heizung',[['#/','Übersicht'],['#/rooms','Räume & Zeitpläne'],['#/stats','Statistik'],['#/model','Lernmodell',1]]],
+ ['Heizung',[['#/','Übersicht'],['#/rooms','Räume & Zeitpläne'],['#/stats','Statistik'],['#/balance','Hydraulischer Abgleich'],['#/model','Lernmodell',1]]],
  ['Einrichtung',[['#/setup','Erste Schritte'],['#/sensors','Temperatursensoren'],['#/ble','Bluetooth-Thermometer'],['#/hw/outputs','Ventile & Ausgänge'],['#/heatdemand','Wärmeanforderung (Kessel)'],['#/emsesp','EMS-ESP (Kessel)'],['#/hw/inputs','Taster & Fensterkontakte'],['#/rf','Funkgeräte'],['#/rf/learn','Funkgerät anlernen'],['#/rules','Automationen'],['#/display','Display'],
   ['#/external','Externe Quellen (MQTT/HTTP)',1],['#/hw/analog','Analogeingänge',1],['#/hw/onewire','1-Wire-Busse',1],['#/rf/sensors','Funk-Temperatursensoren',1]]],
  ['Diagnose',[['#/hw/selftest','Selbsttest & Status'],['#/rules/log','Ereignisprotokoll',1],['#/rf/monitor','Funk-Empfangsmonitor',1],['#/rf/diag','Funkdiagnose',1],['#/rf/tx','Funk-Sender',1],['#/rules/test','Automationen testen',1],['#/rules/catalog','Automations-Bausteine',1],
@@ -160,6 +160,7 @@ const HELP={
  '/sensors':'Temperaturfühler einem Raum zuordnen, Korrekturen einstellen und mehrere Fühler gegeneinander abgleichen.',
  '/ble':'Bluetooth-Thermometer in Reichweite finden und koppeln. Gekoppelte Thermometer arbeiten wie jeder andere Fühler und erscheinen automatisch in Home Assistant.',
  '/stats':'Verlauf von Temperatur, Sollwert und Heizzeit der letzten 14 Tage sowie Kennzahlen je Raum.',
+ '/balance':'Wertet aus, wie lange die Ventile jedes Raums offen sein müssen, um den Sollwert zu halten, und schlägt vor, an welchem Heizkreis der Durchfluss erhöht oder reduziert werden sollte.',
  '/model':'Das Lernmodell lernt, wie schnell jeder Raum aufheizt und abkühlt, und hilft so, Überschwingen zu vermeiden.',
  '/hw/outputs':'Die 16 Ausgänge der Platine: als Heizkreis (Ventil) oder allgemeiner Schaltausgang nutzen und zum Testen von Hand schalten.',
  '/heatdemand':'Sagt dem Kessel bzw. Heizkreis (z. B. Heizkreis 2 am RC35 über EMS-ESP), wann HeatCore-Räume Wärme brauchen – und hält die Ventile zu, solange die Heizung keine Wärme liefert.',
@@ -896,6 +897,33 @@ routes['/stats']=async m=>{const heat=await GET('heating');m.append(h('h2',null,
   const rs=sum.rooms.find(r=>r.id===st.room);if(rs&&rs.days.length)body.append(h('div',{class:'card tbl'},h('h3',{style:'margin-top:0'},'Kennzahlen je Tag'),h('table',null,h('tr',null,KPI_COLS.map(c=>h('th',null,c[1]))),[...rs.days].reverse().map(d=>h('tr',null,KPI_COLS.map(([c])=>h('td',null,c==='date'?d.date:c==='switches'?(d[c]||0):nf(d[c],c==='comfortMeanDevK'||c==='maxOvershootK'?2:c==='warmupMeanMin'?0:1))))))));
  };
  m.append(h('div',{class:'row',style:'margin-bottom:12px'},sel(heat.rooms.map(r=>[r.id,r.name]),st.room,v=>{st.room=v;load()}),sel([[24,'24 Stunden'],[48,'48 Stunden'],[168,'7 Tage'],[336,'14 Tage']],st.hours,v=>{st.hours=+v;load()})),body);await load()};
+
+// ------------------------------------------------------------ hydraulic balance
+const BAL_CHIP={ok:'ok',increase:'bad',increase_slight:'warn',reduce:'warn',nodata:''};
+routes['/balance']=async m=>{const b=await GET('balance');
+ m.append(h('h2',null,'Hydraulischer Abgleich'),h('div',{class:'card hint'},'Gemessen wird nicht der Durchfluss selbst, sondern wie lange das Ventil eines Raums offen sein muss, um den Sollwert zu halten. Gut abgeglichen brauchen alle Räume ähnlich viel Ventilzeit. Ausgewertet werden nur ruhige Komfortzeiten ab '+b.minHours+' Stunden: ohne Fenster, Handbetrieb, Störung, Aufheizphase und ohne Wärmeangebot-Sperre, bei höchstens 15 °C draußen. Verstellt wird am Heizkreisverteiler (Durchflussmesser bzw. Ventileinsatz).'));
+ if(!b.timeValid)m.append(h('div',{class:'card bad'},'Keine Uhrzeit – die Auswertung braucht die Zeitsynchronisation (NTP).'));
+ m.append(h('div',{class:'card'},h('h3',{style:'margin-top:0'},'Gesamtbild ',chip(b.system==='flow_low'?'Vorlauf zu niedrig':b.system==='flow_high'?'Vorlauf könnte sinken':b.system==='ok'?b.assessed+' Räume ausgewertet':'noch keine Auswertung',b.system==='flow_low'?'bad':b.system==='flow_high'?'warn':b.system==='ok'?'ok':'')),
+  h('p',{style:'margin:0'},b.systemText),b.medianDuty!=null?h('p',{class:'hint'},'Typische Ventilzeit (Median): '+nf(b.medianDuty,0)+' %'):null));
+ if(!b.rooms.length)m.append(h('p',{class:'muted'},'Keinem Raum ist ein Heizkreis zugeordnet.'));
+ else m.append(h('div',{class:'card'},b.rooms.map((r,i)=>h('div',{style:'padding:10px 0'+(i?';border-top:1px solid var(--line)':'')},
+   h('div',{class:'row',style:'justify-content:space-between;gap:8px;flex-wrap:wrap'},h('b',null,r.name),h('span',null,chip(r.label,BAL_CHIP[r.verdict]),r.externalHeat?' ':null,r.externalHeat?chip('Fremdwärme?','warn'):null)),
+   h('div',{class:'hint'},r.circuits.map(c=>'Kreis '+c.n+(c.name?' ('+c.name+')':'')+(c.share<100?' – Anteil '+c.share+' %':'')).join(', ')),
+   h('div',{style:'margin:6px 0;display:flex;gap:16px;flex-wrap:wrap'},h('span',null,'Ventil offen Ø ',h('b',null,r.duty!=null?nf(r.duty,0)+' %':'–')),h('span',null,'Abweichung Ø ',h('b',null,r.dev!=null?(r.dev>0?'+':'')+nf(r.dev,1)+' K':'–')),
+    h('span',{class:'muted'},nf(r.hours,0)+' h Daten'+(r.afterNote&&r.since?' (ab '+r.since+')':''))),
+   h('div',null,r.advice))),
+  h('p',{class:'hint'},'Ventil offen: Anteil der Zeit, in der das Ventil offen war. Abweichung: Ist minus Soll. Mehrere Kreise eines Raums werden gemeinsam bewertet (ein Raumfühler).')));
+ const cfg={days:b.days};
+ m.append(h('div',{class:'card'},h('h3',{style:'margin-top:0'},'Auswertezeitraum'),h('div',{class:'row'},sel([[3,'3 Tage'],[5,'5 Tage'],[7,'7 Tage'],[10,'10 Tage'],[14,'14 Tage']],cfg.days,v=>cfg.days=+v),
+  h('button',{class:'p',onclick:()=>act(()=>PUT('balance',{days:cfg.days}),'Gespeichert').then(r=>r&&route())},'Übernehmen')),h('p',{class:'hint'},'Längere Zeiträume sind ruhiger, reagieren aber langsamer. Nach einer Notiz im Änderungsprotokoll zählt für den betroffenen Raum ohnehin nur die Zeit ab einem Tag nach der Änderung.')));
+ const note={room:'',text:''};
+ m.append(h('div',{class:'card'},h('h3',{style:'margin-top:0'},'Änderungsprotokoll'),h('p',{class:'hint',style:'margin-top:0'},'Nach jeder Verstellung am Verteiler hier eintragen. Der Raum wird danach '+b.settleHours+' Stunden nicht bewertet (Fußbodenheizungen brauchen so lange) und anschließend nur mit neuen Daten.'),
+  h('div',{class:'row'},sel([['','alle Räume'],...b.rooms.map(r=>[r.id,r.name])],note.room,v=>note.room=v),inp(note,'text','text',{placeholder:'z. B. Kreis 3: 1,5 → 2,0 l/min',maxlength:120,style:'flex:1;min-width:180px'}),
+   h('button',{class:'p',onclick:()=>{if(!note.text.trim())return toast('Bitte eintragen, was geändert wurde',true);act(()=>POST('balance/notes',{room:note.room,text:note.text.trim()}),'Eingetragen').then(r=>r&&route())}},'Eintragen')),
+  b.notes.length?h('div',{class:'tbl',style:'margin-top:10px'},h('table',null,h('tr',null,['Zeit','Raum','Änderung',''].map(x=>h('th',null,x))),b.notes.map(n=>h('tr',null,h('td',null,n.local),h('td',null,n.roomName),h('td',null,n.text),
+   h('td',null,h('button',{onclick:()=>{if(confirm('Eintrag löschen?'))act(()=>DEL('balance/notes/'+n.t),'Gelöscht').then(r=>r&&route())}},'Löschen')))))):h('p',{class:'muted'},'Noch keine Einträge.')));
+ m.append(h('div',{class:'card hint'},h('b',null,'Vorgehen: '),'Immer nur wenige Kreise und in kleinen Schritten verstellen (etwa 0,25–0,5 l/min), eintragen und die nächste Auswertung abwarten. Bleiben fast alle Räume trotz offener Ventile zu kalt, zuerst die Vorlauftemperatur bzw. Heizkurve anheben – mehr Durchfluss an einem Kreis nimmt ihn sonst nur den anderen weg. Die Empfehlungen ersetzen keinen rechnerischen Abgleich nach Heizlast, helfen aber, ihn im Betrieb nachzujustieren.'));
+};
 
 // ------------------------------------------------------------ AI / MCP
 routes['/sys/ai']=async m=>{const a=await GET('ai');const c={access:a.access,maxDirectPerDay:a.maxDirectPerDay};let fresh='';const host=location.host||'heatcore.local';
