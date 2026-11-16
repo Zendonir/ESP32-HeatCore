@@ -12,7 +12,7 @@ const crypto = require('crypto');
   const base = 'http://127.0.0.1:' + (process.env.HC_PORT || 8099) + '/';
   const routes = ['#/', '#/rooms', '#/sensors', '#/model', '#/rf', '#/rf/learn', '#/rf/monitor', '#/rf/tx', '#/rf/sensors', '#/rf/diag',
     '#/display', '#/display/pages', '#/display/settings', '#/display/status', '#/rules', '#/rules/catalog', '#/rules/test', '#/rules/log',
-    '#/ble', '#/heatdemand', '#/emsesp', '#/setup', '#/hw/outputs', '#/hw/inputs', '#/hw/analog', '#/hw/onewire', '#/hw/selftest', '#/sys/safety', '#/sys/network', '#/sys/mqtt', '#/sys/general', '#/sys/firmware', '#/stats', '#/sys/ai'];
+    '#/ble', '#/heatdemand', '#/emsesp', '#/setup', '#/hw/outputs', '#/hw/inputs', '#/hw/analog', '#/hw/onewire', '#/hw/selftest', '#/sys/safety', '#/sys/network', '#/sys/mqtt', '#/sys/general', '#/sys/firmware', '#/stats', '#/balance', '#/sys/ai'];
   await p.goto(base);
   for (const r of routes) {
     await p.goto(base + r); await p.waitForTimeout(900);
@@ -86,6 +86,19 @@ const crypto = require('crypto');
   if (!(await p.$('button:has-text("Vorherige Firmware starten")'))) errors.push('rollback button missing');
   await p.screenshot({ path: (process.env.HC_SHOTS || '.') + '/firmware.png', fullPage: true });
   // ---- display canvas has pixels
+  // ---- hydraulic balance: recommendations from the seeded history, change log entry
+  await p.goto(base + '#/balance'); await p.waitForTimeout(900);
+  const balTxt = await p.textContent('#main');
+  if (!balTxt.includes('Durchfluss erhöhen') || !balTxt.includes('Durchfluss reduzieren')) errors.push('balance: recommendations missing');
+  await p.fill('input[placeholder^="z. B. Kreis"]', 'Kreis 1: 1,5 -> 2,0 l/min');
+  await p.click('button:has-text("Eintragen")'); await p.waitForTimeout(900);
+  const bal = await (await p.request.get(base + 'api/balance')).json();
+  if (bal.notes.length !== 2 || bal.notes[0].text !== 'Kreis 1: 1,5 -> 2,0 l/min') errors.push('balance: note not saved');
+  if (!(await p.textContent('#main')).includes('Kreis 1: 1,5 -> 2,0 l/min')) errors.push('balance: note not listed');
+  p.once('dialog', d => d.accept());
+  await p.click('#main tr:nth-child(2) button:has-text("Löschen")'); await p.waitForTimeout(900);
+  const bal2 = await (await p.request.get(base + 'api/balance')).json();
+  if (bal2.notes.length !== 1 || bal2.notes[0].text === 'Kreis 1: 1,5 -> 2,0 l/min') errors.push('balance: note not deleted');
   await p.goto(base + '#/display'); await p.waitForTimeout(1500);
   const lit = await p.evaluate(() => { const c = document.querySelector('canvas'); const d = c.getContext('2d').getImageData(0, 0, 128, 64).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 2] > 0) n++; return n; });
   console.log('lit OLED pixels:', lit);

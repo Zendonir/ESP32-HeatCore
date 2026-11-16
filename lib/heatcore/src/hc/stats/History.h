@@ -36,6 +36,7 @@ enum HistFlag : uint8_t {
   kHistSensorFallback = 8,
   kHistComfortSlot = 16,
   kHistModelAssist = 32,  // model advice shifted the switching thresholds
+  kHistNoSupply = 64,     // heat source delivered no heat (valves held closed)
 };
 
 struct HistPoint {

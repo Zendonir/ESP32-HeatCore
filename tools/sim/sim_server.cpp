@@ -103,6 +103,27 @@ void demo() {
      "triggers":[{"type":"manual"}],"actions":[{"type":"set_global_mode","mode":"vacation","durationSec":604800}]}]})");
   for (auto& r : g_sys->heating.rooms) g_plants[r.id] = Plant{};
   g_plants["bad"].T = 21.f;
+  // five past days of history for the hydraulic balance page: the living room
+  // is short of flow, the bedroom gets more than it needs
+  uint32_t nowMin = static_cast<uint32_t>(g_clock.epoch() / 60);
+  struct Seed { const char* id; float dev, duty; } seeds[] = {{"wohnen", -0.7f, 0.94f}, {"bad", 0.05f, 0.42f},
+                                                             {"schlafen", 0.3f, 0.11f}};
+  for (const Seed& sd : seeds) {
+    const Room* r = g_sys->heating.room(sd.id);
+    for (uint32_t t = nowMin - 5u * 1440u; t < nowMin - 15u; ++t) {
+      uint32_t mod = (t + 60u) % 1440u;  // local time (UTC+1)
+      bool comfort = mod >= 360 && mod < 1320;
+      HistSample hs;
+      hs.tempValid = hs.setpointValid = hs.outdoorValid = true;
+      hs.setpoint = comfort ? r->comfort : r->eco;
+      hs.temp = hs.setpoint + (comfort ? sd.dev : 0.2f);
+      hs.outdoor = 3.f;
+      hs.duty = comfort ? sd.duty : 0.f;
+      hs.flags = comfort ? kHistComfortSlot : 0;
+      g_sys->history.record(sd.id, hs, t);
+    }
+  }
+  g_sys->balanceCfg.addNote(nowMin - 4u * 1440u, "schlafen", "Kreis 4: 1,0 -> 0,8 l/min");
   // EMS-ESP with an RC35 (heating circuit 2 = underfloor heating of the living room)
   loadJson(ConfigSection::Mqtt, R"({"enabled":true,"host":"broker.sim"})");
   JsonDocument e;

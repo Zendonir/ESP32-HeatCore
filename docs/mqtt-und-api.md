@@ -8,7 +8,7 @@ Alles funktioniert ohne MQTT und Home Assistant. MQTT ist optional
 | Thema | Richtung | Inhalt |
 |---|---|---|
 | `<basis>/status` | aus | `online`/`offline` (LWT) |
-| `<basis>/room/<id>/state` | aus | JSON: temp, setpoint, ha_mode, preset, action, window, demand, reason, manual, duty (nur PWM-Regelung, %), power (Heizleistung %: PWM-Tastgrad, sonst 100 solange der Raum heizt), mode_text (Komfort/Absenkung/Hand/…), comfort, eco |
+| `<basis>/room/<id>/state` | aus | JSON: temp, setpoint, ha_mode, preset, action, window, demand, reason, manual, duty (nur PWM-Regelung, %), power (Heizleistung %: PWM-Tastgrad, sonst 100 solange der Raum heizt), mode_text (Komfort/Absenkung/Hand/…), comfort, eco, balance (Abgleich-Empfehlung) mit balance_advice, balance_duty, balance_dev, balance_hours (nur Räume mit Heizkreis) |
 | `<basis>/room/<id>/setpoint/set` | ein | Sollwert (auf Sicherheitsgrenzen begrenzt) |
 | `<basis>/room/<id>/comfort/set` / `eco/set` | ein | gespeicherte Komfort-/Absenktemperatur (Sicherheitsgrenzen, Frostschutz ≤ Absenkung ≤ Komfort) |
 | `<basis>/room/<id>/mode/set` / `preset/set` | ein | `auto`/`heat`/`off` bzw. `comfort`/`eco`/`frost`/`none` |
@@ -27,7 +27,7 @@ Alles funktioniert ohne MQTT und Home Assistant. MQTT ist optional
 
 MQTT-Discovery legt an: Klima-Entität je Raum (mit Heizleistung, Betrieb und
 Grund als Attribute), je Raum Fenster, Heizbedarf, Heizleistung (%),
-Solltemperatur und Betrieb (Text), Komfort- und Absenktemperatur zum
+Solltemperatur, Betrieb (Text) und Abgleich-Empfehlung (siehe `docs/hydraulischer-abgleich.md`), Komfort- und Absenktemperatur zum
 Einstellen (dauerhaft gespeichert, anders als der Sollwert der Klima-Entität,
 der nur bis zum nächsten Zeitplanwechsel gilt) – damit zeichnet Home Assistant den Verlauf
 von Soll-/Isttemperatur und Ventilansteuerung auf –, Lernmodellstatus,
@@ -116,6 +116,7 @@ Alle Antworten JSON, Fehler als `{"error": "..."}` mit HTTP-Status.
 | `GET /api/status`, `/api/alarms`, `/api/events?since=` | Übersicht, Alarme, Ereignisprotokoll |
 | `GET /api/hardware`, `POST /api/hardware/selftest` | Hardwarestatus, Selbsttest |
 | `GET /api/stats?days=`, `GET /api/stats/<raum>?hours=&res=` | Statistik: Kennzahlen je Tag, Verlauf (15-Minuten-Werte, verdichtet) |
+| `GET/PUT /api/balance`, `POST /api/balance/notes`, `DELETE /api/balance/notes/<id>` | Hydraulischer Abgleich: Auswertung, Zeitraum, Änderungsprotokoll |
 | `GET/PUT /api/ai`, `POST /api/ai/changes/<id>/accept`, `/reject`, `/revert` | KI-Zugriff, Token, Journal; Vorschläge freigeben/ablehnen/zurücknehmen |
 | `POST /mcp` (Bearer-Token) | MCP-Server für KI-Assistenten, siehe `docs/ki-und-mcp.md` |
 | `GET /api/firmware`, `POST /api/firmware/rollback` | Firmware-Version, Speicherbereich, Probelauf, letztes Update-Ergebnis; Rückkehr zur vorherigen Firmware |

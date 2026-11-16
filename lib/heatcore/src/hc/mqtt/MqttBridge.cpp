@@ -216,6 +216,18 @@ void MqttBridge::discovery(std::vector<MqttMsg>& out) {
       d["entity_category"] = "config";
       addConfig(out, topics, "number", "room_" + r.id + "_" + which, d);
     }
+    if (balanceOf(r.id)) {
+      JsonDocument d;
+      d["name"] = r.name + " Abgleich";
+      d["state_topic"] = st;
+      d["value_template"] = "{{ value_json.balance }}";
+      d["json_attributes_topic"] = st;
+      d["json_attributes_template"] =
+          "{{ {'empfehlung': value_json.balance_advice, 'ventilzeit': value_json.balance_duty, "
+          "'abweichung': value_json.balance_dev, 'stunden': value_json.balance_hours} | tojson }}";
+      d["icon"] = "mdi:scale-balance";
+      addConfig(out, topics, "sensor", "room_" + r.id + "_balance", d);
+    }
     {
       JsonDocument d;
       d["name"] = r.name + " Lernmodell";
@@ -519,6 +531,12 @@ void MqttBridge::discovery(std::vector<MqttMsg>& out) {
 
 // ------------------------------------------------------------------ state
 
+const RoomBalance* MqttBridge::balanceOf(const std::string& room) const {
+  for (const RoomBalance& b : sys_.balance().rooms)
+    if (b.room == room) return &b;
+  return nullptr;
+}
+
 void MqttBridge::roomState(const Room& r, std::vector<MqttMsg>& out) const {
   JsonDocument d;
   if (r.hasTemp) d["temp"] = std::round(r.temperature * 10.f) / 10.f;
@@ -536,6 +554,22 @@ void MqttBridge::roomState(const Room& r, std::vector<MqttMsg>& out) const {
   d["mode_text"] = roomModeText(r);
   d["comfort"] = r.comfort;
   d["eco"] = r.eco;
+  if (const RoomBalance* bal = balanceOf(r.id)) {
+    const BalanceResult& res = sys_.balance();
+    int n = 0;
+    for (int i = 0; i < kNumOutputs; ++i) {
+      const Circuit& c = sys_.heating.circuits[static_cast<size_t>(i)];
+      if (c.room == r.id && c.enabled && sys_.io.outCfg[static_cast<size_t>(i)].function == OutputFunction::Circuit) ++n;
+    }
+    bool multi = n > 1;
+    d["balance"] = balanceVerdictLabel(bal->verdict);
+    d["balance_advice"] = BalanceAnalyzer::advice(*bal, res.system, multi);
+    if (!std::isnan(bal->duty)) d["balance_duty"] = std::round(bal->duty);
+    else d["balance_duty"] = nullptr;
+    if (!std::isnan(bal->dev)) d["balance_dev"] = std::round(bal->dev * 10.f) / 10.f;
+    else d["balance_dev"] = nullptr;
+    d["balance_hours"] = std::round(bal->hours);
+  }
   out.push_back({base() + "/room/" + r.id + "/state", toStr(d), true});
   if (!sys_.mqttCfg.roomValueTopics) return;
   // one plain value per topic for simple displays (Button+, ...)

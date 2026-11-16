@@ -221,6 +221,12 @@ void McpServer::toolsList(JsonObject result) {
           "Anzahl gelernter/ausgeschlossener Perioden, Stoerungsverdacht, letzte Ereignisse.",
           R"({"type":"object","properties":{"room":{"type":"string","description":"Raum-ID, leer = alle"}},"additionalProperties":false})",
           true);
+  addTool(tools, "get_balance", "Hydraulischer Abgleich",
+          "Auswertung fuer den hydraulischen Abgleich: je Raum mittlere Ventil-Offenzeit und Abweichung vom "
+          "Sollwert in ruhigen Komfortzeiten (ohne Fenster, Handbetrieb, Stoerung, Aufheizphase), daraus die "
+          "Empfehlung (Durchfluss erhoehen/reduzieren/passt), Systemhinweis zur Vorlauftemperatur und das "
+          "Protokoll der Aenderungen am Verteiler.",
+          R"({"type":"object","properties":{},"additionalProperties":false})", true);
   addTool(tools, "get_events", "Ereignisprotokoll", "Letzte Ereignisse (Sollwert, Fenster, Ventile, Alarme, ...).",
           R"({"type":"object","properties":{"limit":{"type":"integer","minimum":1,"maximum":100,"default":40}},"additionalProperties":false})",
           true);
@@ -249,8 +255,9 @@ void McpServer::toolsList(JsonObject result) {
 void McpServer::toolsCall(JsonObjectConst params, JsonObject result, JsonObject error) {
   std::string name = params["name"] | "";
   JsonObjectConst args = params["arguments"];
-  static const char* const known[] = {"get_overview", "get_settings", "get_statistics", "get_room_history", "get_model",
-                                      "get_events",   "get_change_log", "change_settings", "revert_change"};
+  static const char* const known[] = {"get_overview", "get_settings",   "get_statistics",  "get_room_history",
+                                      "get_model",    "get_balance",    "get_events",      "get_change_log",
+                                      "change_settings", "revert_change"};
   bool ok = false;
   for (const char* k : known)
     if (name == k) ok = true;
@@ -340,6 +347,10 @@ std::string McpServer::tool(const std::string& name, JsonObjectConst args, JsonO
     s["maxFlowTemp"] = sys_.safety.cfg.maxFlowTemp;
     aiLimitsToJson(sys_, o["aiLimits"].to<JsonObject>());
     return std::string();
+  }
+  if (name == "get_balance") {
+    sys_.balanceJson(o);
+    return "";
   }
   if (name == "get_statistics") {
     int days = args["days"] | 7;
