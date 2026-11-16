@@ -12,6 +12,7 @@ void BalanceConfig::toJson(JsonObject o) const {
   JsonArray a = o["notes"].to<JsonArray>();
   for (const BalanceNote& n : notes) {
     JsonObject x = a.add<JsonObject>();
+    x["id"] = n.id;
     x["t"] = n.tMin;
     x["room"] = n.room;
     x["text"] = n.text;
@@ -27,6 +28,7 @@ std::string BalanceConfig::fromJson(JsonObjectConst o) {
     list.clear();
     for (JsonObjectConst x : o["notes"].as<JsonArrayConst>()) {
       BalanceNote n;
+      n.id = x["id"] | 0u;
       n.tMin = x["t"] | 0u;
       n.room = x["room"] | "";
       n.text = x["text"] | "";
@@ -36,6 +38,14 @@ std::string BalanceConfig::fromJson(JsonObjectConst o) {
     }
     std::stable_sort(list.begin(), list.end(), [](const BalanceNote& a, const BalanceNote& b) { return a.tMin < b.tMin; });
     if (list.size() > kMaxNotes) list.erase(list.begin(), list.end() - kMaxNotes);
+    // ids must be unique (delete key): renumber missing or duplicate ones
+    uint32_t next = 1;
+    for (const BalanceNote& n : list) next = std::max(next, n.id + 1);
+    for (size_t i = 0; i < list.size(); ++i) {
+      bool dup = !list[i].id;
+      for (size_t j = 0; j < i && !dup; ++j) dup = list[j].id == list[i].id;
+      if (dup) list[i].id = next++;
+    }
   }
   days = static_cast<uint8_t>(d);
   notes = std::move(list);
@@ -44,6 +54,8 @@ std::string BalanceConfig::fromJson(JsonObjectConst o) {
 
 void BalanceConfig::addNote(uint32_t tMin, const std::string& room, const std::string& text) {
   BalanceNote n;
+  n.id = 1;
+  for (const BalanceNote& x : notes) n.id = std::max(n.id, x.id + 1);
   n.tMin = tMin;
   n.room = room;
   n.text = text.size() > kMaxText ? text.substr(0, kMaxText) : text;
@@ -94,16 +106,31 @@ RoomBalance BalanceAnalyzer::analyzeRoom(const std::string& room, const std::vec
   constexpr uint8_t kExclude =
       kHistManualSetpoint | kHistManualOutput | kHistFault | kHistSensorFallback | kHistNoSupply;
   float minutes = 0.f, dutySum = 0.f, devSum = 0.f, below = 0.f, above = 0.f, outSum = 0.f, outMin = 0.f;
-  float prevSp = NAN;
+  // Setpoint steps (warm-up). Buckets hold the mean setpoint, so a step inside
+  // a bucket shows up spread over two buckets (20.5 -> 20.83 -> 21): compare
+  // with the lower of the two buckets before and date the step to the first
+  // rising bucket.
+  std::vector<uint32_t> steps;
+  for (size_t i = 1; i < pts.size(); ++i) {
+    auto spAt = [&](size_t k) { return pts[k].setpoint / 100.f; };
+    auto valid = [&](size_t k) { return pts[k].tMin && pts[k].setpoint != kHistNoValue; };
+    auto adjacent = [&](size_t a, size_t b) { return pts[b].tMin - pts[a].tMin == kHistBucketMin; };
+    if (!valid(i) || !valid(i - 1) || !adjacent(i - 1, i)) continue;
+    float base = spAt(i - 1);
+    size_t first = i;
+    if (i >= 2 && valid(i - 2) && adjacent(i - 2, i - 1) && spAt(i - 2) < base) {
+      base = spAt(i - 2);
+      first = i - 1;
+    }
+    if (spAt(i) - base >= 0.5f && (steps.empty() || pts[first].tMin >= steps.back() + kHistBucketMin * 2))
+      steps.push_back(pts[first].tMin);
+  }
+  size_t nextStep = 0;
   uint32_t stepMin = 0;
   for (const HistPoint& p : pts) {
-    if (!p.tMin || p.setpoint == kHistNoValue) {
-      prevSp = NAN;
-      continue;
-    }
+    if (!p.tMin || p.setpoint == kHistNoValue) continue;
+    while (nextStep < steps.size() && steps[nextStep] <= p.tMin) stepMin = steps[nextStep++];
     float sp = p.setpoint / 100.f;
-    if (!std::isnan(prevSp) && sp - prevSp >= 0.5f) stepMin = p.tMin;  // warm-up after a setpoint step
-    prevSp = sp;
     if (p.tMin < sinceMin || p.minutes < 10 || p.temp == kHistNoValue) continue;
     if (!(p.flags & kHistComfortSlot) || (p.flags & kExclude) || p.windowMin) continue;
     if (sp < 15.f) continue;

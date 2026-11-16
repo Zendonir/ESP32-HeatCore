@@ -126,7 +126,7 @@ class HeatCoreSystem : public IAutomationContext {
   const BalanceResult& balance() const;
   void balanceJson(JsonObject o) const;
   std::string balanceAddNote(const std::string& room, const std::string& text);
-  bool balanceRemoveNote(uint32_t tMin);
+  bool balanceRemoveNote(uint32_t id);
 
   std::recursive_mutex& mutex() { return mtx_; }
   const IClock& clock() const { return clock_; }

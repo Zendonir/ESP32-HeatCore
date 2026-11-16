@@ -27,6 +27,7 @@
 namespace hc {
 
 struct BalanceNote {
+  uint32_t id = 0;    // unique within the log (delete key)
   uint32_t tMin = 0;  // epoch minutes (UTC)
   std::string room;   // room id, empty = all rooms
   std::string text;   // e.g. "Kreis 3: 1,5 -> 2,0 l/min"

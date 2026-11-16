@@ -274,7 +274,8 @@ void HeatCoreSystem::controlCycle(Millis now) {
       int total = 0, open = 0;
       for (int i = 0; i < kNumOutputs; ++i) {
         const Circuit& c = heating.circuits[static_cast<size_t>(i)];
-        if (io.outCfg[static_cast<size_t>(i)].function != OutputFunction::Circuit || c.room != r.id) continue;
+        if (io.outCfg[static_cast<size_t>(i)].function != OutputFunction::Circuit || c.room != r.id || !c.enabled)
+          continue;  // a disabled circuit never opens: it must not dilute the room's valve time
         ++total;
         if (io.out[static_cast<size_t>(i)].level != heating.circuitSafeLevel(c)) ++open;
       }
@@ -565,6 +566,7 @@ void HeatCoreSystem::balanceJson(JsonObject o) const {
   JsonArray notes = o["notes"].to<JsonArray>();
   for (auto it = balanceCfg.notes.rbegin(); it != balanceCfg.notes.rend(); ++it) {
     JsonObject x = notes.add<JsonObject>();
+    x["id"] = it->id;
     x["t"] = it->tMin;
     x["local"] = formatLocalMinute(it->tMin, off);
     x["room"] = it->room;
@@ -584,9 +586,9 @@ std::string HeatCoreSystem::balanceAddNote(const std::string& room, const std::s
   return "";
 }
 
-bool HeatCoreSystem::balanceRemoveNote(uint32_t tMin) {
+bool HeatCoreSystem::balanceRemoveNote(uint32_t id) {
   for (auto it = balanceCfg.notes.begin(); it != balanceCfg.notes.end(); ++it)
-    if (it->tMin == tMin) {
+    if (it->id == id) {
       balanceCfg.notes.erase(it);
       markDirty(ConfigSection::Heating);
       return true;

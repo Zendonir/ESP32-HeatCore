@@ -92,6 +92,43 @@ TEST(balance_analyzer_counts_only_steady_comfort_periods) {
   CHECK_NEAR(late.hours, 1.0, 0.01);
 }
 
+TEST(balance_setpoint_step_inside_a_bucket_starts_the_warmup) {
+  // 20.5 -> 21 degC at 06:05: the averaged buckets read 20.5, 20.83, 21
+  std::vector<HistPoint> v;
+  uint32_t t = kBase;
+  for (int i = 0; i < 8; ++i, t += 15) v.push_back(pt(t, 20.5f, 20.5f, 40));
+  v.push_back(pt(t, 20.4f, 20.83f, 100));
+  t += 15;
+  for (int i = 0; i < 7; ++i, t += 15) v.push_back(pt(t, 20.2f, 21.f, 100));  // warm-up (1 h 45)
+  for (int i = 0; i < 8; ++i, t += 15) v.push_back(pt(t, 21.f, 21.f, 50));    // steady
+  RoomBalance rb = BalanceAnalyzer::analyzeRoom("x", v, 0);
+  CHECK_NEAR(rb.hours, 2.0 + 2.0, 0.01);  // 2 h before the step + 2 h steady
+  CHECK_NEAR(rb.duty, 45.0, 0.01);
+  // a slow ramp of small steps is no warm-up: everything counts
+  std::vector<HistPoint> ramp;
+  t = kBase;
+  for (int i = 0; i < 8; ++i, t += 15) ramp.push_back(pt(t, 21.f, 20.f + i * 0.2f, 50));
+  CHECK_NEAR(BalanceAnalyzer::analyzeRoom("x", ramp, 0).hours, 2.0, 0.01);
+}
+
+TEST(balance_duty_ignores_disabled_circuits) {
+  Rig r;
+  r.load(ConfigSection::Heating,
+         R"({"rooms":[{"id":"wohnen","name":"Wohnen","comfort":21,"eco":18,"frost":7,"mode":"comfort"}],
+             "circuits":[{"n":1,"room":"wohnen","minOnSec":60,"minOffSec":60},
+                         {"n":2,"room":"wohnen","enabled":false}]})");
+  r.load(ConfigSection::Sensors, R"({"sensors":[{"id":"ow1:01","name":"F","room":"wohnen","timeoutSec":300}]})");
+  for (int s = 0; s < 40 * 60; ++s) {
+    if (s % 30 == 0) r.sys.sensors.update("ow1:01", 17.f, r.clock.ms);
+    r.run(1000, false);
+  }
+  CHECK(r.output(1));
+  CHECK(!r.output(2));
+  std::vector<HistPoint> pts = r.sys.history.query("wohnen", 1);
+  CHECK(!pts.empty());
+  CHECK(pts.back().duty >= 90);  // the only active circuit was open the whole bucket
+}
+
 TEST(balance_classify_rooms_and_system) {
   BalanceResult r;
   r.rooms.push_back(room("kalt", -1.0f, 97));      // open all the time, too cold
@@ -235,8 +272,9 @@ TEST(balance_api_notes_persistence_and_mqtt) {
   CHECK_STR(std::string(d["rooms"][1]["verdict"] | ""), "ok");  // other rooms unaffected
   CHECK_EQ(d["notes"].size(), 1u);
   CHECK_STR(std::string(d["notes"][0]["roomName"] | ""), "Flur");
-  uint32_t t = d["notes"][0]["t"] | 0u;
-  CHECK_EQ(t, kBase + 3u * 1440u);
+  CHECK_EQ(d["notes"][0]["t"].as<uint32_t>(), kBase + 3u * 1440u);
+  uint32_t id = d["notes"][0]["id"] | 0u;
+  CHECK(id > 0);
 
   // after the settling day and enough new data the room is assessed again
   record(r, "flur", 2, -0.1f, 0.6f, kBase + 3u * 1440u);
@@ -262,11 +300,34 @@ TEST(balance_api_notes_persistence_and_mqtt) {
   CHECK_STR(r.sys.sectionFromJson(ConfigSection::Heating, saved.as<JsonObjectConst>()), "");
   CHECK_EQ(r.sys.balanceCfg.notes.size(), 1u);
 
-  // delete the note
-  std::string path = "/api/balance/notes/" + std::to_string(t);
-  CHECK_EQ(call(api, "DELETE", path.c_str()).status, 200);
-  CHECK_EQ(call(api, "DELETE", path.c_str()).status, 404);
-  CHECK(r.sys.balanceCfg.notes.empty());
+  // two notes in the same minute: each one is deleted by its own id
+  CHECK_EQ(call(api, "POST", "/api/balance/notes", R"({"room":"bad","text":"Kreis 4 zu"})").status, 200);
+  CHECK_EQ(call(api, "POST", "/api/balance/notes", R"({"room":"wohnen","text":"Kreis 2 auf"})").status, 200);
+  deserializeJson(d, call(api, "GET", "/api/balance").body);
+  CHECK_EQ(d["notes"].size(), 3u);
+  CHECK_EQ(d["notes"][0]["t"].as<uint32_t>(), d["notes"][1]["t"].as<uint32_t>());
+  CHECK(d["notes"][0]["id"].as<uint32_t>() != d["notes"][1]["id"].as<uint32_t>());
+  CHECK_STR(std::string(d["notes"][0]["text"] | ""), "Kreis 2 auf");  // newest first
+  std::string newest = "/api/balance/notes/" + std::to_string(d["notes"][0]["id"].as<uint32_t>());
+  CHECK_EQ(call(api, "DELETE", newest.c_str()).status, 200);
+  CHECK_EQ(r.sys.balanceCfg.notes.size(), 2u);
+  CHECK_STR(r.sys.balanceCfg.notes.back().text, "Kreis 4 zu");
+  // ids survive save / load; missing or duplicate ids are renumbered
+  {
+    JsonDocument cfg;
+    deserializeJson(cfg, R"({"notes":[{"t":5,"text":"a"},{"id":3,"t":6,"text":"b"},{"id":3,"t":7,"text":"c"}]})");
+    BalanceConfig bc;
+    CHECK_STR(bc.fromJson(cfg.as<JsonObjectConst>()), "");
+    CHECK_EQ(bc.notes.size(), 3u);
+    CHECK(bc.notes[0].id != 3 && bc.notes[0].id != 0 && bc.notes[1].id == 3);
+    CHECK(bc.notes[2].id != 3 && bc.notes[2].id != bc.notes[0].id);
+  }
+  // delete the remaining notes
+  CHECK_EQ(call(api, "DELETE", "/api/balance/notes/999").status, 404);
+  while (!r.sys.balanceCfg.notes.empty()) {
+    std::string path = "/api/balance/notes/" + std::to_string(r.sys.balanceCfg.notes.front().id);
+    CHECK_EQ(call(api, "DELETE", path.c_str()).status, 200);
+  }
 
   // without time no note can be dated
   r.clock.epochBase = 0;

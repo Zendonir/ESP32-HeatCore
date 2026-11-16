@@ -100,6 +100,6 @@ Die Auswertung ersetzt keinen rechnerischen Abgleich nach Heizlast
   * `PUT /api/balance` mit `{"days":7}`
   * `POST /api/balance/notes` mit `{"room":"flur","text":"…"}` (leerer Raum
     = alle Räume)
-  * `DELETE /api/balance/notes/<t>`
+  * `DELETE /api/balance/notes/<id>`
 * **MCP:** Das Werkzeug `get_balance` liefert dieselbe Auswertung an
   KI-Assistenten.

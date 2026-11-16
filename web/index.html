@@ -921,7 +921,7 @@ routes['/balance']=async m=>{const b=await GET('balance');
   h('div',{class:'row'},sel([['','alle Räume'],...b.rooms.map(r=>[r.id,r.name])],note.room,v=>note.room=v),inp(note,'text','text',{placeholder:'z. B. Kreis 3: 1,5 → 2,0 l/min',maxlength:120,style:'flex:1;min-width:180px'}),
    h('button',{class:'p',onclick:()=>{if(!note.text.trim())return toast('Bitte eintragen, was geändert wurde',true);act(()=>POST('balance/notes',{room:note.room,text:note.text.trim()}),'Eingetragen').then(r=>r&&route())}},'Eintragen')),
   b.notes.length?h('div',{class:'tbl',style:'margin-top:10px'},h('table',null,h('tr',null,['Zeit','Raum','Änderung',''].map(x=>h('th',null,x))),b.notes.map(n=>h('tr',null,h('td',null,n.local),h('td',null,n.roomName),h('td',null,n.text),
-   h('td',null,h('button',{onclick:()=>{if(confirm('Eintrag löschen?'))act(()=>DEL('balance/notes/'+n.t),'Gelöscht').then(r=>r&&route())}},'Löschen')))))):h('p',{class:'muted'},'Noch keine Einträge.')));
+   h('td',null,h('button',{onclick:()=>{if(confirm('Eintrag löschen?'))act(()=>DEL('balance/notes/'+n.id),'Gelöscht').then(r=>r&&route())}},'Löschen')))))):h('p',{class:'muted'},'Noch keine Einträge.')));
  m.append(h('div',{class:'card hint'},h('b',null,'Vorgehen: '),'Immer nur wenige Kreise und in kleinen Schritten verstellen (etwa 0,25–0,5 l/min), eintragen und die nächste Auswertung abwarten. Bleiben fast alle Räume trotz offener Ventile zu kalt, zuerst die Vorlauftemperatur bzw. Heizkurve anheben – mehr Durchfluss an einem Kreis nimmt ihn sonst nur den anderen weg. Die Empfehlungen ersetzen keinen rechnerischen Abgleich nach Heizlast, helfen aber, ihn im Betrieb nachzujustieren.'));
 };
 

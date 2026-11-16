@@ -116,7 +116,7 @@ Alle Antworten JSON, Fehler als `{"error": "..."}` mit HTTP-Status.
 | `GET /api/status`, `/api/alarms`, `/api/events?since=` | Übersicht, Alarme, Ereignisprotokoll |
 | `GET /api/hardware`, `POST /api/hardware/selftest` | Hardwarestatus, Selbsttest |
 | `GET /api/stats?days=`, `GET /api/stats/<raum>?hours=&res=` | Statistik: Kennzahlen je Tag, Verlauf (15-Minuten-Werte, verdichtet) |
-| `GET/PUT /api/balance`, `POST /api/balance/notes`, `DELETE /api/balance/notes/<t>` | Hydraulischer Abgleich: Auswertung, Zeitraum, Änderungsprotokoll |
+| `GET/PUT /api/balance`, `POST /api/balance/notes`, `DELETE /api/balance/notes/<id>` | Hydraulischer Abgleich: Auswertung, Zeitraum, Änderungsprotokoll |
 | `GET/PUT /api/ai`, `POST /api/ai/changes/<id>/accept`, `/reject`, `/revert` | KI-Zugriff, Token, Journal; Vorschläge freigeben/ablehnen/zurücknehmen |
 | `POST /mcp` (Bearer-Token) | MCP-Server für KI-Assistenten, siehe `docs/ki-und-mcp.md` |
 | `GET /api/firmware`, `POST /api/firmware/rollback` | Firmware-Version, Speicherbereich, Probelauf, letztes Update-Ergebnis; Rückkehr zur vorherigen Firmware |
