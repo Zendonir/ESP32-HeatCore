@@ -48,7 +48,8 @@ Webinterface.
 * **Automationen:** gleichberechtigte Signalquellen, Trigger/Bedingungen/
   Aktionen, Prioritäten, Validierung, Testmodus, Schleifenschutz,
   Ereignisprotokoll.
-* **Lernmodell:** RLS-Raummodell mit Totzeit, Klassifizierung von
+* **Lernmodell:** RLS-Raummodell, das Heizkörper (Totzeit) und Fußbodenheizung
+  (träger Estrich, 30 min bis 6 h) selbst erkennt, Klassifizierung von
   Lüftungs-, Stör-, manuellen und unvollständigen Perioden, Prognosen mit
   Unsicherheit, begrenzte Beratung der Hysterese-Regelung mit Rückfallebene.
 * **Statistik und KI-Optimierung:** 15-Minuten-Aufzeichnung je Raum über

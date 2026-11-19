@@ -717,6 +717,7 @@ void MqttBridge::state(std::vector<MqttMsg>& out) const {
       d["gain_kh"] = m->heatingGain();
       d["trend_kh"] = m->trendKh();
       d["delay_min"] = m->delayMin();
+      d["emitter"] = !m->emitterKnown() ? "unbekannt" : m->slowEmitter() ? "fussboden" : "heizkoerper";
       d["fault_suspected"] = m->faultSuspected();
       out.push_back({b + "/model/" + r.id + "/state", toStr(d), true});
     }

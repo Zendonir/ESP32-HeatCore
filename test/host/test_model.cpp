@@ -50,6 +50,7 @@ TEST(model_converges_to_plant_parameters) {
   CHECK_NEAR(m.heatingGain(), 4.0, 0.8);
   CHECK_NEAR(m.lossCoeff(), 0.12, 0.06);
   CHECK(m.delaySamples() > 0);
+  CHECK(!m.slowEmitter());  // radiator: dead-time model
   CHECK_NEAR(m.delayMin(), 20.0, 12.0);
   CHECK(m.paramStd(0) > 0.f);
   // prediction with uncertainty; compare against the true plant

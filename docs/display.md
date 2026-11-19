@@ -14,7 +14,7 @@
    Strich = nicht belegt
 4. **Diagnose** – Last der HeatCore-Tasks (bezogen auf beide Kerne), freier RAM
    und PSRAM, Laufzeit, Firmware, SD, MQTT, Netzwerk
-5. **Lernmodell** – Raum, Status, Aufheiztrend, Totzeit ± Unsicherheit,
+5. **Lernmodell** – Raum, Status, Aufheiztrend, Totzeit bzw. Trägheit (Fußbodenheizung) ± Unsicherheit,
    Prognose 1 h ± Unsicherheit, Heizleistung
 
 Alarme ab der eingestellten Priorität erscheinen als Balken in der letzten
