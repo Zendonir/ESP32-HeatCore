@@ -2,10 +2,16 @@
 // Learning thermal room model.
 //
 // Model (per room, sampled every `sampleMin` minutes):
-//     dT/dt [K/h] = a * u(t - delay) + b * (Tref - T) + c
-//   u    heating duty 0..1 (valve open fraction), delayed by the dead time
+//     dT/dt [K/h] = a * q(t) + b * (Tref - T) + c
+//   q    heat input 0..1 derived from the valve open fraction u:
+//        radiators: u delayed by the measured dead time,
+//        underfloor heating: u through a first-order lag (the screed stores
+//        the heat for hours, the room only sees its slow average)
 //   Tref outdoor temperature if available, otherwise 0 (then c absorbs b*Tout)
-// Parameters are estimated by recursive least squares with forgetting.
+// Parameters are estimated by recursive least squares with forgetting. A bank
+// of candidates runs side by side - the dead-time model and lags of 30 min to
+// 6 h - and the one with the smallest residual describes the room, so
+// radiators and underfloor heating are recognised without configuration.
 //
 // Every sample is classified before it may be used:
 //   Normal        -> used for parameter adaptation
@@ -72,6 +78,8 @@ struct ModelConfig {
 class ThermalModel {
  public:
   static constexpr int kParams = 3;
+  static constexpr int kLagCount = 6;
+  static constexpr float kLagMin[kLagCount] = {30.f, 60.f, 90.f, 150.f, 240.f, 360.f};
 
   explicit ThermalModel(const ModelConfig* cfg = nullptr);
   void setConfig(const ModelConfig* cfg) { cfg_ = cfg; }
@@ -89,14 +97,19 @@ class ThermalModel {
   ModelAdvice advice(bool heatingOn, float currentTemp) const;
 
   ModelStatus status() const { return status_; }
-  float heatingGain() const { return theta_[0]; }  // K/h at full duty
-  float lossCoeff() const { return theta_[1]; }    // 1/h
-  float offset() const { return theta_[2]; }
+  float heatingGain() const { return sel().theta[0]; }  // K/h at full (steady) heat input
+  float lossCoeff() const { return sel().theta[1]; }    // 1/h
+  float offset() const { return sel().theta[2]; }
   float paramStd(int i) const;
   float residualStd() const;
   float trendKh() const { return trend_; }
-  float delayMin() const { return delayMean_; }
+  // response time: dead time (radiators) or lag time constant (underfloor)
+  float delayMin() const { return best_ ? kLagMin[best_ - 1] : delayMean_; }
   float delayStdMin() const;
+  bool slowEmitter() const { return best_ > 0; }  // underfloor-like response selected
+  bool emitterKnown() const;  // enough data to compare all candidates (or a lag model chosen)
+  float lagMin() const { return best_ ? kLagMin[best_ - 1] : 0.f; }
+  bool usesOutdoor() const { return haveOutdoor_; }
   uint32_t samples(PeriodClass c) const { return counts_[static_cast<size_t>(c)]; }
   PeriodClass lastClass() const { return lastClass_; }
   bool faultSuspected() const { return faultSuspected_; }
@@ -114,17 +127,28 @@ class ThermalModel {
 
  private:
   void finishInterval(Millis now);
-  void rlsUpdate(const float phi[kParams], float y);
+  struct Cand {  // one candidate input model with its own estimator
+    std::array<float, kParams> theta{};
+    std::array<std::array<float, kParams>, kParams> P{};
+    float sigma2 = 0.04f;  // residual variance (K/h)^2
+    uint32_t n = 0;        // updates (a fresh candidate must learn before it may win)
+    float q = 0.f;         // lag filter state (lag candidates)
+    float qSum = 0.f;      // filter output summed over the interval
+    uint16_t qN = 0;
+  };
+  static void resetCand(Cand& c);
+  static void rlsUpdate(Cand& c, const float phi[kParams], float y, float lambda);
+  const Cand& sel() const { return cand_[static_cast<size_t>(best_)]; }
+  void selectBest();
   void updateStatus();
   float delayedDuty(float delayMin, float offsetMin) const;
   void trackDelay(const ThermalInput& in, Millis now, bool disturbed);
 
   const ModelConfig* cfg_;
   ModelConfig defaultCfg_;
-  // parameters
-  std::array<float, kParams> theta_{};
-  std::array<std::array<float, kParams>, kParams> P_{};
-  float sigma2_ = 0.04f;  // residual variance (K/h)^2
+  // parameters: [0] dead-time model, [1..] lag models
+  std::array<Cand, kLagCount + 1> cand_{};
+  int best_ = 0;
   float baselineSigma2_ = 0.f;
   std::array<uint32_t, static_cast<size_t>(PeriodClass::Count)> counts_{};
   ModelStatus status_ = ModelStatus::Learning;

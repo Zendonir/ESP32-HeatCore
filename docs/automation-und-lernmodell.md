@@ -124,10 +124,10 @@ Zeitplanbetrieb beginnt HeatCore vor einer Komfortzeit so früh mit der
 Komforttemperatur, dass der Raum zu ihrem Beginn warm ist:
 
 ```
-Vorlauf = Totzeit + (Komfort − Ist) / Aufheizrate × 60 min   (höchstens der eingestellte Wert)
+Vorlauf = Totzeit bzw. Trägheit + (Komfort − Ist) / Aufheizrate × 60 min   (höchstens der eingestellte Wert)
 ```
 
-Aufheizrate und Totzeit kommen aus dem Lernmodell, sobald es „bereit“ ist:
+Aufheizrate und Totzeit bzw. Trägheit kommen aus dem Lernmodell, sobald es „bereit“ ist:
 Heizleistung abzüglich Wärmeverlust bei der aktuellen Außentemperatur, ohne
 Außenfühler mit der gelernten Drift. Solange das Modell noch lernt oder
 eingeschränkt ist, wird die volle eingestellte Zeit verwendet. Hat das
@@ -138,10 +138,37 @@ und feste Betriebsarten haben Vorrang. Grund und Display zeigen
 
 ## Lernmodell
 
-`dT/dt = a·u(t − Totzeit) + b·(T_außen − T)` (mit Außenfühler) bzw.
-`a·u + c` (Drift, ohne Außenfühler). Parameterschätzung per rekursiver
-Kleinste-Quadrate mit Vergessensfaktor; Steigung aus 10 Minutenwerten
-(DS18B20-Auflösung 0,0625 K).
+`dT/dt = a·q + b·(T_außen − T)` (mit Außenfühler) bzw. `a·q + c` (Drift,
+ohne Außenfühler). Parameterschätzung per rekursiver Kleinste-Quadrate mit
+Vergessensfaktor; Steigung aus den Minutenwerten eines Abtastintervalls
+(Standard 10 min, DS18B20-Auflösung 0,0625 K).
+
+**q ist die Wärmezufuhr in den Raum.** Sie hängt davon ab, wie die Heizfläche
+die Wärme abgibt:
+
+* **Heizkörper (schnell):** q ist die Ventilstellung nach einer Totzeit. Die
+  Totzeit wird aus Heizstarts geschätzt (Mittel ± Streuung).
+* **Fußbodenheizung (träge):** Der Estrich speichert die Wärme über Stunden.
+  Das schnelle Takten der Ventile kommt im Raum nur als geglätteter
+  Mittelwert an. q ist deshalb die Ventilzeit, geglättet mit der Trägheit
+  des Bodens (Verzögerung erster Ordnung).
+
+Das Modell rechnet beide Arten parallel: die Totzeit-Variante und sechs
+Fußboden-Varianten mit 30, 60, 90, 150, 240 und 360 min Trägheit. Nach den
+ersten 48 normalen Intervallen nimmt es die Variante mit der kleinsten
+Abweichung. Es wechselt nur, wenn eine andere Variante deutlich besser passt
+(mindestens 15 % kleinere Residuenvarianz).
+
+Die Webseite zeigt das erkannte Verhalten und die Trägheit des Raums. Für
+Fußbodenheizungen empfiehlt sich ein **Abtastintervall von 20 min**: Es
+glättet das Messrauschen, und das Modell wird schneller sicher.
+
+Mit der Fußboden-Variante gilt außerdem:
+
+* **Beratung:** Bei geöffnetem Ventil schaut die Beratung über die Trägheit
+  voraus. Ein Raum, der nach dem Schließen weiter warm wird, schaltet so
+  früher ab, und ein Überschwingen wird vermieden.
+* **Vorheizen:** Die Trägheit wird als Vorlauf eingerechnet.
 
 Jedes Intervall wird klassifiziert, nur **normale** Intervalle passen das
 Modell an:
@@ -153,8 +180,7 @@ Modell an:
 | Manuell | Hand-Ausgang, manueller Sollwert (konfigurierbar) |
 | Heizungsstörung | Übertemperatur, Vorlaufschutz, Fühlerausfall, Ausgangsfehler, Verdacht „keine Erwärmung“ |
 
-Ein offenes Fenster wird damit nie als schlechte Heizleistung gelernt. Die
-Totzeit wird aus Heizstarts geschätzt (Mittel ± Streuung). Prognosen enthalten
+Ein offenes Fenster wird damit nie als schlechte Heizleistung gelernt. Prognosen enthalten
 eine Unsicherheit (Parameterkovarianz + Residuen). Verdacht auf
 Heizungsstörung: vertrauenswürdiges Modell, volle Ventilöffnung, aber
 deutlich weniger Erwärmung als vorhergesagt über ≥ 1 h → Ereignis

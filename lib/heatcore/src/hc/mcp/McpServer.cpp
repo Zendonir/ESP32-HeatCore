@@ -394,6 +394,8 @@ std::string McpServer::tool(const std::string& name, JsonObjectConst args, JsonO
       x["offsetKh"] = r2(m->offset());
       x["residualStdKh"] = r2(m->residualStd());
       x["trendKh"] = r2(m->trendKh());
+      x["emitter"] = m->slowEmitter() ? "traege (Fussbodenheizung, Verzoegerung erster Ordnung)" : "schnell (Heizkoerper, Totzeit)";
+      if (m->slowEmitter()) x["lagMin"] = r2(m->lagMin());
       x["deadTimeMin"] = r2(m->delayMin());
       x["deadTimeStdMin"] = r2(m->delayStdMin());
       x["deadTimeSamples"] = m->delaySamples();

@@ -35,11 +35,21 @@ const char* modelStatusName(ModelStatus s) { return kStatusNames[static_cast<int
 
 ThermalModel::ThermalModel(const ModelConfig* cfg) : cfg_(cfg) { reset(); }
 
-void ThermalModel::reset() {
-  theta_ = {1.0f, 0.05f, -0.5f};  // weak prior: 1 K/h heating gain, slow cooling
+constexpr float ThermalModel::kLagMin[ThermalModel::kLagCount];
+
+void ThermalModel::resetCand(Cand& c) {
+  c.theta = {1.0f, 0.05f, -0.5f};  // weak prior: 1 K/h heating gain, slow cooling
   for (int i = 0; i < kParams; ++i)
-    for (int j = 0; j < kParams; ++j) P_[i][j] = i == j ? kPInit : 0.f;
-  sigma2_ = 0.04f;
+    for (int j = 0; j < kParams; ++j) c.P[i][j] = i == j ? kPInit : 0.f;
+  c.sigma2 = 0.04f;
+  c.n = 0;
+  c.q = c.qSum = 0.f;
+  c.qN = 0;
+}
+
+void ThermalModel::reset() {
+  for (Cand& c : cand_) resetCand(c);
+  best_ = 0;
   baselineSigma2_ = 0.f;
   counts_.fill(0);
   status_ = ModelStatus::Learning;
@@ -66,9 +76,13 @@ void ThermalModel::noteContext(const char* what, Millis now, int64_t epoch) {
   context_.push_back({epoch, now, what ? what : ""});
 }
 
-float ThermalModel::paramStd(int i) const { return std::sqrt(std::max(0.f, P_[i][i]) * sigma2_); }
-float ThermalModel::residualStd() const { return std::sqrt(sigma2_); }
+float ThermalModel::paramStd(int i) const { return std::sqrt(std::max(0.f, sel().P[i][i]) * sel().sigma2); }
+float ThermalModel::residualStd() const { return std::sqrt(sel().sigma2); }
 float ThermalModel::delayStdMin() const {
+  if (best_) {  // spacing of the lag grid around the selected one
+    float lo = best_ > 1 ? kLagMin[best_ - 2] : 0.f, hi = best_ < kLagCount ? kLagMin[best_] : kLagMin[best_ - 1] * 1.5f;
+    return (hi - lo) / 4.f;
+  }
   if (delayCount_ < 2) return 30.f;
   return std::sqrt(delayM2_ / (delayCount_ - 1));
 }
@@ -125,8 +139,16 @@ void ThermalModel::trackDelay(const ThermalInput& in, Millis now, bool disturbed
 
 bool ThermalModel::observe(const ThermalInput& in, Millis now) {
   const ModelConfig& c = cfg_ ? *cfg_ : defaultCfg_;
-  dutyHist_.push_back(clampf(in.duty, 0.f, 1.f));
+  float u = clampf(in.duty, 0.f, 1.f);
+  dutyHist_.push_back(u);
   if (dutyHist_.size() > kDutyHistory) dutyHist_.pop_front();
+  // heat released by a slow emitter (screed): first-order lag of the valve
+  for (int k = 0; k < kLagCount; ++k) {
+    Cand& cd = cand_[static_cast<size_t>(k + 1)];
+    cd.q += (u - cd.q) / kLagMin[k];
+    cd.qSum += cd.q;
+    ++cd.qN;
+  }
 
   if (in.tempValid && !in.tempFallback) {
     if (haveLastTemp_) trend_ += 0.1f * ((in.temp - lastTemp_) * 60.f - trend_);
@@ -176,25 +198,38 @@ void ThermalModel::finishInterval(Millis now) {
   if (cls == PeriodClass::Normal && temps_.size() >= 3) {
     float y = slope(temps_) * 60.f;  // K/h
     float tMean = tSum_ / tCount_;
-    float u = delayedDuty(delayMean_, c.sampleMin);
     // With an outdoor sensor the physical loss term b*(Tout-T) is used; without
     // one only a drift constant c (b and c are not separately identifiable when
     // the room temperature hardly varies).
-    float phi[kParams] = {u, 0.f, 0.f};
-    if (outCount_) phi[1] = outSum_ / outCount_ - tMean;
-    else phi[2] = 1.f;
-    float pred = theta_[0] * phi[0] + theta_[1] * phi[1] + theta_[2] * phi[2];
-    // Plausibility of the heating response: full duty but clearly less
+    float phi1 = outCount_ ? outSum_ / outCount_ - tMean : 0.f, phi2 = outCount_ ? 0.f : 1.f;
+    std::array<float, kLagCount + 1> heat{};
+    heat[0] = delayedDuty(delayMean_, c.sampleMin);
+    for (int k = 0; k < kLagCount; ++k) {
+      const Cand& cd = cand_[static_cast<size_t>(k + 1)];
+      heat[static_cast<size_t>(k + 1)] = cd.qN ? cd.qSum / cd.qN : cd.q;
+    }
+    // Plausibility of the heating response: full heat input but clearly less
     // warming than the trusted model predicts -> suspected heating fault.
+    const Cand& b = sel();
+    float hb = heat[static_cast<size_t>(best_)];
+    float pred = b.theta[0] * hb + b.theta[1] * phi1 + b.theta[2] * phi2;
     bool trusted = status_ == ModelStatus::Ready || faultSuspected_;
-    if (trusted && u > 0.8f && pred - y > std::max(3.f * residualStd(), 0.3f)) {
+    if (trusted && hb > 0.8f && pred - y > std::max(3.f * residualStd(), 0.3f)) {
       if (++poorResponseCount_ >= 6) faultSuspected_ = true;
       cls = PeriodClass::HeatingFault;
     } else {
       if (poorResponseCount_ > 0) --poorResponseCount_;
       if (poorResponseCount_ == 0) faultSuspected_ = false;
-      rlsUpdate(phi, y);
+      float lambda = clampf(c.forgetting, 0.95f, 1.f);
+      for (size_t k = 0; k < cand_.size(); ++k) {
+        float phi[kParams] = {heat[k], phi1, phi2};
+        rlsUpdate(cand_[k], phi, y, lambda);
+      }
     }
+  }
+  for (Cand& cd : cand_) {
+    cd.qSum = 0.f;
+    cd.qN = 0;
   }
   ++counts_[static_cast<size_t>(cls)];
   lastClass_ = cls;
@@ -204,12 +239,37 @@ void ThermalModel::finishInterval(Millis now) {
   tCount_ = outCount_ = 0;
   temps_.clear();
   flagVent_ = flagIncomplete_ = flagManual_ = flagFault_ = false;
+  if (cls == PeriodClass::Normal) selectBest();
   updateStatus();
 }
 
-void ThermalModel::rlsUpdate(const float phi[kParams], float y) {
+bool ThermalModel::emitterKnown() const {
+  if (best_ > 0) return true;
   const ModelConfig& c = cfg_ ? *cfg_ : defaultCfg_;
-  float lambda = clampf(c.forgetting, 0.95f, 1.f);
+  for (const Cand& cd : cand_)
+    if (cd.n < c.minSamples) return false;
+  return true;
+}
+
+void ThermalModel::selectBest() {
+  // The candidate with the smallest residual describes the room. Only after
+  // enough data, and only with a clear margin (no flapping between neighbours).
+  const ModelConfig& c = cfg_ ? *cfg_ : defaultCfg_;
+  if (counts_[static_cast<size_t>(PeriodClass::Normal)] < c.minSamples) return;
+  int bestNow = best_;
+  for (int k = 0; k < static_cast<int>(cand_.size()); ++k) {
+    const Cand& cd = cand_[static_cast<size_t>(k)];
+    if (cd.n >= c.minSamples && cd.sigma2 < cand_[static_cast<size_t>(bestNow)].sigma2) bestNow = k;
+  }
+  if (bestNow != best_ && cand_[static_cast<size_t>(bestNow)].sigma2 < 0.85f * sel().sigma2) {
+    best_ = bestNow;
+    baselineSigma2_ = sel().sigma2;  // degradation is judged against the new model
+  }
+}
+
+void ThermalModel::rlsUpdate(Cand& c, const float phi[kParams], float y, float lambda) {
+  auto& P_ = c.P;
+  auto& theta_ = c.theta;
   float Pphi[kParams];
   for (int i = 0; i < kParams; ++i) {
     Pphi[i] = 0.f;
@@ -229,10 +289,10 @@ void ThermalModel::rlsUpdate(const float phi[kParams], float y) {
   for (int i = 0; i < kParams; ++i) {
     for (int j = i + 1; j < kParams; ++j) P_[i][j] = P_[j][i] = 0.5f * (P_[i][j] + P_[j][i]);
     if (P_[i][i] > kPMax) {
-      float s = kPMax / P_[i][i];
+      float sc = kPMax / P_[i][i];
       for (int j = 0; j < kParams; ++j) {
-        P_[i][j] *= std::sqrt(s);
-        P_[j][i] *= std::sqrt(s);
+        P_[i][j] *= std::sqrt(sc);
+        P_[j][i] *= std::sqrt(sc);
       }
     }
     if (P_[i][i] < 1e-6f) P_[i][i] = 1e-6f;
@@ -240,22 +300,23 @@ void ThermalModel::rlsUpdate(const float phi[kParams], float y) {
   theta_[0] = clampf(theta_[0], 0.f, 15.f);
   theta_[1] = clampf(theta_[1], 0.f, 2.f);
   theta_[2] = clampf(theta_[2], -10.f, 10.f);
-  sigma2_ = 0.98f * sigma2_ + 0.02f * e * e;
-  if (sigma2_ < 1e-4f) sigma2_ = 1e-4f;
+  c.sigma2 = 0.98f * c.sigma2 + 0.02f * e * e;
+  if (c.sigma2 < 1e-4f) c.sigma2 = 1e-4f;
+  ++c.n;
 }
 
 void ThermalModel::updateStatus() {
   const ModelConfig& c = cfg_ ? *cfg_ : defaultCfg_;
   if (status_ == ModelStatus::Disabled) return;
   uint32_t normal = counts_[static_cast<size_t>(PeriodClass::Normal)];
-  bool confident = normal >= c.minSamples && theta_[0] > 0.05f && paramStd(0) / theta_[0] < c.maxRelStdA;
+  bool confident = normal >= c.minSamples && sel().theta[0] > 0.05f && paramStd(0) / sel().theta[0] < c.maxRelStdA;
   if (faultSuspected_) {
     status_ = ModelStatus::Degraded;
   } else if (confident) {
     if (status_ != ModelStatus::Ready) {
-      if (baselineSigma2_ <= 0.f || status_ == ModelStatus::Learning) baselineSigma2_ = sigma2_;
+      if (baselineSigma2_ <= 0.f || status_ == ModelStatus::Learning) baselineSigma2_ = sel().sigma2;
     }
-    status_ = baselineSigma2_ > 0.f && sigma2_ > 4.f * baselineSigma2_ ? ModelStatus::Degraded : ModelStatus::Ready;
+    status_ = baselineSigma2_ > 0.f && sel().sigma2 > 4.f * baselineSigma2_ ? ModelStatus::Degraded : ModelStatus::Ready;
   } else {
     status_ = normal >= c.minSamples ? ModelStatus::Degraded : ModelStatus::Learning;
   }
@@ -265,30 +326,38 @@ Prediction ThermalModel::predict(float horizonMin, float futureDuty) const {
   Prediction p;
   if (!haveLastTemp_) return p;
   const ModelConfig& c = cfg_ ? *cfg_ : defaultCfg_;
+  const Cand& m = sel();
   int H = static_cast<int>(clampf(horizonMin, 1.f, 240.f));
   int d = static_cast<int>(delayMean_ + 0.5f);
   float T = lastTemp_;
   float tref = haveOutdoor_ ? lastOutdoor_ : 0.f;
   float sdParam = 0.f;
+  float fut = clampf(futureDuty, 0.f, 1.f);
+  float q = m.q;  // lag model: heat still stored in the screed
   for (int k = 0; k < H; ++k) {
     float u;
-    int back = d - k;  // input applied now was commanded `back` minutes ago
-    if (back > 0) {
-      int idx = static_cast<int>(dutyHist_.size()) - back;
-      u = idx >= 0 ? dutyHist_[static_cast<size_t>(idx)] : 0.f;
+    if (best_) {
+      q += (fut - q) / kLagMin[best_ - 1];
+      u = q;
     } else {
-      u = clampf(futureDuty, 0.f, 1.f);
+      int back = d - k;  // input applied now was commanded `back` minutes ago
+      if (back > 0) {
+        int idx = static_cast<int>(dutyHist_.size()) - back;
+        u = idx >= 0 ? dutyHist_[static_cast<size_t>(idx)] : 0.f;
+      } else {
+        u = fut;
+      }
     }
     float phi[kParams] = {u, haveOutdoor_ ? tref - T : 0.f, haveOutdoor_ ? 0.f : 1.f};
-    float dTdt = theta_[0] * phi[0] + theta_[1] * phi[1] + theta_[2] * phi[2];
+    float dTdt = m.theta[0] * phi[0] + m.theta[1] * phi[1] + m.theta[2] * phi[2];
     T += dTdt / 60.f;
-    float q = 0.f;
+    float qv = 0.f;
     for (int i = 0; i < kParams; ++i)
-      for (int j = 0; j < kParams; ++j) q += phi[i] * P_[i][j] * phi[j];
-    sdParam += std::sqrt(std::max(0.f, q) * sigma2_) / 60.f;  // correlated parameter error
+      for (int j = 0; j < kParams; ++j) qv += phi[i] * m.P[i][j] * phi[j];
+    sdParam += std::sqrt(std::max(0.f, qv) * m.sigma2) / 60.f;  // correlated parameter error
   }
   float steps = static_cast<float>(H) / c.sampleMin;
-  float sdNoise = std::sqrt(sigma2_) * (c.sampleMin / 60.f) * std::sqrt(steps) * 0.5f;
+  float sdNoise = std::sqrt(m.sigma2) * (c.sampleMin / 60.f) * std::sqrt(steps) * 0.5f;
   p.valid = status_ == ModelStatus::Ready;
   p.mean = T;
   p.stddev = sdParam + sdNoise;
@@ -298,10 +367,12 @@ Prediction ThermalModel::predict(float horizonMin, float futureDuty) const {
 ModelAdvice ThermalModel::advice(bool heatingOn, float currentTemp) const {
   ModelAdvice a;
   const ModelConfig& c = cfg_ ? *cfg_ : defaultCfg_;
-  if (status_ != ModelStatus::Ready || delayCount_ == 0) return a;
-  // Switching now only takes effect after the dead time: look at where the
-  // temperature goes during that time with the heating switched off.
-  Prediction p = predict(std::max(5.f, delayMean_), 0.f);
+  if (status_ != ModelStatus::Ready || (!best_ && delayCount_ == 0)) return a;
+  // Switching now only takes effect after the dead time (radiators) or while
+  // the screed releases its stored heat (underfloor, about the lag time):
+  // look at where the temperature goes meanwhile with the heating off.
+  float horizon = best_ ? std::min(240.f, kLagMin[best_ - 1]) : std::max(5.f, delayMean_);
+  Prediction p = predict(horizon, 0.f);
   if (!p.valid || p.stddev > c.maxAdviceStd) return a;
   a.valid = true;
   float delta = p.mean - currentTemp;
@@ -311,12 +382,25 @@ ModelAdvice ThermalModel::advice(bool heatingOn, float currentTemp) const {
 }
 
 void ThermalModel::toJson(JsonObject o, bool runtime) const {
-  JsonArray th = o["theta"].to<JsonArray>();
-  for (float v : theta_) th.add(v);
-  JsonArray pa = o["P"].to<JsonArray>();
-  for (auto& row : P_)
-    for (float v : row) pa.add(v);
-  o["sigma2"] = sigma2_;
+  // dead-time model at top level (format of earlier versions), lag models in "lags"
+  auto putCand = [](JsonObject x, const Cand& c) {
+    JsonArray th = x["theta"].to<JsonArray>();
+    for (float v : c.theta) th.add(v);
+    JsonArray pa = x["P"].to<JsonArray>();
+    for (auto& row : c.P)
+      for (float v : row) pa.add(v);
+    x["sigma2"] = c.sigma2;
+    x["n"] = c.n;
+  };
+  putCand(o, cand_[0]);
+  JsonArray lags = o["lags"].to<JsonArray>();
+  for (int k = 0; k < kLagCount; ++k) {
+    JsonObject x = lags.add<JsonObject>();
+    x["lagMin"] = kLagMin[k];
+    putCand(x, cand_[static_cast<size_t>(k + 1)]);
+    x["q"] = cand_[static_cast<size_t>(k + 1)].q;
+  }
+  o["best"] = best_;
   o["baselineSigma2"] = baselineSigma2_;
   JsonArray ca = o["counts"].to<JsonArray>();
   for (auto v : counts_) ca.add(v);
@@ -326,15 +410,26 @@ void ThermalModel::toJson(JsonObject o, bool runtime) const {
   o["disabled"] = status_ == ModelStatus::Disabled;
   if (!runtime) return;
   o["status"] = modelStatusName(status_);
-  o["heatingGainKh"] = theta_[0];
+  o["emitter"] = best_ ? "slow" : "fast";  // slow = underfloor-like (lag), fast = radiator (dead time)
+  o["emitterKnown"] = emitterKnown();
+  o["lagMin"] = lagMin();
+  o["usesOutdoor"] = haveOutdoor_;
+  o["heatingGainKh"] = heatingGain();
   o["heatingGainStd"] = paramStd(0);
-  o["lossCoeff"] = theta_[1];
+  o["lossCoeff"] = lossCoeff();
   o["lossCoeffStd"] = paramStd(1);
-  o["offsetKh"] = theta_[2];
+  o["offsetKh"] = offset();
   o["residualStd"] = residualStd();
   o["trendKh"] = trend_;
-  o["delayMin"] = delayMean_;
+  o["delayMin"] = delayMin();
   o["delayStdMin"] = delayStdMin();
+  JsonArray cs = o["candidates"].to<JsonArray>();
+  for (size_t k = 0; k < cand_.size(); ++k) {
+    JsonObject x = cs.add<JsonObject>();
+    x["lagMin"] = k ? kLagMin[k - 1] : 0.f;
+    x["residualStd"] = std::sqrt(cand_[k].sigma2);
+    x["gainKh"] = cand_[k].theta[0];
+  }
   o["lastClass"] = periodClassName(lastClass_);
   o["faultSuspected"] = faultSuspected_;
   JsonObject cls = o["periods"].to<JsonObject>();
@@ -356,17 +451,32 @@ void ThermalModel::toJson(JsonObject o, bool runtime) const {
 
 void ThermalModel::fromJson(JsonObjectConst o) {
   reset();
-  JsonArrayConst th = o["theta"];
-  if (th.size() == kParams)
-    for (int i = 0; i < kParams; ++i) theta_[i] = th[i] | theta_[i];
-  JsonArrayConst pa = o["P"];
-  if (pa.size() == kParams * kParams)
-    for (int i = 0; i < kParams; ++i)
-      for (int j = 0; j < kParams; ++j) P_[i][j] = pa[i * kParams + j] | P_[i][j];
-  sigma2_ = o["sigma2"] | sigma2_;
+  auto getCand = [](JsonObjectConst x, Cand& c) {
+    JsonArrayConst th = x["theta"];
+    if (th.size() == kParams)
+      for (int i = 0; i < kParams; ++i) c.theta[i] = th[i] | c.theta[i];
+    JsonArrayConst pa = x["P"];
+    if (pa.size() == kParams * kParams)
+      for (int i = 0; i < kParams; ++i)
+        for (int j = 0; j < kParams; ++j) c.P[i][j] = pa[i * kParams + j] | c.P[i][j];
+    c.sigma2 = x["sigma2"] | c.sigma2;
+    c.n = x["n"] | 0u;
+  };
+  getCand(o, cand_[0]);
+  for (JsonObjectConst x : o["lags"].as<JsonArrayConst>()) {
+    float lag = x["lagMin"] | 0.f;
+    for (int k = 0; k < kLagCount; ++k)
+      if (std::fabs(kLagMin[k] - lag) < 0.5f) {
+        getCand(x, cand_[static_cast<size_t>(k + 1)]);
+        cand_[static_cast<size_t>(k + 1)].q = clampf(x["q"] | 0.f, 0.f, 1.f);
+      }
+  }
+  int b = o["best"] | 0;
+  best_ = b >= 0 && b <= kLagCount ? b : 0;
   baselineSigma2_ = o["baselineSigma2"] | 0.f;
   JsonArrayConst ca = o["counts"];
   for (size_t i = 0; i < counts_.size() && i < ca.size(); ++i) counts_[i] = ca[i] | 0u;
+  if (o["n"].isNull()) cand_[0].n = counts_[static_cast<size_t>(PeriodClass::Normal)];  // earlier version
   delayMean_ = o["delayMean"] | 30.f;
   delayM2_ = o["delayM2"] | 0.f;
   delayCount_ = o["delayCount"] | 0u;
